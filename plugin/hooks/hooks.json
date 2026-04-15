@@ -1,51 +1,54 @@
 {
-  "SessionStart": [
-    {
-      "matcher": "startup|clear|compact",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; _R=\"${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}\"; \"$_NODE\" \"$_R/scripts/startup.cjs\"",
-          "timeout": 5,
-          "statusMessage": "project-mem iniciando..."
-        }
-      ]
-    }
-  ],
-  "UserPromptSubmit": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; _R=\"${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}\"; \"$_NODE\" \"$_R/scripts/session-init.cjs\"",
-          "timeout": 10,
-          "statusMessage": "Carregando memória do projeto..."
-        }
-      ]
-    }
-  ],
-  "PostToolUse": [
-    {
-      "matcher": "Write|Edit|MultiEdit|Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; _R=\"${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}\"; \"$_NODE\" \"$_R/scripts/observe.cjs\"",
-          "timeout": 5,
-          "async": true
-        }
-      ]
-    }
-  ],
-  "SessionEnd": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; _R=\"${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}\"; \"$_NODE\" \"$_R/scripts/session-end.cjs\"",
-          "timeout": 10
-        }
-      ]
-    }
-  ]
+  "description": "Persistent per-project memory for Claude Code — stores context, session history and observations as plain JSONL files inside the repository.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/startup.cjs\"",
+            "timeout": 5,
+            "statusMessage": "project-mem iniciando..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session-init.cjs\"",
+            "timeout": 10,
+            "statusMessage": "Carregando memória do projeto..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/observe.cjs\"",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.cjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }

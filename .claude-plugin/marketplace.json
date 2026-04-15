@@ -1,0 +1,12 @@
+{
+  "name": "project-mem",
+  "owner": { "name": "Tiago" },
+  "plugins": [
+    {
+      "name": "project-mem",
+      "source": "./plugin",
+      "description": "Per-project git-committable memory for Claude Code. Stores observations as JSONL inside the project repo.",
+      "version": "1.0.0"
+    }
+  ]
+}

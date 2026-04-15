@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>claude-project-memory — Persistent memory for Claude Code</title>
+  <meta name="description" content="A Claude Code plugin that keeps persistent, git-committable memory per project. No database, no external services." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --text:        #1a1a1a;
+      --text-muted:  #6b7280;
+      --border:      #e5e7eb;
+      --bg:          #ffffff;
+      --bg-subtle:   #f9fafb;
+      --code-bg:     #f3f4f6;
+      --accent:      #2563eb;
+      --accent-light:#eff6ff;
+      --sponsor:     #db2777;
+    }
+
+    html { font-size: 16px; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 2rem 1.25rem;
+      background: var(--bg-subtle);
+    }
+
+    nav .logo {
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+
+    nav .project-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 2rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    nav ul { list-style: none; }
+
+    nav ul li { margin-bottom: 0.1rem; }
+
+    nav ul li a {
+      display: block;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    nav ul li a:hover { color: var(--text); background: var(--border); }
+
+    nav .nav-section {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 1.25rem 0 0.4rem 0.5rem;
+    }
+
+    /* ── Main ── */
+    main {
+      max-width: 780px;
+      padding: 3rem 3rem 6rem;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 0.75rem;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-top: 3rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p { margin-bottom: 1rem; color: var(--text); }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Lead ── */
+    .lead {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      line-height: 1.7;
+    }
+
+    /* ── Badges ── */
+    .badges { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 2rem; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: var(--bg-subtle);
+      text-decoration: none;
+    }
+
+    .badge:hover { border-color: #9ca3af; color: var(--text); text-decoration: none; }
+
+    .badge.sponsor {
+      color: var(--sponsor);
+      border-color: #fce7f3;
+      background: #fdf2f8;
+    }
+
+    .badge.sponsor:hover { background: #fce7f3; }
+
+    /* ── Code ── */
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.85em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.875rem;
+      line-height: 1.65;
+    }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin: 1rem 0 1.5rem;
+    }
+
+    th {
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Callouts ── */
+    .callout {
+      border-left: 3px solid var(--border);
+      background: var(--bg-subtle);
+      padding: 0.75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin: 1rem 0 1.5rem;
+    }
+
+    .callout.info { border-color: var(--accent); background: var(--accent-light); color: #1e40af; }
+
+    /* ── Sponsor block ── */
+    .sponsor-block {
+      border: 1px solid #fce7f3;
+      background: #fdf2f8;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .sponsor-block h3 { margin-top: 0; color: var(--sponsor); }
+
+    .sponsor-block p { color: #9d174d; margin-bottom: 0.75rem; }
+
+    .btn-sponsor {
+      display: inline-block;
+      background: var(--sponsor);
+      color: #fff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 0.5rem 1.1rem;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+
+    .btn-sponsor:hover { background: #be185d; text-decoration: none; }
+
+    /* ── Pro table ── */
+    .check { color: #16a34a; font-weight: 600; }
+    .planned { color: var(--text-muted); font-size: 0.8rem; }
+
+    /* ── Steps list ── */
+    .steps { list-style: none; counter-reset: steps; margin: 1rem 0 1.5rem; }
+    .steps li {
+      counter-increment: steps;
+      padding: 0.5rem 0 0.5rem 2.5rem;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .steps li:last-child { border-bottom: none; }
+    .steps li::before {
+      content: counter(steps);
+      position: absolute;
+      left: 0;
+      top: 0.5rem;
+      width: 1.4rem;
+      height: 1.4rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 1.25rem; }
+      main { padding: 1.5rem 1.25rem 4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav>
+    <div class="logo">Plugin · Claude Code</div>
+    <div class="project-name">claude-project-memory</div>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#install">Installation</a></li>
+      <li><a href="#storage">How memory is stored</a></li>
+      <li><a href="#graph">Pattern graph</a></li>
+      <div class="nav-section">Skills</div>
+      <li><a href="#mem-setup">/mem-setup</a></li>
+      <li><a href="#mem-search">/mem-search</a></li>
+      <li><a href="#mem-ui">/mem-ui</a></li>
+      <div class="nav-section">Reference</div>
+      <li><a href="#recorded">What is recorded</a></li>
+      <li><a href="#comparison">Comparison</a></li>
+      <li><a href="#sponsor">Sponsor</a></li>
+    </ul>
+  </nav>
+
+  <!-- Content -->
+  <main>
+
+    <h1>claude-project-memory</h1>
+
+    <p class="lead">
+      A <a href="https://claude.ai/code">Claude Code</a> plugin that keeps persistent,
+      git-committable memory per project — stored as plain text inside the repository itself.
+      No database, no external services, no background processes.
+    </p>
+
+    <div class="badges">
+      <a class="badge" href="https://github.com/schedylabs/claude-project-memory">
+        GitHub
+      </a>
+      <a class="badge" href="https://github.com/schedylabs/claude-project-memory/blob/main/LICENSE">
+        MIT License
+      </a>
+      <a class="badge sponsor" href="https://github.com/sponsors/schedylabs">
+        ♥ Sponsor
+      </a>
+    </div>
+
+    <div class="callout">
+      ⚠ Under active development — functional but evolving.
+      <a href="https://github.com/schedylabs/claude-project-memory/issues">Open an issue</a> if you find a problem.
+    </div>
+
+    <!-- Overview -->
+    <h2 id="overview">Overview</h2>
+
+    <p>
+      Every time you open Claude Code it starts from scratch — no memory of previous sessions,
+      no awareness of project conventions, no context about decisions made and why.
+    </p>
+
+    <p>
+      <strong>claude-project-memory</strong> fixes this by maintaining a live context per project
+      and injecting it automatically at the start of each conversation.
+    </p>
+
+    <ol class="steps">
+      <li>Open Claude Code — a status banner confirms the plugin is active</li>
+      <li>Type your first message</li>
+      <li>Claude already receives: <code>PROJECT.md</code> + recent session summaries + prior observations + detected patterns</li>
+      <li>Each file edit and command is silently recorded in the background</li>
+      <li>When the session ends, a summary is generated automatically</li>
+    </ol>
+
+    <!-- Installation -->
+    <h2 id="install">Installation</h2>
+
+    <p><strong>Requirements:</strong> <a href="https://claude.ai/code">Claude Code</a> and Node.js.</p>
+
+    <pre><code>git clone git@github.com:schedylabs/claude-project-memory.git
+cd claude-project-memory
+make install</code></pre>
+
+    <p>Restart Claude Code. That's it.</p>
+
+    <pre><code>make status     # check installation
+make uninstall  # remove the plugin</code></pre>
+
+    <p>
+      <code>make install</code> performs a safe merge into <code>~/.claude/settings.json</code>
+      without overwriting your existing configuration.
+    </p>
+
+    <!-- Storage -->
+    <h2 id="storage">How memory is stored</h2>
+
+    <p>Memory lives inside each project under <code>.claude-project-memory/</code>:</p>
+
+    <pre><code>my-project/
+├── .claude/
+│   └── CLAUDE.md                  ← auto-synced from PROJECT.md (native Claude read)
+└── .claude-project-memory/
+    ├── PROJECT.md          ← permanent context (stack, patterns, decisions)
+    ├── config.json         ← project metadata and settings
+    ├── sessions.jsonl      ← session history with summaries
+    ├── observations.jsonl  ← recorded file edits and commands
+    ├── graph.json          ← detected pattern graph
+    ├── stats.json          ← counter cache (used by the status banner)
+    └── tmp/                ← per-session flag files</code></pre>
+
+    <h3>Dual context delivery</h3>
+
+    <p>Context reaches Claude through two parallel mechanisms for maximum reliability:</p>
+
+    <table>
+      <thead><tr><th>Mechanism</th><th>When</th><th>What it injects</th></tr></thead>
+      <tbody>
+        <tr><td><code>.claude/CLAUDE.md</code> (native)</td><td>Every session, before any hook</td><td>Full PROJECT.md as system prompt</td></tr>
+        <tr><td>Hook <code>UserPromptSubmit</code></td><td>First prompt of the session</td><td>Recent sessions + observations + graph</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      <code>.claude/CLAUDE.md</code> is auto-synced from PROJECT.md every session.
+      Claude reads it as part of the system prompt — no hook dependency required.
+    </p>
+
+    <h3>Why JSONL?</h3>
+
+    <table>
+      <thead><tr><th>Property</th><th>Benefit</th></tr></thead>
+      <tbody>
+        <tr><td><code>git diff</code></td><td>Shows exactly what changed in memory between commits</td></tr>
+        <tr><td><code>git blame</code></td><td>Shows when each piece of information was added</td></tr>
+        <tr><td>Plain text</td><td>Any editor, any tool — <code>grep</code>, <code>jq</code>, <code>cat</code></td></tr>
+        <tr><td>No binary</td><td>Zero dependency on SQLite or any database</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Committing <code>.claude-project-memory/</code> is optional — but if you do, every developer
+      who clones the repo gets the full project context immediately.
+    </p>
+
+    <!-- Graph -->
+    <h2 id="graph">Pattern graph</h2>
+
+    <p>
+      Beyond raw observations, the plugin maintains a <code>graph.json</code> that grows
+      with usage and surfaces patterns automatically. These are injected as additional
+      context at session start.
+    </p>
+
+    <table>
+      <thead><tr><th>Pattern</th><th>What it detects</th></tr></thead>
+      <tbody>
+        <tr><td>Hot files</td><td>Files you edit most frequently</td></tr>
+        <tr><td>Coupling</td><td>Files edited together in the same session</td></tr>
+        <tr><td>Workflows</td><td>Recurring sequences of "edit file X → run command Y"</td></tr>
+      </tbody>
+    </table>
+
+    <p>Example of what Claude sees at session start:</p>
+
+    <pre><code>## Detected patterns
+
+### Most active files
+- `src/auth.py` — 14x
+- `tests/test_auth.py` — 11x
+
+### Couplings (edited together)
+- `auth.py` ↔ `test_auth.py` (9x)
+
+### Detected workflows (edit → run)
+- edit `auth.py` → `pytest tests/ -v` (7x)</code></pre>
+
+    <!-- Skills -->
+    <h2 id="mem-setup">/mem-setup</h2>
+
+    <p>
+      Analyzes the project in depth and creates <code>.claude-project-memory/PROJECT.md</code>.
+    </p>
+
+    <ol class="steps">
+      <li>Reads dependency manifests, configs, folder structure, and code samples</li>
+      <li>Presents a diagnosis: stack, architecture, identified conventions, how to run</li>
+      <li>Asks the developer for context not visible in the code (constraints, decisions, pitfalls)</li>
+      <li>Creates <code>.claude-project-memory/PROJECT.md</code> with everything documented</li>
+    </ol>
+
+    <p>From that point on, Claude never forgets the project's patterns.</p>
+
+    <pre><code>/mem-setup</code></pre>
+
+    <h2 id="mem-search">/mem-search</h2>
+
+    <p>Full-text search across the entire memory history.</p>
+
+    <pre><code>/mem-search authentication
+/mem-search pytest
+/mem-search "database migration"
+/mem-search file: models.py
+/mem-search bash: docker
+/mem-search session: refactor</code></pre>
+
+    <p>Prefix filters: <code>file:</code>, <code>bash:</code>, <code>session:</code> — no prefix searches everything.</p>
+
+    <h2 id="mem-ui">/mem-ui</h2>
+
+    <p>Starts a local web interface at <code>http://localhost:37778</code>.</p>
+
+    <table>
+      <thead><tr><th>Tab</th><th>Content</th></tr></thead>
+      <tbody>
+        <tr><td>PROJECT.md</td><td>Rendered permanent context</td></tr>
+        <tr><td>Sessions</td><td>Session history with dates and summaries</td></tr>
+        <tr><td>Observations</td><td>All recorded events with real-time search</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code>/mem-ui</code></pre>
+
+    <!-- What is recorded -->
+    <h2 id="recorded">What is recorded</h2>
+
+    <table>
+      <thead><tr><th>Event</th><th>What is stored</th></tr></thead>
+      <tbody>
+        <tr><td><code>Write</code> / <code>Edit</code> / <code>MultiEdit</code></td><td>Relative path of the edited file</td></tr>
+        <tr><td><code>Bash</code></td><td>Command executed + exit code</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Trivial commands are ignored: <code>ls</code>, <code>pwd</code>, <code>echo</code>,
+      <code>cat</code>, <code>head</code>, <code>tail</code>, and similar.
+    </p>
+
+    <!-- Comparison -->
+    <h2 id="comparison">Comparison with claude-mem</h2>
+
+    <table>
+      <thead><tr><th></th><th>claude-mem</th><th>claude-project-memory</th></tr></thead>
+      <tbody>
+        <tr><td>Storage location</td><td><code>~/.claude-project-memory/</code> (global)</td><td><code>.claude-project-memory/</code> (per project)</td></tr>
+        <tr><td>Format</td><td>SQLite + Chroma (binary)</td><td>JSONL (plain text)</td></tr>
+        <tr><td>Git</td><td>Not directly committable</td><td>Designed to commit and share</td></tr>
+        <tr><td>Runtime</td><td>Bun worker process</td><td>Direct Node.js scripts</td></tr>
+        <tr><td>Dependencies</td><td>Bun, tree-sitter, SQLite, Chroma</td><td>Node.js only</td></tr>
+        <tr><td>Search</td><td>Semantic via embeddings</td><td>Full-text + pattern graph</td></tr>
+        <tr><td>Team sharing</td><td>Personal per developer</td><td>Shared via git</td></tr>
+      </tbody>
+    </table>
+
+    <p>Both can coexist — they serve different purposes.</p>
+
+    <!-- Sponsor -->
+    <h2 id="sponsor">Sponsor</h2>
+
+    <p>
+      claude-project-memory is free and open source. If it saves time in your workflow,
+      consider supporting its development.
+    </p>
+
+    <div class="sponsor-block">
+      <h3>Support the project</h3>
+      <p>
+        Your sponsorship keeps this project maintained and helps fund the Pro roadmap —
+        cloud sync, hosted dashboard, semantic search, and stack profiles.
+      </p>
+      <a class="btn-sponsor" href="https://github.com/sponsors/schedylabs">♥ Sponsor on GitHub</a>
+    </div>
+
+    <h3>Pro roadmap</h3>
+
+    <table>
+      <thead><tr><th>Feature</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Memory sync across machines and team members</td><td><span class="planned">planned</span></td></tr>
+        <tr><td>Hosted dashboard (no localhost required)</td><td><span class="planned">planned</span></td></tr>
+        <tr><td>Semantic search over observations</td><td><span class="planned">planned</span></td></tr>
+        <tr><td>Stack profiles (FastAPI, Go, Next.js, Laravel…)</td><td><span class="planned">planned</span></td></tr>
+        <tr><td>Priority support</td><td><span class="planned">planned</span></td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Interested in Pro or enterprise support:
+      <a href="mailto:maisbitlabs@gmail.com">maisbitlabs@gmail.com</a>
+    </p>
+
+  </main>
+</div>
+</body>
+</html>

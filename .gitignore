@@ -1,0 +1,19 @@
+node_modules/
+
+# Memory directory — commit or ignore, your choice.
+# Committing .claude-project-memory/ shares full project context with the team.
+# Ignoring it keeps memory local to each developer's machine.
+# .claude-project-memory/
+
+# Temporary session flags (always ignore)
+.claude-project-memory/tmp/
+
+# Stats cache (regenerated automatically)
+.claude-project-memory/stats.json
+
+# Auto-synced Claude context (regenerated from PROJECT.md each session)
+.claude/CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db

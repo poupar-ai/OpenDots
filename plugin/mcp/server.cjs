@@ -34,7 +34,7 @@ const TOOLS = [
   },
   {
     name: 'mem_read_project',
-    description: 'Returns the content of .claude-mem/PROJECT.md — permanent project documentation including stack, architecture, conventions, and known decisions.',
+    description: 'Returns the content of .claude-project-memory/PROJECT.md — permanent project documentation including stack, architecture, conventions, and known decisions.',
     inputSchema: {
       type: 'object',
       properties: {},

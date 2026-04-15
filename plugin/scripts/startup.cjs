@@ -39,4 +39,19 @@ if (!fs.existsSync(memDir)) {
   line += ` | UI → http://localhost:${PORT}`;
 }
 
+// Warn if MCP server is not registered in settings.json
+const os = require('os');
+try {
+  const settingsPath = path.join(
+    process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'),
+    'settings.json'
+  );
+  const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  if (!settings.mcpServers?.['project-mem']) {
+    const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
+    const mcpPath    = path.join(pluginRoot, 'mcp', 'server.cjs');
+    line += ` | ⚠ MCP não registrado — adicione em settings.json: {"mcpServers":{"project-mem":{"type":"stdio","command":"node","args":["${mcpPath}"]}}}`;
+  }
+} catch {}
+
 console.log(JSON.stringify({ continue: true, systemMessage: line }));

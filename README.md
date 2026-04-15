@@ -46,6 +46,23 @@ Ao encerrar → resumo da sessão gerado automaticamente
 
 ## Instalação
 
+### Via Claude Code (recomendado)
+
+Abra o Claude Code e peça:
+
+> "Instale o plugin schedylabs/claude-project-memory"
+
+Ou execute diretamente no terminal:
+
+```bash
+claude plugins marketplace add schedylabs/claude-project-memory
+claude plugins install project-mem@project-mem
+```
+
+Reinicie o Claude Code. Pronto.
+
+### Manual
+
 **Pré-requisito:** [Claude Code](https://claude.ai/code) + Node.js
 
 ```bash
@@ -53,8 +70,6 @@ git clone git@github.com:schedylabs/claude-project-memory.git
 cd claude-project-memory
 make install
 ```
-
-Reinicie o Claude Code. Pronto.
 
 ```bash
 make status     # verifica se está instalado

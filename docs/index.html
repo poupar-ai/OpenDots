@@ -300,6 +300,8 @@
     <ul>
       <li><a href="#overview">Overview</a></li>
       <li><a href="#install">Installation</a></li>
+      <li><a href="#install" style="padding-left:1.5rem;font-size:0.8rem">Via Claude Code</a></li>
+      <li><a href="#install" style="padding-left:1.5rem;font-size:0.8rem">Manual</a></li>
       <li><a href="#storage">How memory is stored</a></li>
       <li><a href="#graph">Pattern graph</a></li>
       <div class="nav-section">Skills</div>
@@ -365,21 +367,29 @@
     <!-- Installation -->
     <h2 id="install">Installation</h2>
 
+    <h3>Via Claude Code (recommended)</h3>
+
+    <p>Open Claude Code and ask:</p>
+
+    <pre><code>Install the plugin schedylabs/claude-project-memory</code></pre>
+
+    <p>Or run directly in the terminal:</p>
+
+    <pre><code>claude plugins marketplace add schedylabs/claude-project-memory
+claude plugins install project-mem@project-mem</code></pre>
+
+    <p>Restart Claude Code. That's it.</p>
+
+    <h3>Manual</h3>
+
     <p><strong>Requirements:</strong> <a href="https://claude.ai/code">Claude Code</a> and Node.js.</p>
 
     <pre><code>git clone git@github.com:schedylabs/claude-project-memory.git
 cd claude-project-memory
 make install</code></pre>
 
-    <p>Restart Claude Code. That's it.</p>
-
     <pre><code>make status     # check installation
 make uninstall  # remove the plugin</code></pre>
-
-    <p>
-      <code>make install</code> performs a safe merge into <code>~/.claude/settings.json</code>
-      without overwriting your existing configuration.
-    </p>
 
     <!-- Storage -->
     <h2 id="storage">How memory is stored</h2>

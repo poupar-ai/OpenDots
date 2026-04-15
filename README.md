@@ -246,6 +246,8 @@ Os dois podem coexistir — servem propósitos diferentes.
 
 Issues, PRs e sugestões são bem-vindos.
 
+> Se você usa **Claude Code** para contribuir com este projeto, o repositório já tem um `CLAUDE.md` na raiz com contexto completo da arquitetura, convenções e como testar. O Claude lê esse arquivo automaticamente ao abrir o projeto.
+
 ```bash
 git clone git@github.com:schedylabs/claude-project-memory.git
 cd claude-project-memory

@@ -80,7 +80,6 @@ if (!fs.existsSync(memDir)) {
 }
 
 // Warn if MCP server is not registered in settings.json
-const os = require('os');
 try {
   const settingsPath = path.join(
     process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'),

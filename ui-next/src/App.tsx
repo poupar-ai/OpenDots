@@ -55,6 +55,7 @@ export default function App() {
                 count={agents?.counts[selected]}
                 lastInvoked={agents?.recent[selected]}
                 manifest={agents?.manifest}
+                logSummary={agents?.logs?.[selected]}
                 onSelect={setSelected}
               />
             </div>

@@ -104,7 +104,8 @@ function getData() {
       for (const [name, a] of Object.entries(manifest.agents || {})) {
         contexts[name] = agents.loadMiniContext(memDir, a.context_file) || '';
       }
-      agentsData = { manifest, contexts, counts, recent };
+      const logs = agentLogSummary();
+      agentsData = { manifest, contexts, counts, recent, logs };
     }
   } catch {}
 
@@ -145,12 +146,19 @@ function getData() {
 // ── Chat com agentes (spawn `claude -p`) ─────────────────────────────────────
 
 const chatDir = path.join(memDir, 'agent_chats');
+const logDir  = path.join(memDir, 'agent_logs');
 
 function chatLogPath(agent) { return path.join(chatDir, `${agent}.jsonl`); }
+function agentLogPath(agent) { return path.join(logDir, `${agent}.jsonl`); }
 
 function appendChat(agent, entry) {
   if (!fs.existsSync(chatDir)) fs.mkdirSync(chatDir, { recursive: true });
   fs.appendFileSync(chatLogPath(agent), JSON.stringify(entry) + '\n');
+}
+
+function appendAgentLog(agent, entry) {
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  fs.appendFileSync(agentLogPath(agent), JSON.stringify(entry) + '\n');
 }
 
 function readChat(agent) {
@@ -159,6 +167,39 @@ function readChat(agent) {
   return fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map(l => {
     try { return JSON.parse(l); } catch { return null; }
   }).filter(Boolean);
+}
+
+function readAgentLog(agent, limit) {
+  const p = agentLogPath(agent);
+  if (!fs.existsSync(p)) return [];
+  const lines = fs.readFileSync(p, 'utf8').split('\n').filter(Boolean);
+  const slice = typeof limit === 'number' && limit > 0 ? lines.slice(-limit) : lines;
+  return slice.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+}
+
+function agentLogSummary() {
+  const out = {};
+  if (!fs.existsSync(logDir)) return out;
+  for (const f of fs.readdirSync(logDir)) {
+    if (!f.endsWith('.jsonl')) continue;
+    const name = f.replace(/\.jsonl$/, '');
+    const entries = readAgentLog(name);
+    let errors = 0, requests = 0, responses = 0;
+    let lastErrorAt = null, lastErrorMsg = null;
+    let lastDurationMs = null;
+    for (const e of entries) {
+      if (e.type === 'request') requests++;
+      else if (e.type === 'response') { responses++; lastDurationMs = e.duration_ms; }
+      else if (e.type === 'error') {
+        errors++;
+        lastErrorAt = e.ts;
+        lastErrorMsg = e.stderr || e.message || `exit ${e.code}`;
+        lastDurationMs = e.duration_ms;
+      }
+    }
+    out[name] = { total: entries.length, requests, responses, errors, lastErrorAt, lastErrorMsg, lastDurationMs };
+  }
+  return out;
 }
 
 function readBody(req) {
@@ -257,6 +298,14 @@ async function handleChatSend(req, res) {
 
   const userTs = new Date().toISOString();
   appendChat(agent, { ts: userTs, role: 'user', content: message });
+  appendAgentLog(agent, {
+    ts: userTs,
+    type: 'request',
+    prompt_chars: prompt.length,
+    user_chars: message.length,
+    history_turns: history.length,
+    model: agentCfg.model || null,
+  });
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -279,6 +328,13 @@ async function handleChatSend(req, res) {
   } catch (err) {
     sse('error', { message: `falha ao iniciar claude CLI: ${err.message}` });
     sse('done', { duration_ms: 0 });
+    appendAgentLog(agent, {
+      ts: new Date().toISOString(),
+      type: 'error',
+      stage: 'spawn',
+      message: err.message,
+      duration_ms: 0,
+    });
     return res.end();
   }
 
@@ -293,8 +349,16 @@ async function handleChatSend(req, res) {
   proc.stderr.on('data', chunk => { errBuf += chunk.toString(); });
 
   proc.on('error', err => {
+    const duration_ms = Date.now() - started;
     sse('error', { message: err.message });
-    sse('done', { duration_ms: Date.now() - started });
+    sse('done', { duration_ms });
+    appendAgentLog(agent, {
+      ts: new Date().toISOString(),
+      type: 'error',
+      stage: 'proc',
+      message: err.message,
+      duration_ms,
+    });
     res.end();
   });
 
@@ -303,8 +367,24 @@ async function handleChatSend(req, res) {
     const agentTs = new Date().toISOString();
     if (code !== 0 && !full) {
       sse('error', { code, stderr: errBuf.slice(0, 500) });
+      appendAgentLog(agent, {
+        ts: agentTs,
+        type: 'error',
+        stage: 'exit',
+        code,
+        stderr: errBuf.slice(0, 500),
+        duration_ms,
+      });
     } else {
       appendChat(agent, { ts: agentTs, role: 'agent', content: full, duration_ms });
+      appendAgentLog(agent, {
+        ts: agentTs,
+        type: 'response',
+        response_chars: full.length,
+        duration_ms,
+        code,
+        stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
+      });
     }
     sse('done', { duration_ms, code });
     res.end();
@@ -328,6 +408,18 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/chat/history' && req.method === 'GET') {
     handleChatHistory(url, res);
+    return;
+  }
+
+  if (url.pathname === '/api/agents/log' && req.method === 'GET') {
+    const agent = url.searchParams.get('agent');
+    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    if (!agent) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'missing agent' }));
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ agent, entries: readAgentLog(agent, limit) }));
     return;
   }
 

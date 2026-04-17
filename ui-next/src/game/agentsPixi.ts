@@ -199,7 +199,7 @@ export class AgentCanvas {
       let node = this.nodes.get(name);
       const [tx, ty] = positions[name];
       if (!node) {
-        const sprite = new AgentSprite(name, type, cfg.emoji);
+        const sprite = new AgentSprite(name, type, cfg.emoji, cfg.profession);
         sprite.x = tx;
         sprite.y = ty;
         sprite.on('pointerdown', (e) => {
@@ -216,11 +216,13 @@ export class AgentCanvas {
           node.targetY = ty;
         }
         node.sprite.updateName(name);
-        node.sprite.updateType(type);
+        node.sprite.updateType(type, cfg.profession);
       }
-      // bombeiro fica calmo (sinal verde) por padrão;
-      // o `!` vermelho só aparece quando houver sinal externo de problema.
-      if (type === 'firefighter') node!.sprite.setStatus('calm');
+      // status do agente: erros recentes no log → alert; caso contrário calmo (só para bombeiros).
+      const errs = data.logs?.[name]?.errors ?? 0;
+      if (errs > 0) node!.sprite.setStatus('alert');
+      else if (type === 'firefighter') node!.sprite.setStatus('calm');
+      else node!.sprite.setStatus('none');
     }
 
     this.applyAlpha();
@@ -303,6 +305,13 @@ export class AgentCanvas {
     for (const { type, base } of rings) {
       const list = (byType[type] || []).filter((n) => n !== manager);
       if (!list.length) continue;
+      // mantém agentes da mesma profissão adjacentes no anel
+      list.sort((a, b) => {
+        const pa = agents[a].profession || '~';
+        const pb = agents[b].profession || '~';
+        if (pa !== pb) return pa.localeCompare(pb);
+        return a.localeCompare(b);
+      });
       const r = cap(minR(list.length, base));
       const step = (2 * Math.PI) / list.length;
       const phase = -Math.PI / 2 + (type === 'specialist' ? 0 : step / 2);
@@ -311,6 +320,23 @@ export class AgentCanvas {
       });
     }
     for (const n of names) if (!out[n]) out[n] = [cx, cy];
+
+    // puxa agentes da mesma profissão pro centróide do grupo (coesão visual)
+    const profGroups: Record<string, string[]> = {};
+    for (const n of names) {
+      const p = agents[n].profession;
+      if (p) (profGroups[p] ||= []).push(n);
+    }
+    for (const group of Object.values(profGroups)) {
+      if (group.length < 2) continue;
+      let cxg = 0, cyg = 0;
+      for (const n of group) { cxg += out[n][0]; cyg += out[n][1]; }
+      cxg /= group.length; cyg /= group.length;
+      for (const n of group) {
+        out[n][0] += (cxg - out[n][0]) * 0.25;
+        out[n][1] += (cyg - out[n][1]) * 0.25;
+      }
+    }
 
     // colisão: empurra pares próximos
     for (let iter = 0; iter < 80; iter++) {

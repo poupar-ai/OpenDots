@@ -9,6 +9,17 @@ const PALETTE: Record<AgentType, { primary: number; accent: number; gear: number
   firefighter: { primary: 0xef4444, accent: 0x7f1d1d, gear: 0xfde047 },
 };
 
+// Cor da "camisa" por profissão — sobrescreve a palette do tipo
+// quando o agente pertence a uma profissão conhecida.
+const PROFESSION_PALETTE: Record<string, { primary: number; accent: number; gear: number }> = {
+  devs: { primary: 0x16a34a, accent: 0x14532d, gear: 0xbbf7d0 },
+};
+
+function paletteFor(type: AgentType, profession?: string) {
+  if (profession && PROFESSION_PALETTE[profession]) return PROFESSION_PALETTE[profession];
+  return PALETTE[type] || PALETTE.specialist;
+}
+
 const SKIN = 0xfcd9b6;
 const SHADOW = 0x0f172a;
 const OUTLINE = 0x0f172a;
@@ -37,6 +48,7 @@ interface Particle {
 export class AgentSprite extends Container {
   public name: string;
   public type: AgentType;
+  public profession: string | undefined;
   private palette: (typeof PALETTE)[AgentType];
   private directionalView: Container; // wrapper pra flip horizontal (padrão Spine Boy)
   private body: Container;
@@ -69,11 +81,12 @@ export class AgentSprite extends Container {
   private stateTimer = 0; // tempo (s) no estado atual — usado para auto-voltar de happy
   private animationMap: Record<AgentState, (dt: number) => void>;
 
-  constructor(name: string, type: AgentType, emoji?: string) {
+  constructor(name: string, type: AgentType, emoji?: string, profession?: string) {
     super();
     this.name = name;
     this.type = type;
-    this.palette = PALETTE[type] || PALETTE.specialist;
+    this.profession = profession;
+    this.palette = paletteFor(type, profession);
     this.workingKind = {
       core: 'compass',
       specialist: 'sparkle',
@@ -332,10 +345,11 @@ export class AgentSprite extends Container {
     this.drawBadgeBg();
   }
 
-  public updateType(type: AgentType) {
-    if (type === this.type) return;
+  public updateType(type: AgentType, profession?: string) {
+    if (type === this.type && profession === this.profession) return;
     this.type = type;
-    this.palette = PALETTE[type] || PALETTE.specialist;
+    this.profession = profession;
+    this.palette = paletteFor(type, profession);
     this.workingKind = {
       core: 'compass',
       specialist: 'sparkle',

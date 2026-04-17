@@ -2,6 +2,7 @@ export type AgentType = 'core' | 'specialist' | 'integrator' | 'motor' | 'firefi
 
 export interface AgentCfg {
   type?: AgentType;
+  profession?: string;
   role?: string;
   emoji?: string;
   can_talk_to?: string[];
@@ -24,11 +25,22 @@ export interface Manifest {
   agents: Record<string, AgentCfg>;
 }
 
+export interface AgentLogSummary {
+  total: number;
+  requests: number;
+  responses: number;
+  errors: number;
+  lastErrorAt: string | null;
+  lastErrorMsg: string | null;
+  lastDurationMs: number | null;
+}
+
 export interface AgentsData {
   manifest: Manifest;
   contexts: Record<string, string>;
   counts: Record<string, number>;
   recent: Record<string, string>;
+  logs?: Record<string, AgentLogSummary>;
 }
 
 export interface ServerData {

@@ -13,6 +13,40 @@ const projectRoot = findProjectRoot(cwd);
 const memDir      = getMemDir(cwd);
 const projectName = path.basename(projectRoot);
 const HTML_PATH   = path.join(__dirname, 'index.html');
+const DIST_DIR    = path.resolve(__dirname, '../..', 'ui-next', 'dist');
+const HAS_DIST    = fs.existsSync(path.join(DIST_DIR, 'index.html'));
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.mjs':  'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.ico':  'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2':'font/woff2',
+  '.map':  'application/json',
+};
+
+function serveStaticFromDist(pathname, res) {
+  const clean = pathname.replace(/^\/+/, '').replace(/\?.*$/, '');
+  const target = clean === '' ? 'index.html' : clean;
+  const filePath = path.resolve(DIST_DIR, target);
+  if (!filePath.startsWith(DIST_DIR)) { res.writeHead(403); res.end('forbidden'); return true; }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
+  });
+  res.end(fs.readFileSync(filePath));
+  return true;
+}
 
 function readMdIfExists(file) {
   const p = path.join(memDir, file);
@@ -280,6 +314,14 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (HAS_DIST && (req.method === 'GET' || req.method === 'HEAD')) {
+    if (serveStaticFromDist(url.pathname, res)) return;
+    // SPA fallback
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    res.end(fs.readFileSync(path.join(DIST_DIR, 'index.html')));
+    return;
+  }
+
   if (url.pathname === '/') {
     try {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -299,6 +341,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`\nproject-mem UI rodando em: http://localhost:${PORT}`);
   console.log(`Projeto: ${projectName}`);
   console.log(`Memória: ${memDir}`);
+  console.log(`UI: ${HAS_DIST ? 'ui-next/dist (React)' : 'plugin/ui/index.html (legacy)'}`);
   console.log('\nCtrl+C para parar\n');
 });
 

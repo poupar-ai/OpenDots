@@ -1,4 +1,6 @@
 node_modules/
+ui-next/node_modules/
+ui-next/dist/
 
 # Memory directory — commit or ignore, your choice.
 # Committing .claude-project-memory/ shares full project context with the team.

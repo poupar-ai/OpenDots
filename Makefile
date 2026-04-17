@@ -7,7 +7,7 @@ ifeq ($(NODE),)
 NODE := node
 endif
 
-.PHONY: install uninstall status help
+.PHONY: install uninstall status help ui ui-dev
 
 help:
 	@echo ""
@@ -16,7 +16,15 @@ help:
 	@echo "  make install    Registra o plugin no Claude Code"
 	@echo "  make uninstall  Remove o plugin do Claude Code"
 	@echo "  make status     Verifica se o plugin está instalado"
+	@echo "  make ui         Instala deps e builda a UI React (ui-next/dist)"
+	@echo "  make ui-dev     Roda Vite dev server (porta 5173, proxy /api → 37778)"
 	@echo ""
+
+ui:
+	@cd ui-next && npm install --silent && npm run build
+
+ui-dev:
+	@cd ui-next && npm run dev
 
 install:
 	@echo ""

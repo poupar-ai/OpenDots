@@ -1,0 +1,122 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ChatMsg } from '@/lib/types';
+
+type Stream = {
+  role: 'agent';
+  content: string;
+  ts: string;
+  streaming: true;
+};
+
+type MsgLike = ChatMsg | Stream;
+
+export function useChat(agent: string | null) {
+  const [history, setHistory] = useState<ChatMsg[]>([]);
+  const [stream, setStream] = useState<Stream | null>(null);
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setStream(null);
+    setHistory([]);
+    setErr(null);
+    if (!agent) return;
+    let cancelled = false;
+    fetch(`/api/chat/history?agent=${encodeURIComponent(agent)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!cancelled) setHistory(j.messages || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [agent]);
+
+  const send = useCallback(
+    async (message: string) => {
+      if (!agent || !message.trim() || sending) return;
+      setSending(true);
+      setErr(null);
+
+      const userMsg: ChatMsg = {
+        ts: new Date().toISOString(),
+        role: 'user',
+        content: message,
+      };
+      setHistory((h) => [...h, userMsg]);
+
+      const ac = new AbortController();
+      abortRef.current = ac;
+
+      try {
+        const r = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent, message }),
+          signal: ac.signal,
+        });
+        if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        let acc = '';
+        let startTs = new Date().toISOString();
+        setStream({ role: 'agent', content: '', ts: startTs, streaming: true });
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split(/\n\n/);
+          buf = parts.pop() || '';
+          for (const part of parts) {
+            const evMatch = part.match(/^event:\s*(\S+)/m);
+            const dataMatch = part.match(/^data:\s*(.+)$/m);
+            if (!evMatch || !dataMatch) continue;
+            const ev = evMatch[1];
+            let payload: any = {};
+            try {
+              payload = JSON.parse(dataMatch[1]);
+            } catch {}
+            if (ev === 'start') {
+              startTs = payload.ts || startTs;
+            } else if (ev === 'text') {
+              acc += payload.text || '';
+              setStream({ role: 'agent', content: acc, ts: startTs, streaming: true });
+            } else if (ev === 'error') {
+              setErr(payload.message || payload.stderr || `exit ${payload.code}`);
+            } else if (ev === 'done') {
+              setHistory((h) => [
+                ...h,
+                {
+                  ts: new Date().toISOString(),
+                  role: 'agent',
+                  content: acc,
+                  duration_ms: payload.duration_ms,
+                },
+              ]);
+              setStream(null);
+            }
+          }
+        }
+      } catch (e: any) {
+        if (e.name !== 'AbortError') setErr(e.message || 'erro no stream');
+        setStream(null);
+      } finally {
+        setSending(false);
+        abortRef.current = null;
+      }
+    },
+    [agent, sending],
+  );
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const messages: MsgLike[] = stream ? [...history, stream] : history;
+  return { messages, send, sending, err, cancel, isStreaming: !!stream };
+}

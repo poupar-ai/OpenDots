@@ -171,16 +171,48 @@ function readBody(req) {
 }
 
 function composePrompt(agent, agentCfg, miniContext, userMessage, history) {
+  const isManager = agent === 'manager';
   const hist = (history || []).slice(-6).map(m => `**${m.role === 'user' ? 'Engenheiro' : agent}:** ${m.content}`).join('\n\n');
-  return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo. O Engenheiro humano está falando com você direto pela UI do project-mem.
+  return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo. A mensagem abaixo chega pela UI do project-mem.
 
 ## Seu mini-contexto
 ${miniContext || '_(nenhum mini-contexto definido)_'}
 
-## Regras
+## Atores e autoria
+Separe sempre quem pediu o quê:
+- **Engenheiro** — humano dono do projeto. É com ele que você está falando neste chat.
+- **Manager** — agente orquestrador. Coordena delegações entre agentes. **Não é o Engenheiro.** Tarefas que o Manager repassa chegam em outro canal (Task tool), não por este chat.
+- **Você (${agent})** — especialista na sua área.
+
+Regras de autoria nesta conversa:
+- Toda mensagem abaixo vem **do Engenheiro** (direto).
+- Se o Engenheiro relatar uma decisão/ordem que veio do Manager ("o manager decidiu X"), trate isso como fato reportado, não como pedido direto do Manager.
+- Nunca confunda "o Manager disse" com "o Engenheiro disse" ao registrar qualquer coisa — a origem importa.
+
+## Regras de resposta
 - Responda dentro do seu papel (${agentCfg.type || 'specialist'}).
-- Se for ação que exige confirmação do Manager (regra de ouro do projeto), diga isso explicitamente em vez de agir.
 - Seja direto. Sem preâmbulo. Português.
+${isManager
+  ? '- Você orquestra: decide quem faz o quê e responde com a decisão consolidada.'
+  : '- Se o pedido é decisão ampla de projeto (stack, roadmap, valores, anti-padrões), responda que isso deve passar pelo Manager — **não decida sozinho**.'}
+
+## Persistência de anotações (project-mem)
+Quando o Engenheiro disser "anote", "registre", "salve" ou equivalente, **não pergunte onde** — classifique e grave. Siga a hierarquia do README:
+
+| Tipo de anotação | Destino | Como salvar | Quem pode registrar |
+|---|---|---|---|
+| Decisão técnica local do SEU escopo (com "por quê") | \`decisions.jsonl\` → \`DECISIONS.md\` | \`/mem-decision <o que> — <por quê>\` | ${isManager ? 'Manager' : 'você mesmo'} |
+| Decisão ampla do projeto (processo, roadmap, arquitetura global) | \`decisions.jsonl\` → \`DECISIONS.md\` | \`/mem-decision ...\` | **Manager** ${isManager ? '(você)' : '— escale'} |
+| Identidade: valores, filosofia, voz, estética, anti-padrão | \`SOUL.md\` | \`/mem-soul add|update: ...\` | **Manager** ${isManager ? '(você)' : '— escale'} |
+| Fato estrutural: stack, pasta, padrão, como rodar | \`PROJECT.md\` | editar direto (ou \`/mem-setup\`) | Manager (ou agente cujo domínio é o fato) |
+| Armadilha (bug + conserto) do SEU escopo | \`gotchas.jsonl\` → \`GOTCHAS.md\` | append manual | ${isManager ? 'Manager' : 'você mesmo'} |
+| Termo do glossário | \`glossary.jsonl\` → \`GLOSSARY.md\` | append manual | **Manager** ${isManager ? '(você)' : '— escale'} |
+
+Diretrizes:
+- Escolha UM destino. Não divida a mesma anotação.
+- **Marque a origem** no próprio registro: \`origem: Engenheiro\` (quando veio direto do dev, como aqui) ou \`origem: Manager via <agente>\` (quando é repasse interno).
+- Ao confirmar, responda em UMA linha: "registrei em <arquivo> (decisão/alma/gotcha) — origem: Engenheiro".
+- Se estiver inseguro entre dois destinos, faça UMA pergunta curta; se estiver entre registrar agora ou escalar ao Manager, **escalar**.
 ${hist ? '\n## Conversa recente\n' + hist + '\n' : ''}
 ## Mensagem do Engenheiro
 ${userMessage}

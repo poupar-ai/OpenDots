@@ -328,10 +328,10 @@ export class AgentCanvas {
         node.sprite.updateName(name);
         node.sprite.updateType(type, cfg.profession);
       }
-      // status do agente: erros recentes no log → alert; caso contrário calmo (só para bombeiros).
+      // status do agente: último evento é erro → alert + balão; caso contrário limpa.
       const log = data.logs?.[name];
-      const errs = log?.errors ?? 0;
-      if (errs > 0) {
+      const isCurrentlyFailing = log?.lastEventType === 'error';
+      if (isCurrentlyFailing) {
         node!.sprite.setStatus('alert');
         node!.sprite.setErrorTooltip(log?.lastErrorMsg ?? null, log?.lastErrorHint ?? null);
       } else {

@@ -382,8 +382,10 @@ export class AgentSprite extends Container {
     const padX = 6;
     const padY = 5;
     const gap = 2;
+    const copyBtnSize = 14;
+    const copyGap = 4;
     const contentW = Math.min(Math.max(errText.width, hintText ? hintText.width : 0), wrapWidth);
-    const w = contentW + padX * 2;
+    const w = contentW + padX * 2 + copyBtnSize + copyGap;
     const h = errText.height + (hintText ? hintText.height + gap : 0) + padY * 2;
 
     const bg = new Graphics();
@@ -400,9 +402,40 @@ export class AgentSprite extends Container {
     errText.position.set(-w / 2 + padX, padY);
     if (hintText) hintText.position.set(-w / 2 + padX, padY + errText.height + gap);
 
+    const copyBtn = new Container();
+    const copyBg = new Graphics();
+    copyBg.roundRect(0, 0, copyBtnSize, copyBtnSize, 3)
+      .fill({ color: 0xf1f5f9 })
+      .stroke({ width: 0.8, color: 0xef4444, alpha: 0.5 });
+    const copyIcon = new Text({
+      text: '📋',
+      style: new TextStyle({ fontSize: 9, fontFamily: 'ui-sans-serif, system-ui' }),
+    });
+    copyIcon.anchor.set(0.5);
+    copyIcon.position.set(copyBtnSize / 2, copyBtnSize / 2);
+    copyBtn.addChild(copyBg);
+    copyBtn.addChild(copyIcon);
+    copyBtn.position.set(w / 2 - copyBtnSize - padX / 2, padY);
+    copyBtn.eventMode = 'static';
+    copyBtn.cursor = 'pointer';
+    copyBtn.hitArea = { contains: (x: number, y: number) =>
+      x >= 0 && x <= copyBtnSize && y >= 0 && y <= copyBtnSize } as any;
+    const payload = hint ? `Erro: ${msg}\nCorreção: ${hint}` : `Erro: ${msg}`;
+    const copyHandler = (e: any) => {
+      if (e?.stopPropagation) e.stopPropagation();
+      try {
+        navigator.clipboard?.writeText(payload);
+        copyIcon.text = '✓';
+        setTimeout(() => { copyIcon.text = '📋'; }, 900);
+      } catch {}
+    };
+    copyBtn.on('pointerdown', copyHandler);
+    copyBtn.on('pointertap', copyHandler);
+
     bubble.addChild(bg);
     bubble.addChild(errText);
     if (hintText) bubble.addChild(hintText);
+    bubble.addChild(copyBtn);
 
     bubble.position.set(0, -50 - h);
     this.errorBubble = bubble;

@@ -34,6 +34,7 @@ export interface AgentLogSummary {
   lastErrorMsg: string | null;
   lastErrorHint?: string | null;
   lastDurationMs: number | null;
+  lastEventType?: 'request' | 'response' | 'error' | null;
 }
 
 export interface AgentsData {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, X, Bot, User as UserIcon } from 'lucide-react';
+import { Send, X, Bot, User as UserIcon, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
@@ -24,7 +24,7 @@ const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'destructive' | 'succ
 };
 
 export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props) {
-  const { messages, send, sending, err, isStreaming } = useChat(agent);
+  const { messages, send, sending, err, isStreaming, streamingPhase } = useChat(agent);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -104,7 +104,13 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
           </div>
           <p className="truncate text-xs text-muted-foreground">
             {isStreaming ? (
-              <span className="text-emerald-600">digitando…</span>
+              streamingPhase === 'thinking' ? (
+                <span className="inline-flex items-center gap-1 text-amber-600">
+                  <Brain className="h-3 w-3" /> pensando…
+                </span>
+              ) : (
+                <span className="text-emerald-600">digitando…</span>
+              )
             ) : (
               agentCfg.role || 'agente'
             )}
@@ -190,14 +196,31 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
 function Bubble({
   msg,
 }: {
-  msg: { role: 'user' | 'agent'; content: string; ts: string; streaming?: boolean };
+  msg: {
+    role: 'user' | 'agent';
+    content: string;
+    ts: string;
+    streaming?: boolean;
+    phase?: 'thinking' | 'writing';
+  };
 }) {
   const isUser = msg.role === 'user';
+  const thinking = msg.streaming && msg.phase === 'thinking';
+  const writing = msg.streaming && msg.phase === 'writing';
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'justify-end' : 'justify-start')}>
       {!isUser && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px]">
-          <Bot className="h-3.5 w-3.5 text-slate-600" />
+        <div
+          className={cn(
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px]',
+            thinking ? 'bg-amber-100' : 'bg-slate-200',
+          )}
+        >
+          {thinking ? (
+            <Brain className="h-3.5 w-3.5 text-amber-600" />
+          ) : (
+            <Bot className="h-3.5 w-3.5 text-slate-600" />
+          )}
         </div>
       )}
       <div
@@ -206,22 +229,31 @@ function Bubble({
           isUser
             ? 'user rounded-br-sm bg-primary text-primary-foreground'
             : 'rounded-bl-sm bg-white text-slate-800',
-          msg.streaming && 'streaming-cursor',
+          writing && 'streaming-cursor',
         )}
       >
-        {isUser ? (
+        {thinking ? (
+          <div className="flex items-center gap-1.5 py-0.5">
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+            <span className="ml-1 text-[11px] text-slate-500">pensando</span>
+          </div>
+        ) : isUser ? (
           <div className="whitespace-pre-wrap break-words">{msg.content}</div>
         ) : (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content || ' '}</ReactMarkdown>
         )}
-        <div
-          className={cn(
-            'mt-1 text-right text-[10px]',
-            isUser ? 'text-white/70' : 'text-slate-400',
-          )}
-        >
-          {fmtTime(msg.ts)}
-        </div>
+        {!thinking && (
+          <div
+            className={cn(
+              'mt-1 text-right text-[10px]',
+              isUser ? 'text-white/70' : 'text-slate-400',
+            )}
+          >
+            {fmtTime(msg.ts)}
+          </div>
+        )}
       </div>
       {isUser && (
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">

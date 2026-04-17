@@ -6,6 +6,7 @@ type Stream = {
   content: string;
   ts: string;
   streaming: true;
+  phase: 'thinking' | 'writing';
 };
 
 type MsgLike = ChatMsg | Stream;
@@ -47,6 +48,10 @@ export function useChat(agent: string | null) {
       };
       setHistory((h) => [...h, userMsg]);
 
+      // Mostra "pensando" imediatamente, antes do primeiro token chegar.
+      let startTs = new Date().toISOString();
+      setStream({ role: 'agent', content: '', ts: startTs, streaming: true, phase: 'thinking' });
+
       const ac = new AbortController();
       abortRef.current = ac;
 
@@ -63,8 +68,6 @@ export function useChat(agent: string | null) {
         const dec = new TextDecoder();
         let buf = '';
         let acc = '';
-        let startTs = new Date().toISOString();
-        setStream({ role: 'agent', content: '', ts: startTs, streaming: true });
 
         while (true) {
           const { value, done } = await reader.read();
@@ -85,7 +88,7 @@ export function useChat(agent: string | null) {
               startTs = payload.ts || startTs;
             } else if (ev === 'text') {
               acc += payload.text || '';
-              setStream({ role: 'agent', content: acc, ts: startTs, streaming: true });
+              setStream({ role: 'agent', content: acc, ts: startTs, streaming: true, phase: 'writing' });
             } else if (ev === 'error') {
               setErr(payload.message || payload.stderr || `exit ${payload.code}`);
             } else if (ev === 'done') {
@@ -118,5 +121,13 @@ export function useChat(agent: string | null) {
   }, []);
 
   const messages: MsgLike[] = stream ? [...history, stream] : history;
-  return { messages, send, sending, err, cancel, isStreaming: !!stream };
+  return {
+    messages,
+    send,
+    sending,
+    err,
+    cancel,
+    isStreaming: !!stream,
+    streamingPhase: stream?.phase ?? null,
+  };
 }

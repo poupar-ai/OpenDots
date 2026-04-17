@@ -16,13 +16,23 @@ const DIR      = 'agents';
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
+// Tipos de agente:
+//   core        — Manager, Oracle (sistema, sempre existem)
+//   specialist  — Conhecimento interno do projeto (architect, reviewer, tester, designer)
+//   integrator  — Conhece uma API externa a fundo. INFORMA, NÃO AGE. Sem MCPs.
+//   motor       — Age no mundo real via MCPs. Guardrails obrigatórios.
+//   firefighter — Reativo. Escuta logs (Datadog), detecta erro, dispara triage via claude -p.
+//                 Diagnostica e escala ao Manager — não corrige sozinho.
+const AGENT_TYPES = new Set(['core', 'specialist', 'integrator', 'motor', 'firefighter']);
+
 const DEFAULT_MANIFEST = {
   version: 1,
   manager: 'manager',
   oracle:  'oracle',
-  rule: 'Toda decisão relevante deve ser comunicada ao Manager antes de finalizar. O Engenheiro pode falar direto com qualquer agente, mas o Manager é notificado.',
+  rule: 'Toda decisão relevante deve ser comunicada ao Manager antes de finalizar. O Engenheiro pode falar direto com qualquer agente, mas o Manager é notificado. Motores (ação no mundo real) sempre pedem confirmação ao Manager antes de executar.',
   agents: {
     manager: {
+      type: 'core',
       emoji: '🎯',
       model: 'opus',
       role:  'Orquestrador central. Recebe ordens do Engenheiro, distribui tarefas, consolida resultados, comunica decisões.',
@@ -32,6 +42,7 @@ const DEFAULT_MANIFEST = {
       can_talk_to: ['oracle', 'architect', 'reviewer', 'tester', 'designer']
     },
     oracle: {
+      type: 'core',
       emoji: '🔮',
       model: 'opus',
       role:  'Conhece todo o projeto — fonte de verdade sobre código, arquitetura e histórico. Responde, não dá ordens.',
@@ -41,6 +52,7 @@ const DEFAULT_MANIFEST = {
       can_talk_to: ['manager']
     },
     architect: {
+      type: 'specialist',
       emoji: '🏛',
       model: 'opus',
       role:  'Decisões de arquitetura, trade-offs de design, ADRs.',
@@ -50,6 +62,7 @@ const DEFAULT_MANIFEST = {
       can_talk_to: ['manager', 'oracle']
     },
     reviewer: {
+      type: 'specialist',
       emoji: '🔍',
       model: 'sonnet',
       role:  'Revisa PRs, aponta bugs, sugere melhorias. Segurança e clareza.',
@@ -59,6 +72,7 @@ const DEFAULT_MANIFEST = {
       can_talk_to: ['manager', 'oracle']
     },
     tester: {
+      type: 'specialist',
       emoji: '🧪',
       model: 'sonnet',
       role:  'Escreve testes, roda suites, reporta regressões. Unit + integration.',
@@ -68,6 +82,7 @@ const DEFAULT_MANIFEST = {
       can_talk_to: ['manager', 'oracle']
     },
     designer: {
+      type: 'specialist',
       emoji: '🎨',
       model: 'sonnet',
       role:  'UI/UX, layout, acessibilidade, consistência visual.',
@@ -155,6 +170,128 @@ Decisões visuais, layout, acessibilidade, consistência. Conversa com o Manager
 `
 };
 
+// ── Templates pra novos agentes ───────────────────────────────────────────────
+
+function integratorTemplate({ name, service, description, base_url, auth, env_vars, endpoints, webhooks, docs_url, gotchas }) {
+  const envList = (env_vars || []).map(v => `- \`${v}\``).join('\n') || '- _(nenhuma)_';
+  const epList  = (endpoints || []).map(e => `- \`${e.method || 'GET'} ${e.path}\`${e.purpose ? ' — ' + e.purpose : ''}`).join('\n') || '- _A preencher a partir da documentação oficial._';
+  const whList  = (webhooks || []).map(w => `- \`${w.event}\`${w.purpose ? ' — ' + w.purpose : ''}`).join('\n') || '- _(sem webhooks documentados ainda)_';
+  const gotList = (gotchas || []).map(g => `- ${g}`).join('\n') || '- _A preencher conforme integração avança._';
+
+  return `# ${name} — Integrator (${service || name})
+
+## Papel
+${description || 'Integrator agent. Conhece a API externa a fundo. **Informa, não age.** Quem age é o motor correspondente.'}
+
+## Documentação oficial
+${docs_url ? `- ${docs_url}` : '- _Adicionar URL da documentação oficial_'}
+
+## Base URL
+${base_url ? `\`${base_url}\`` : '_A definir_'}
+
+## Autenticação
+${auth || '_A preencher: tipo (API key / OAuth / JWT), header esperado, formato do token._'}
+
+## Env vars esperadas
+${envList}
+
+> Nunca guarde valores no código ou nos contextos. Só nomes.
+
+## Endpoints principais
+${epList}
+
+## Webhooks
+${whList}
+
+## Gotchas conhecidas
+${gotList}
+
+## Quando o Manager deve consultar este agente
+- Antes de implementar qualquer chamada pra ${service || name}
+- Quando aparecer erro de integração
+- Ao revisar PRs que mexem com ${service || name}
+`;
+}
+
+function firefighterTemplate({ name, service, description, datadog_query, threshold, window_minutes, cooldown_seconds, max_triages_per_hour, runbook, escalation, env_vars }) {
+  const envList = (env_vars || ['DD_API_KEY', 'DD_APP_KEY', 'DD_SITE']).map(v => `- \`${v}\``).join('\n');
+  const runbookList = (runbook || []).map(r => `- ${r}`).join('\n') || '- _A preencher: primeiro olhar, comandos úteis, hipóteses típicas._';
+  const escalationList = (escalation || []).map(e => `- ${e}`).join('\n') || '- Sempre: reportar triage ao Manager\n- Se incidente crítico: notificar o Engenheiro humano';
+
+  return `# ${name} — Firefighter (${service || 'monitoramento'})
+
+## Papel
+${description || 'Firefighter agent. **Reativo** — escuta logs e dispara triage quando detecta padrão de erro. Diagnostica, propõe correção, **escala ao Manager**. Nunca corrige sozinho.'}
+
+## O que observa
+- **Fonte:** Datadog Logs
+- **Query:** \`${datadog_query || 'service:? status:error'}\`
+- **Threshold:** ${threshold || 5} eventos
+- **Janela:** últimos ${window_minutes || 5} minutos
+
+## Controles de custo
+- **Cooldown:** ${cooldown_seconds || 900}s entre triages consecutivas (evita spam no mesmo incidente)
+- **Teto:** ${max_triages_per_hour || 4} triages/hora (proteção contra storm)
+
+## Env vars esperadas (só NOMES, sem valores)
+${envList}
+
+## Runbook — primeiro olhar
+${runbookList}
+
+## Escalação
+${escalationList}
+
+## Regras obrigatórias
+1. **Nunca** corrige código sem aprovação do Manager + Engenheiro.
+2. **Sempre** registra a triage como observação (\`firefighter_triage\`).
+3. **Não** re-dispara durante cooldown (dedup por incidente).
+4. **Dry-first**: diagnóstico primeiro, ação depois — e só via motor aprovado.
+
+## Quando o Manager consulta
+- Após receber triage: validar diagnóstico, decidir se aciona motor de correção ou só monitora.
+- Para ajustar threshold/query se estiver ruidoso.
+`;
+}
+
+function motorTemplate({ name, action, description, mcps, tools, env_vars, allowed_actions, forbidden_actions, requires_manager_approval }) {
+  const mcpList = (mcps || []).map(m => `- \`${m}\``).join('\n') || '- _(nenhum MCP configurado — este motor precisa de um MCP server em settings.json para agir)_';
+  const envList = (env_vars || []).map(v => `- \`${v}\``).join('\n') || '- _(nenhuma)_';
+  const allowed = (allowed_actions || []).map(a => `- ${a}`).join('\n') || '- _A definir_';
+  const forbidden = (forbidden_actions || []).map(a => `- ${a}`).join('\n') || '- Enviar conteúdo não verificado\n- Operar fora do horário comercial (quando aplicável)\n- Ações em massa sem aprovação do Manager';
+
+  return `# ${name} — Motor (${action || name})
+
+## Papel
+${description || 'Motor agent. **Age no mundo real** via MCPs ou chamadas de rede. Toda ação relevante passa pelo Manager.'}
+
+## Guardrails obrigatórios
+1. **Confirmar com o Manager** antes de executar qualquer ação ${requires_manager_approval === false ? '_(exceto operações marcadas como seguras)_' : 'relevante'}
+2. **Nunca** armazenar ou logar conteúdo sensível (senhas, tokens, dados pessoais em texto plano)
+3. **Idempotência** — toda ação precisa ter identificador único pra evitar duplicidade
+4. **Dry-run primeiro** quando possível — simule antes de executar de verdade
+
+## MCPs necessários
+${mcpList}
+
+## Ferramentas permitidas
+${(tools || []).map(t => `- \`${t}\``).join('\n') || '- _A definir_'}
+
+## Env vars
+${envList}
+
+## Ações permitidas
+${allowed}
+
+## Ações proibidas
+${forbidden}
+
+## Quando o Manager pode invocar
+- Apenas após confirmar com o Engenheiro humano em ações de escopo amplo
+- Individualmente pra ações rotineiras já aprovadas
+`;
+}
+
 // ── I/O ───────────────────────────────────────────────────────────────────────
 
 function manifestPath(memDir) { return path.join(memDir, MANIFEST); }
@@ -234,26 +371,118 @@ function buildInjectionBlock(memDir) {
   const manager = cfg.manager || 'manager';
   const entries = Object.entries(cfg.agents);
 
-  lines.push(`Papéis declarados (delegue via Task tool com \`subagent_type\` apropriado):`);
+  const groups = {
+    core:        { title: '### Core (sistema)',                                           list: [] },
+    specialist:  { title: '### Especialistas (conhecimento interno)',                     list: [] },
+    integrator:  { title: '### Integradores (conhecimento externo — consultam, não agem)',list: [] },
+    motor:       { title: '### Motores (ação no mundo — requer confirmação do Manager)',  list: [] },
+    firefighter: { title: '### Bombeiros (reativos — escutam logs, diagnosticam, escalam)',list: [] }
+  };
+
   for (const [name, a] of entries) {
-    const emoji = a.emoji || '•';
-    const isManager = name === manager;
-    const tag = isManager ? ' **(Manager)**' : (name === cfg.oracle ? ' _(Oracle)_' : '');
-    lines.push(`- ${emoji} **${name}**${tag} — ${a.role}`);
-    if (a.model) lines.push(`  · modelo: \`${a.model}\``);
-    if (a.can_talk_to && a.can_talk_to.length) {
-      lines.push(`  · fala com: ${a.can_talk_to.map(x => `\`${x}\``).join(', ')}`);
-    }
-    const ctx = loadMiniContext(memDir, a.context_file);
-    if (ctx) {
-      const short = ctx.split('\n').slice(0, 4).join(' ').replace(/#+\s*/g, '').slice(0, 140);
-      if (short) lines.push(`  · _${short}…_`);
+    const type = AGENT_TYPES.has(a.type) ? a.type : 'specialist';
+    groups[type].list.push([name, a]);
+  }
+
+  lines.push(`Delegue via Task tool com \`subagent_type\` apropriado. Respeite o tipo de cada agente:`);
+
+  for (const key of ['core', 'specialist', 'integrator', 'motor', 'firefighter']) {
+    const g = groups[key];
+    if (g.list.length === 0) continue;
+    lines.push('');
+    lines.push(g.title);
+    for (const [name, a] of g.list) {
+      const emoji = a.emoji || '•';
+      const isManager = name === manager;
+      const tag = isManager ? ' **(Manager)**' : (name === cfg.oracle ? ' _(Oracle)_' : '');
+      lines.push(`- ${emoji} **${name}**${tag} — ${a.role}`);
+      if (a.model) lines.push(`  · modelo: \`${a.model}\``);
+      if (a.mcps && a.mcps.length) {
+        lines.push(`  · MCPs: ${a.mcps.map(x => `\`${x}\``).join(', ')}`);
+      }
+      if (a.watch && a.watch.query) {
+        lines.push(`  · observa: \`${a.watch.query}\` (${a.watch.source || 'datadog'}, threshold ${a.watch.threshold}/${a.watch.window_minutes}min)`);
+      }
+      if (a.can_talk_to && a.can_talk_to.length) {
+        lines.push(`  · fala com: ${a.can_talk_to.map(x => `\`${x}\``).join(', ')}`);
+      }
+      const ctx = loadMiniContext(memDir, a.context_file);
+      if (ctx) {
+        const short = ctx.split('\n').slice(0, 4).join(' ').replace(/#+\s*/g, '').slice(0, 140);
+        if (short) lines.push(`  · _${short}…_`);
+      }
     }
   }
+
   lines.push('');
-  lines.push(`> Antes de finalizar uma tarefa complexa: delegue pro agente certo (Task) e reporte resultado consolidado ao Manager.`);
+  lines.push(`> Antes de finalizar uma tarefa complexa: delegue pro agente certo (Task) e reporte resultado consolidado ao Manager. Motores nunca executam sem confirmação.`);
 
   return lines;
+}
+
+// ── Adicionar / remover agentes ───────────────────────────────────────────────
+
+function addAgent(memDir, name, config) {
+  if (!name || !/^[a-z0-9_-]+$/.test(name)) {
+    throw new Error('Nome inválido. Use só letras minúsculas, números, "-" ou "_".');
+  }
+  const type = config.type;
+  if (!AGENT_TYPES.has(type)) {
+    throw new Error(`Tipo inválido: ${type}. Use um de: ${[...AGENT_TYPES].join(', ')}`);
+  }
+
+  const cfg = loadManifest(memDir) || { version: 1, manager: 'manager', oracle: 'oracle', agents: {} };
+  if (cfg.agents[name]) {
+    throw new Error(`Agente "${name}" já existe. Use edit ou remove primeiro.`);
+  }
+
+  const contextFile = config.context_file || `agents/${name}.md`;
+  const defaultEmoji = { integrator: '🔌', motor: '⚙️', firefighter: '🚒' }[type] || '•';
+  cfg.agents[name] = {
+    type,
+    emoji: config.emoji || defaultEmoji,
+    model: config.model || 'sonnet',
+    role:  config.role || '',
+    context_file: contextFile,
+    tools: config.tools || ['Read', 'Grep', 'Glob'],
+    mcps:  config.mcps  || [],
+    can_talk_to: config.can_talk_to || ['manager']
+  };
+  if (type === 'firefighter' && config.watch) {
+    cfg.agents[name].watch = {
+      source:               config.watch.source               || 'datadog',
+      query:                config.watch.query                || '',
+      threshold:            config.watch.threshold            || 5,
+      window_minutes:       config.watch.window_minutes       || 5,
+      cooldown_seconds:     config.watch.cooldown_seconds     || 900,
+      max_triages_per_hour: config.watch.max_triages_per_hour || 4,
+      env_vars:             config.watch.env_vars             || ['DD_API_KEY', 'DD_APP_KEY', 'DD_SITE']
+    };
+  }
+
+  saveManifest(memDir, cfg);
+
+  const ctxPath = path.join(memDir, contextFile);
+  if (!fs.existsSync(ctxPath)) {
+    const dir = path.dirname(ctxPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(ctxPath, config.context || `# ${name}\n\n## Responsabilidade\n${config.role || '_A preencher_'}\n`);
+  }
+
+  return cfg.agents[name];
+}
+
+function removeAgent(memDir, name) {
+  const cfg = loadManifest(memDir);
+  if (!cfg || !cfg.agents[name]) return false;
+  const ctxFile = cfg.agents[name].context_file;
+  delete cfg.agents[name];
+  saveManifest(memDir, cfg);
+  try {
+    const p = path.join(memDir, ctxFile || `agents/${name}.md`);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {}
+  return true;
 }
 
 module.exports = {
@@ -263,8 +492,14 @@ module.exports = {
   initDefaults,
   countInvocations,
   buildInjectionBlock,
+  addAgent,
+  removeAgent,
+  integratorTemplate,
+  motorTemplate,
+  firefighterTemplate,
   manifestPath,
   agentsDir,
+  AGENT_TYPES,
   DEFAULT_MANIFEST,
   DEFAULT_MINI_CONTEXTS
 };

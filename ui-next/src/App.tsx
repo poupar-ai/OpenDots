@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Brain, LogOut, Users } from 'lucide-react';
+import { Brain, LogOut, Users, Package } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { ModulesPanel } from '@/panels/ModulesPanel';
@@ -8,6 +8,7 @@ import { ChatPanel } from '@/panels/ChatPanel';
 import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
 import { HumansPanel } from '@/panels/HumansPanel';
 import { MyChatsPanel } from '@/panels/MyChatsPanel';
+import { SeedsPanel } from '@/panels/SeedsPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -26,6 +27,7 @@ export default function App() {
   const [humansPreselected, setHumansPreselected] = useState<string | null>(null);
   const [myChatsOpen, setMyChatsOpen] = useState(false);
   const [humansTick, setHumansTick] = useState(0);
+  const [seedsOpen, setSeedsOpen] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
 
@@ -61,6 +63,9 @@ export default function App() {
           }}
         />
       )}
+      {seedsOpen && (
+        <SeedsPanel onClose={() => setSeedsOpen(false)} />
+      )}
       {myChatsOpen && humanId && human && (
         <MyChatsPanel
           meId={humanId}
@@ -89,11 +94,20 @@ export default function App() {
           {err && <Badge variant="destructive">offline</Badge>}
           {chatStreaming && <Badge variant="success">chat ao vivo</Badge>}
           {data && <Badge variant="outline">{data.stats?.sessions || 0} sessões</Badge>}
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-2 gap-1.5"
+            onClick={() => setSeedsOpen(true)}
+            title="instalar time de agentes a partir de templates"
+          >
+            <Package className="h-3.5 w-3.5" /> time
+          </Button>
           {human && (
             <Button
               size="sm"
               variant="outline"
-              className="ml-2 gap-1.5"
+              className="gap-1.5"
               onClick={() => setHumansOpen(true)}
               title="falar com outros humanos"
             >

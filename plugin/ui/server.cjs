@@ -6,6 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { findProjectRoot, getMemDir, readJsonl } = require('../scripts/lib.cjs');
 const agents = require('../scripts/agents.cjs');
+const seed = require('../scripts/seed.cjs');
 
 const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
 const cwd         = process.cwd();
@@ -1178,6 +1179,50 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+// ── Seeds (agentes-template) ────────────────────────────────────────────────
+
+function handleSeedsList(res) {
+  const categories = seed.listCategories().map((c) => {
+    const packs = seed.listPacks(c.name).map((p) => ({
+      name: p.name,
+      label: p.meta?.label || p.name,
+      description: p.meta?.description || '',
+      agents: p.agentNames,
+    }));
+    return {
+      name: c.name,
+      label: c.label || c.name,
+      description: c.description || '',
+      packs,
+    };
+  });
+  sendJson(res, 200, { categories, project_root: projectRoot });
+}
+
+async function handleSeedsApply(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { ref, only, exclude, overwrite } = body || {};
+  if (!ref || typeof ref !== 'string' || !ref.includes('/')) {
+    return sendJson(res, 400, { error: 'need ref as "<categoria>/<pack>"' });
+  }
+  const onlyStr    = Array.isArray(only)    ? only.join(',')    : (only    || '');
+  const excludeStr = Array.isArray(exclude) ? exclude.join(',') : (exclude || '');
+  try {
+    const r = seed.apply({
+      ref,
+      projectRoot,
+      only: onlyStr,
+      exclude: excludeStr,
+      overwrite: !!overwrite,
+    });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
 function handleHumansList(res) {
   const data = loadHumans();
   const list = Object.values(data.humans).map(humanSummary);
@@ -1439,6 +1484,15 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/chat/history' && req.method === 'GET') {
     handleChatHistory(url, res);
+    return;
+  }
+
+  if (url.pathname === '/api/seeds' && req.method === 'GET') {
+    handleSeedsList(res);
+    return;
+  }
+  if (url.pathname === '/api/seeds/apply' && req.method === 'POST') {
+    handleSeedsApply(req, res).catch((e) => sendJson(res, 500, { error: e.message }));
     return;
   }
 

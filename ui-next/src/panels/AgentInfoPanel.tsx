@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { AgentCfg } from '@/lib/types';
-import { Eye, Users } from 'lucide-react';
+import type { AgentCfg, Manifest } from '@/lib/types';
+import { Eye, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface Props {
   name: string;
@@ -9,10 +9,31 @@ interface Props {
   context: string;
   count?: number;
   lastInvoked?: string;
+  manifest?: Manifest | null;
+  onSelect?: (name: string) => void;
 }
 
-export function AgentInfoPanel({ name, cfg, context, count, lastInvoked }: Props) {
+function edges(c: AgentCfg): string[] {
+  return c.can_talk_to || c.consults || [];
+}
+
+export function AgentInfoPanel({
+  name,
+  cfg,
+  context,
+  count,
+  lastInvoked,
+  manifest,
+  onSelect,
+}: Props) {
   const type = cfg.type || 'specialist';
+  const outgoing = edges(cfg);
+  const incoming = manifest
+    ? Object.entries(manifest.agents)
+        .filter(([n, a]) => n !== name && edges(a).includes(name))
+        .map(([n]) => n)
+    : [];
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -43,16 +64,40 @@ export function AgentInfoPanel({ name, cfg, context, count, lastInvoked }: Props
             </div>
           </div>
         )}
-        {cfg.consults && cfg.consults.length > 0 && (
+        {outgoing.length > 0 && (
           <div>
-            <div className="mb-1 flex items-center gap-1 text-muted-foreground">
-              <Users className="h-3 w-3" /> consulta
+            <div className="mb-1 flex items-center gap-1 text-orange-600">
+              <ArrowRight className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wide">fala com</span>
             </div>
             <div className="flex flex-wrap gap-1">
-              {cfg.consults.map((c) => (
-                <Badge key={c} variant="secondary">
+              {outgoing.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onSelect?.(c)}
+                  className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
+                >
                   {c}
-                </Badge>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {incoming.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-1 text-blue-600">
+              <ArrowLeft className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wide">recebe de</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {incoming.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => onSelect?.(c)}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
+                >
+                  {c}
+                </button>
               ))}
             </div>
           </div>

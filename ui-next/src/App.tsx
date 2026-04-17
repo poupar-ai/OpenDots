@@ -54,6 +54,8 @@ export default function App() {
                 context={agentContext}
                 count={agents?.counts[selected]}
                 lastInvoked={agents?.recent[selected]}
+                manifest={agents?.manifest}
+                onSelect={setSelected}
               />
             </div>
           )}
@@ -65,7 +67,6 @@ export default function App() {
             selected={selected}
             onSelect={setSelected}
             workingAgent={chatStreaming ? selected : null}
-            workingLabel="pensando…"
           />
         </main>
 

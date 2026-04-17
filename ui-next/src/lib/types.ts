@@ -4,9 +4,12 @@ export interface AgentCfg {
   type?: AgentType;
   role?: string;
   emoji?: string;
-  consults?: string[];
+  can_talk_to?: string[];
+  consults?: string[]; // legacy
   model?: string;
   context_file?: string;
+  tools?: string[];
+  mcps?: string[];
   watch?: {
     source?: string;
     query?: string;

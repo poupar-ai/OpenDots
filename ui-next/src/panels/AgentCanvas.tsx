@@ -7,10 +7,9 @@ interface Props {
   selected: string | null;
   onSelect: (name: string) => void;
   workingAgent?: string | null;
-  workingLabel?: string;
 }
 
-export function AgentCanvas({ agents, selected, onSelect, workingAgent, workingLabel }: Props) {
+export function AgentCanvas({ agents, selected, onSelect, workingAgent }: Props) {
   const elRef = useRef<HTMLDivElement>(null);
   const pixiRef = useRef<PixiCanvas | null>(null);
 
@@ -34,12 +33,8 @@ export function AgentCanvas({ agents, selected, onSelect, workingAgent, workingL
   }, [selected]);
 
   useEffect(() => {
-    if (!pixiRef.current) return;
-    for (const n of Object.keys(agents?.manifest.agents || {})) {
-      if (workingAgent === n) pixiRef.current.setWorking(n, workingLabel);
-      else pixiRef.current.clearWorking(n);
-    }
-  }, [workingAgent, workingLabel, agents]);
+    pixiRef.current?.setWorking(workingAgent || null);
+  }, [workingAgent]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg border bg-slate-50">

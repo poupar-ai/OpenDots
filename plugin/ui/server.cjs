@@ -99,6 +99,7 @@ function getData() {
   try {
     const manifest = agents.loadManifest(memDir);
     if (manifest) {
+      ensureAgentChannels(manifest);
       const { counts = {}, recent = {} } = agents.countInvocations(memDir);
       const contexts = {};
       for (const [name, a] of Object.entries(manifest.agents || {})) {
@@ -156,6 +157,17 @@ function appendChat(agent, entry) {
   fs.appendFileSync(chatLogPath(agent), JSON.stringify(entry) + '\n');
 }
 
+// Garante que todo agente do manifest tenha seu arquivo de canal — permite
+// que agentes (subprocessos) façam append sem precisar criar o arquivo.
+function ensureAgentChannels(manifest) {
+  if (!manifest || !manifest.agents) return;
+  if (!fs.existsSync(chatDir)) fs.mkdirSync(chatDir, { recursive: true });
+  for (const name of Object.keys(manifest.agents)) {
+    const p = chatLogPath(name);
+    if (!fs.existsSync(p)) fs.writeFileSync(p, '');
+  }
+}
+
 function appendAgentLog(agent, entry) {
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
   fs.appendFileSync(agentLogPath(agent), JSON.stringify(entry) + '\n');
@@ -175,6 +187,36 @@ function readAgentLog(agent, limit) {
   const lines = fs.readFileSync(p, 'utf8').split('\n').filter(Boolean);
   const slice = typeof limit === 'number' && limit > 0 ? lines.slice(-limit) : lines;
   return slice.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+}
+
+// Classifica mensagens de erro comuns em sugestões de correção acionáveis.
+// Retorna string curta (1 linha) ou null quando não souber sugerir.
+function classifyErrorHint(msg, agent) {
+  if (!msg) return null;
+  const m = String(msg);
+  const low = m.toLowerCase();
+  if (low.includes('permission denied') || low.includes('eacces')) {
+    return 'Libere o caminho em .claude/settings.json ou aprove o prompt de permissão.';
+  }
+  if (low.includes('enoent') || /no such file/i.test(m)) {
+    if (low.includes('agent_chats')) {
+      return `Canal ${agent}.jsonl não existe — reinicie o servidor pra pré-criar.`;
+    }
+    return 'Arquivo ou diretório não encontrado — confira o caminho.';
+  }
+  if (low.includes('spawn') && (low.includes('enoent') || low.includes('claude'))) {
+    return 'Claude Code CLI não encontrado no PATH.';
+  }
+  if (/^exit \d+$/i.test(m.trim())) {
+    return `Ver log completo em agent_logs/${agent}.jsonl.`;
+  }
+  if (low.includes('timeout')) {
+    return 'Tempo esgotado — modelo ou rede demorou demais para responder.';
+  }
+  if (low.includes('rate limit') || low.includes('429')) {
+    return 'Rate limit atingido — aguarde alguns minutos antes de retry.';
+  }
+  return `Ver log completo em agent_logs/${agent}.jsonl.`;
 }
 
 function agentLogSummary() {
@@ -197,7 +239,17 @@ function agentLogSummary() {
         lastDurationMs = e.duration_ms;
       }
     }
-    out[name] = { total: entries.length, requests, responses, errors, lastErrorAt, lastErrorMsg, lastDurationMs };
+    const lastErrorHint = errors > 0 ? classifyErrorHint(lastErrorMsg, name) : null;
+    out[name] = {
+      total: entries.length,
+      requests,
+      responses,
+      errors,
+      lastErrorAt,
+      lastErrorMsg,
+      lastErrorHint,
+      lastDurationMs,
+    };
   }
   return out;
 }
@@ -291,6 +343,7 @@ async function handleChatSend(req, res) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: `agent "${agent}" not found` }));
   }
+  ensureAgentChannels(manifest);
 
   const miniContext = agents.loadMiniContext(memDir, agentCfg.context_file) || '';
   const history = readChat(agent);

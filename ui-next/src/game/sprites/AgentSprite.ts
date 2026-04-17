@@ -67,6 +67,8 @@ export class AgentSprite extends Container {
   private statusMark: Text | null = null;
   private statusBg: Graphics | null = null;
   private statusKind: 'none' | 'calm' | 'alert' = 'none';
+  private errorBubble: Container | null = null;
+  private errorBubbleKey: string | null = null;
   private particles: Particle[] = [];
   private particleLayer: Container;
   private t = 0;
@@ -337,6 +339,74 @@ export class AgentSprite extends Container {
     this.statusMark.position.set(14, -36);
     this.addChild(this.statusBg);
     this.addChild(this.statusMark);
+  }
+
+  public setErrorTooltip(msg: string | null, hint: string | null) {
+    const key = msg == null ? null : `${msg}|${hint ?? ''}`;
+    if (key === this.errorBubbleKey) return;
+    this.errorBubbleKey = key;
+    if (this.errorBubble) {
+      this.errorBubble.destroy({ children: true });
+      this.errorBubble = null;
+    }
+    if (!msg) return;
+
+    const bubble = new Container();
+    const wrapWidth = 180;
+    const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+    const errText = new Text({
+      text: `Erro: ${trunc(msg, 140)}`,
+      style: new TextStyle({
+        fontSize: 9,
+        fill: 0x7f1d1d,
+        fontWeight: '600',
+        fontFamily: 'ui-sans-serif, system-ui',
+        wordWrap: true,
+        wordWrapWidth: wrapWidth,
+      }),
+    });
+    const hintText = hint
+      ? new Text({
+          text: `Correção: ${trunc(hint, 140)}`,
+          style: new TextStyle({
+            fontSize: 9,
+            fill: 0x0f172a,
+            fontFamily: 'ui-sans-serif, system-ui',
+            wordWrap: true,
+            wordWrapWidth: wrapWidth,
+          }),
+        })
+      : null;
+
+    const padX = 6;
+    const padY = 5;
+    const gap = 2;
+    const contentW = Math.min(Math.max(errText.width, hintText ? hintText.width : 0), wrapWidth);
+    const w = contentW + padX * 2;
+    const h = errText.height + (hintText ? hintText.height + gap : 0) + padY * 2;
+
+    const bg = new Graphics();
+    bg.roundRect(-w / 2, 0, w, h, 6)
+      .fill({ color: 0xffffff, alpha: 0.96 })
+      .stroke({ width: 1.2, color: 0xef4444 });
+    bg.moveTo(-4, h)
+      .lineTo(0, h + 5)
+      .lineTo(4, h)
+      .closePath()
+      .fill({ color: 0xffffff })
+      .stroke({ width: 1.2, color: 0xef4444 });
+
+    errText.position.set(-w / 2 + padX, padY);
+    if (hintText) hintText.position.set(-w / 2 + padX, padY + errText.height + gap);
+
+    bubble.addChild(bg);
+    bubble.addChild(errText);
+    if (hintText) bubble.addChild(hintText);
+
+    bubble.position.set(0, -50 - h);
+    this.errorBubble = bubble;
+    this.addChild(bubble);
   }
 
   public updateName(name: string) {

@@ -329,10 +329,16 @@ export class AgentCanvas {
         node.sprite.updateType(type, cfg.profession);
       }
       // status do agente: erros recentes no log → alert; caso contrário calmo (só para bombeiros).
-      const errs = data.logs?.[name]?.errors ?? 0;
-      if (errs > 0) node!.sprite.setStatus('alert');
-      else if (type === 'firefighter') node!.sprite.setStatus('calm');
-      else node!.sprite.setStatus('none');
+      const log = data.logs?.[name];
+      const errs = log?.errors ?? 0;
+      if (errs > 0) {
+        node!.sprite.setStatus('alert');
+        node!.sprite.setErrorTooltip(log?.lastErrorMsg ?? null, log?.lastErrorHint ?? null);
+      } else {
+        if (type === 'firefighter') node!.sprite.setStatus('calm');
+        else node!.sprite.setStatus('none');
+        node!.sprite.setErrorTooltip(null, null);
+      }
     }
 
     this.applyAlpha();

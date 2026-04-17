@@ -32,6 +32,7 @@ export interface AgentLogSummary {
   errors: number;
   lastErrorAt: string | null;
   lastErrorMsg: string | null;
+  lastErrorHint?: string | null;
   lastDurationMs: number | null;
 }
 

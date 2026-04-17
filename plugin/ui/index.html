@@ -227,6 +227,92 @@
       font-size: 12px;
     }
     .refresh-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    /* Agentes — canvas + sidebar */
+    .agents-wrap {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 16px;
+      height: calc(100vh - 200px);
+      min-height: 540px;
+    }
+    @media (max-width: 1020px) { .agents-wrap { grid-template-columns: 1fr; height: auto; } }
+    .agents-canvas {
+      background: radial-gradient(ellipse at center, rgba(163,113,247,0.06), var(--surface) 70%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      min-height: 500px;
+    }
+    .agents-canvas svg { width: 100%; height: 100%; display: block; }
+    .agent-node {
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .agent-node:hover { filter: brightness(1.2); }
+    .agent-node circle { transition: stroke-width 0.2s; }
+    .agent-node.active circle {
+      animation: pulse 1.2s ease-out infinite;
+    }
+    @keyframes pulse {
+      0%   { stroke-opacity: 0.9; stroke-width: 2; }
+      50%  { stroke-opacity: 0.3; stroke-width: 10; }
+      100% { stroke-opacity: 0.9; stroke-width: 2; }
+    }
+    .agent-node text {
+      pointer-events: none;
+      user-select: none;
+    }
+    .agent-sidebar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      overflow-y: auto;
+    }
+    .agent-sidebar h3 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .agent-sidebar .meta { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+    .agent-sidebar .badge-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .tiny-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: monospace;
+    }
+    .tiny-badge.accent { border-color: var(--accent); color: var(--accent); }
+    .tiny-badge.purple { border-color: var(--purple); color: var(--purple); }
+    .tiny-badge.green  { border-color: var(--green); color: var(--green); }
+    .agent-sidebar .mini-ctx {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      color: var(--text);
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .agents-rule {
+      background: linear-gradient(90deg, rgba(163,113,247,0.10), transparent);
+      border-left: 3px solid var(--purple);
+      padding: 10px 16px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .agents-empty {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -247,6 +333,7 @@
   <div class="tab" data-panel="gotchas">Armadilhas</div>
   <div class="tab" data-panel="glossary">Glossário</div>
   <div class="tab" data-panel="code-index">Code Index</div>
+  <div class="tab" data-panel="agents">Agentes</div>
   <div class="tab" data-panel="sessions">Sessões</div>
   <div class="tab" data-panel="observations">Observações</div>
 </div>
@@ -302,6 +389,19 @@
       <span style="color:var(--muted);font-size:12px;margin-left:auto">Rode <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--accent)">/mem-index</code> pra rebuild completo</span>
     </div>
     <pre class="md-panel" id="code-index-md-content">Carregando…</pre>
+  </div>
+
+  <!-- Agents -->
+  <div class="panel" id="panel-agents">
+    <div id="agents-rule"></div>
+    <div class="agents-wrap">
+      <div class="agents-canvas">
+        <svg id="agents-svg" viewBox="0 0 800 540" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <div class="agent-sidebar" id="agent-sidebar">
+        <div class="no-data">Clique em um agente pra ver detalhes.</div>
+      </div>
+    </div>
   </div>
 
   <!-- Sessions -->
@@ -471,7 +571,153 @@
       }).join('');
     }
 
+    renderAgents();
     renderObs();
+  }
+
+  let selectedAgent = null;
+
+  function renderAgents() {
+    const svg  = document.getElementById('agents-svg');
+    const rule = document.getElementById('agents-rule');
+    const side = document.getElementById('agent-sidebar');
+
+    if (!data.agents || !data.agents.manifest) {
+      svg.innerHTML = '';
+      rule.innerHTML = '';
+      side.innerHTML = `<div class="agents-empty">
+        Nenhum agente declarado.<br><br>
+        Rode <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--accent)">/mem-agents init</code>
+        pra criar Manager, Oracle e especialistas com defaults.
+      </div>`;
+      return;
+    }
+
+    const { manifest, contexts, counts, recent } = data.agents;
+    const agentsObj = manifest.agents || {};
+    const names = Object.keys(agentsObj);
+    const managerName = manifest.manager || 'manager';
+    const oracleName  = manifest.oracle  || 'oracle';
+
+    rule.innerHTML = manifest.rule
+      ? `<div class="agents-rule"><strong>Regra de ouro:</strong> ${esc(manifest.rule)}</div>`
+      : '';
+
+    // Layout: Manager no centro. Oracle ao lado. Outros em círculo.
+    const W = 800, H = 540;
+    const cx = W / 2, cy = H / 2;
+    const positions = {};
+    positions[managerName] = { x: cx, y: cy };
+
+    const others = names.filter(n => n !== managerName);
+    const oracleIdx = others.indexOf(oracleName);
+    if (oracleIdx !== -1) {
+      // Oracle em destaque — upper-right
+      positions[oracleName] = { x: cx + 180, y: cy - 120 };
+      others.splice(oracleIdx, 1);
+    }
+
+    const R = 200;
+    others.forEach((n, i) => {
+      const a = (i / others.length) * Math.PI * 2 + Math.PI / 2;
+      positions[n] = { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R };
+    });
+
+    // Detecta atividade recente (último agent_call < 30s)
+    const now = Date.now();
+    const active = new Set();
+    for (const [name, ts] of Object.entries(recent || {})) {
+      if (ts && (now - new Date(ts).getTime()) < 30_000) active.add(name);
+    }
+
+    // Renderiza conexões (can_talk_to)
+    const edges = [];
+    const edgeSet = new Set();
+    for (const [name, a] of Object.entries(agentsObj)) {
+      for (const target of (a.can_talk_to || [])) {
+        if (!positions[target] || !positions[name]) continue;
+        const key = [name, target].sort().join('|');
+        if (edgeSet.has(key)) continue;
+        edgeSet.add(key);
+        edges.push({ from: name, to: target });
+      }
+    }
+
+    const edgeSvg = edges.map(e => {
+      const a = positions[e.from], b = positions[e.to];
+      const isManager = e.from === managerName || e.to === managerName;
+      const stroke = isManager ? 'var(--purple)' : 'var(--border)';
+      const op = isManager ? 0.5 : 0.25;
+      return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${stroke}" stroke-opacity="${op}" stroke-width="1.5"/>`;
+    }).join('');
+
+    const nodeSvg = names.map(name => {
+      const p = positions[name];
+      const a = agentsObj[name];
+      const isManager = name === managerName;
+      const isOracle  = name === oracleName;
+      const r = isManager ? 46 : (isOracle ? 40 : 34);
+      const color = isManager ? 'var(--purple)' : (isOracle ? 'var(--accent)' : 'var(--green)');
+      const fill = isManager ? 'rgba(163,113,247,0.18)' : (isOracle ? 'rgba(56,139,253,0.14)' : 'rgba(63,185,80,0.10)');
+      const isActive = active.has(name);
+      const count = counts[name] || 0;
+      return `<g class="agent-node ${isActive ? 'active' : ''}" data-name="${esc(name)}" transform="translate(${p.x},${p.y})">
+        <circle r="${r}" fill="${fill}" stroke="${color}" stroke-width="2"/>
+        <text text-anchor="middle" dy="4" font-size="${r - 10}">${esc(a.emoji || '•')}</text>
+        <text text-anchor="middle" y="${r + 18}" fill="var(--text)" font-size="13" font-weight="600">${esc(name)}</text>
+        ${count > 0 ? `<text text-anchor="middle" y="${r + 34}" fill="var(--muted)" font-size="11">${count}× chamado</text>` : ''}
+      </g>`;
+    }).join('');
+
+    svg.innerHTML = edgeSvg + nodeSvg;
+
+    // Click handling
+    svg.querySelectorAll('.agent-node').forEach(g => {
+      g.addEventListener('click', () => {
+        const n = g.dataset.name;
+        selectedAgent = n;
+        renderAgentSidebar();
+      });
+    });
+
+    if (!selectedAgent || !agentsObj[selectedAgent]) selectedAgent = managerName;
+    renderAgentSidebar();
+
+    function renderAgentSidebar() {
+      if (!agentsObj[selectedAgent]) { side.innerHTML = ''; return; }
+      const a = agentsObj[selectedAgent];
+      const ctx = contexts[selectedAgent] || '';
+      const count = counts[selectedAgent] || 0;
+      const last = recent[selectedAgent] ? ' · último: ' + recent[selectedAgent].slice(0, 16).replace('T', ' ') : '';
+      const isM = selectedAgent === managerName;
+      const isO = selectedAgent === oracleName;
+      const tagCls = isM ? 'purple' : (isO ? 'accent' : 'green');
+      side.innerHTML = `
+        <h3>${esc(a.emoji || '•')} ${esc(selectedAgent)}
+          ${isM ? '<span class="tiny-badge purple">Manager</span>' : ''}
+          ${isO ? '<span class="tiny-badge accent">Oracle</span>' : ''}
+        </h3>
+        <div class="meta">${esc(a.role || '')}</div>
+        <div class="badge-row">
+          <span class="tiny-badge ${tagCls}">${esc(a.model || '?')}</span>
+          <span class="tiny-badge">${count}× invocações${last}</span>
+        </div>
+        <div class="meta" style="margin-bottom:6px"><strong>Ferramentas:</strong></div>
+        <div class="badge-row">
+          ${(a.tools || []).map(t => `<span class="tiny-badge">${esc(t)}</span>`).join('') || '<span class="tiny-badge">—</span>'}
+        </div>
+        <div class="meta" style="margin-bottom:6px"><strong>MCPs:</strong></div>
+        <div class="badge-row">
+          ${(a.mcps || []).map(m => `<span class="tiny-badge">${esc(m)}</span>`).join('') || '<span class="tiny-badge">nenhum</span>'}
+        </div>
+        <div class="meta" style="margin-bottom:6px"><strong>Fala com:</strong></div>
+        <div class="badge-row">
+          ${(a.can_talk_to || []).map(t => `<span class="tiny-badge ${t === managerName ? 'purple' : ''}">${esc(t)}</span>`).join('') || '<span class="tiny-badge">ninguém</span>'}
+        </div>
+        <div class="meta" style="margin-top:14px;margin-bottom:6px"><strong>Mini-contexto (<code>${esc(a.context_file || '')}</code>):</strong></div>
+        <div class="mini-ctx">${ctx ? esc(ctx) : '_(vazio — rode /mem-agents edit ' + esc(selectedAgent) + ')_'}</div>
+      `;
+    }
   }
 
   function renderEntries(name, items, cssClass, mapFn) {

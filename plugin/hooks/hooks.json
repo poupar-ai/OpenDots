@@ -28,7 +28,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|Bash|Task|Agent",
         "hooks": [
           {
             "type": "command",

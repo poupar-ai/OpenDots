@@ -129,7 +129,7 @@ const { session_id, tool_name, tool_input, tool_response } = input;
 
 if (!tool_name) process.exit(0);
 
-const relevant = new Set(['Write', 'Edit', 'MultiEdit', 'Bash']);
+const relevant = new Set(['Write', 'Edit', 'MultiEdit', 'Bash', 'Task', 'Agent']);
 if (!relevant.has(tool_name)) process.exit(0);
 
 if (tool_response && (tool_response.error || tool_response.is_error)) process.exit(0);
@@ -159,6 +159,12 @@ if (tool_name === 'Write' || tool_name === 'Edit' || tool_name === 'MultiEdit') 
   obs = { type: 'bash', session_id, cmd: cmd.slice(0, 200), exit, ts };
   const summary = summarizeOutput(cmd, tool_response);
   if (summary) obs.output_summary = summary;
+
+} else if (tool_name === 'Task' || tool_name === 'Agent') {
+  const agent = (tool_input?.subagent_type || 'general-purpose').toLowerCase();
+  const desc  = (tool_input?.description || '').slice(0, 120);
+  const prompt = (tool_input?.prompt || '').slice(0, 200);
+  obs = { type: 'agent_call', session_id, agent, description: desc, prompt, ts };
 }
 
 if (obs) {

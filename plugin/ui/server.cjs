@@ -4,6 +4,7 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 const { findProjectRoot, getMemDir, readJsonl } = require('../scripts/lib.cjs');
+const agents = require('../scripts/agents.cjs');
 
 const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
 const cwd         = process.cwd();
@@ -58,6 +59,20 @@ function getData() {
     generated_at: codeIndex.generated_at
   } : null;
 
+  // Agents: manifest + mini-contexts + invocation counts
+  let agentsData = null;
+  try {
+    const manifest = agents.loadManifest(memDir);
+    if (manifest) {
+      const { counts = {}, recent = {} } = agents.countInvocations(memDir);
+      const contexts = {};
+      for (const [name, a] of Object.entries(manifest.agents || {})) {
+        contexts[name] = agents.loadMiniContext(memDir, a.context_file) || '';
+      }
+      agentsData = { manifest, contexts, counts, recent };
+    }
+  } catch {}
+
   return {
     project:      { name: projectName, root: projectRoot },
     soulMd,
@@ -66,6 +81,7 @@ function getData() {
     gotchasMd,
     glossaryMd,
     codeIndexMd,
+    agents:       agentsData,
     sessions,
     observations: [...observations].reverse(),
     decisions:    [...decisions].reverse(),

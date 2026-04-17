@@ -161,7 +161,14 @@ for (const [name, title, file] of [
   if (content) pushBlock(name, 3, [title, content]);
 }
 
-// 4. Git context
+// 4. Agentes declarados (Manager + Oracle + roles) — guia pro Claude usar subagents
+try {
+  const { buildInjectionBlock } = require('./agents.cjs');
+  const agentLines = buildInjectionBlock(memDir);
+  if (agentLines.length > 0) pushBlock('agents', 4, agentLines);
+} catch {}
+
+// 5. Git context
 try {
   const git = readGitContext(projectRoot);
   if (git) {
@@ -327,6 +334,10 @@ function formatObs(ts, o) {
       const exit = o.exit !== undefined && o.exit !== null ? ` → exit ${o.exit}` : '';
       const out = o.output_summary ? ` _${o.output_summary}_` : '';
       return `- \`${ts}\` BASH \`${(o.cmd || '').slice(0, 120)}\`${exit}${out}`;
+    }
+    case 'agent_call': {
+      const desc = o.description ? ` — ${o.description}` : '';
+      return `- \`${ts}\` AGENT \`${o.agent}\`${desc}`;
     }
     case 'note': return `- \`${ts}\` NOTE: ${o.content}`;
     default:     return `- \`${ts}\` ${o.type}`;

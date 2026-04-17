@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/CopyButton';
 import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/types';
-import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save } from 'lucide-react';
-import { updateAutonomy } from '@/lib/agents';
+import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil } from 'lucide-react';
+import { updateAutonomy, updateModel, updateAgentContext } from '@/lib/agents';
 
 interface LogEntry {
   ts: string;
@@ -78,11 +78,15 @@ export function AgentInfoPanel({
   const [logEntries, setLogEntries] = useState<LogEntry[] | null>(null);
   const [logLoading, setLogLoading] = useState(false);
   const [editAuto, setEditAuto] = useState(false);
+  const [editModel, setEditModel] = useState(false);
+  const [editContext, setEditContext] = useState(false);
 
   useEffect(() => {
     setLogOpen(false);
     setLogEntries(null);
     setEditAuto(false);
+    setEditModel(false);
+    setEditContext(false);
   }, [name]);
 
   const loadLog = async () => {
@@ -102,22 +106,47 @@ export function AgentInfoPanel({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex min-w-0 items-center gap-1.5">
             <span>{cfg.emoji || '🤖'}</span>
-            {name}
+            <span className="truncate">{name}</span>
             <CopyButton value={name} label="copiar nome do agente" />
           </CardTitle>
-          <Badge variant="outline">{type}</Badge>
+          <div className="flex shrink-0 items-center gap-1">
+            <Badge variant="outline">{type}</Badge>
+            {cfg.autonomy && <AutonomyBadge level={cfg.autonomy.level} />}
+          </div>
         </div>
         {cfg.role && <p className="text-xs text-muted-foreground">{cfg.role}</p>}
+        {manifest?._meta?.agent_origin?.[name] && (
+          <p className="flex items-center gap-1 text-[10px] text-slate-400">
+            <Sprout className="h-3 w-3" />
+            seed: <code className="font-mono">{manifest._meta.agent_origin[name].category}/{manifest._meta.agent_origin[name].slug}</code>
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-2 pt-0 text-xs">
-        {cfg.model && (
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">modelo</span>
-            <span className="font-mono">{cfg.model}</span>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Cpu className="h-3 w-3" /> modelo
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[11px]">{cfg.model || '(default)'}</span>
+            <button
+              onClick={() => setEditModel(true)}
+              className="text-[10px] text-indigo-700 underline-offset-2 hover:underline"
+            >
+              editar
+            </button>
           </div>
+        </div>
+        {editModel && (
+          <ModelEditor
+            name={name}
+            current={cfg.model || ''}
+            origin={manifest?._meta?.agent_origin?.[name] || null}
+            onClose={() => setEditModel(false)}
+          />
         )}
         {cfg.watch && (
           <div className="flex items-start gap-1 rounded-md bg-red-50 px-2 py-1.5 text-red-700">
@@ -272,16 +301,45 @@ export function AgentInfoPanel({
             )}
           </div>
         )}
-        {context && (
-          <details className="rounded-md border bg-muted/30 p-2">
-            <summary className="cursor-pointer text-[11px] font-medium">mini-contexto</summary>
-            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[10px]">
-              {context}
-            </pre>
-          </details>
+        <button
+          type="button"
+          onClick={() => setEditContext(true)}
+          className="group flex w-full items-center justify-between rounded-md border bg-muted/30 px-2 py-1.5 text-left hover:border-indigo-300 hover:bg-indigo-50/40"
+          title="abrir mini-contexto pra editar"
+        >
+          <span className="flex items-center gap-1.5 text-[11px] font-medium">
+            <FileText className="h-3 w-3" /> mini-contexto
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-slate-500 group-hover:text-indigo-700">
+            {context ? `${context.length} chars` : 'vazio'}
+            <Pencil className="h-3 w-3" />
+          </span>
+        </button>
+        {editContext && (
+          <ContextEditor
+            name={name}
+            current={context}
+            onClose={() => setEditContext(false)}
+          />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AutonomyBadge({ level }: { level: AutonomyLevel }) {
+  const styles: Record<AutonomyLevel, string> = {
+    low: 'border-amber-200 bg-amber-50 text-amber-700',
+    medium: 'border-slate-200 bg-slate-50 text-slate-600',
+    high: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  };
+  return (
+    <span
+      title={`autonomia ${level}`}
+      className={`rounded-full border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide ${styles[level]}`}
+    >
+      {level}
+    </span>
   );
 }
 
@@ -410,6 +468,205 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
             cancelar
           </Button>
           <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'salvando…' : 'salvar'}
+          </Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+const MODEL_SUGGESTIONS = [
+  'opus',
+  'sonnet',
+  'haiku',
+  'opus-4.7',
+  'opus-4.6',
+  'sonnet-4.6',
+  'sonnet-4.5',
+  'haiku-4.5',
+  'claude-opus-4-7',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5-20251001',
+];
+
+interface ModelEditorProps {
+  name: string;
+  current: string;
+  origin: { category: string; slug: string } | null;
+  onClose: () => void;
+}
+
+function ModelEditor({ name, current, origin, onClose }: ModelEditorProps) {
+  const [model, setModel] = useState<string>(current || '');
+  const [propagate, setPropagate] = useState<boolean>(!!origin);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateModel(name, {
+        model: model.trim(),
+        propagate_seed: propagate && !!origin,
+        ...(origin ? { seed_category: origin.category, seed_slug: origin.slug } : {}),
+      });
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Cpu className="h-4 w-4" /> Modelo de {name}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              versão do modelo que o agente usa ao responder
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </header>
+        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
+          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+            Modelo <span className="text-slate-400">(deixe vazio pra usar o default)</span>
+          </label>
+          <input
+            list="model-suggestions"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="opus, sonnet, opus-4.7, claude-sonnet-4-6…"
+            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+          />
+          <datalist id="model-suggestions">
+            {MODEL_SUGGESTIONS.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <p className="mb-3 text-[10px] text-slate-500">
+            aceita aliases curtos (opus/sonnet/haiku) ou IDs completos (claude-opus-4-7). o valor
+            é passado direto ao <code className="rounded bg-slate-100 px-1">claude -p --model</code>.
+          </p>
+
+          <label className="mb-3 flex items-start gap-2 text-[11px]">
+            <input
+              type="checkbox"
+              checked={propagate}
+              disabled={!origin}
+              onChange={(e) => setPropagate(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className={origin ? 'text-slate-700' : 'text-slate-400'}>
+              Propagar também ao seed {origin ? (
+                <code className="rounded bg-slate-100 px-1">{origin.category}/{origin.slug}</code>
+              ) : '(origem do seed desconhecida pra este agente)'}
+              <br />
+              <span className="text-[10px] text-slate-500">
+                se marcado, a mesma mudança é gravada no template — próximos projetos já vêm com esse modelo.
+              </span>
+            </span>
+          </label>
+
+          {err && (
+            <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+              {err}
+            </div>
+          )}
+        </div>
+        <footer className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
+            cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'salvando…' : 'salvar'}
+          </Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+interface ContextEditorProps {
+  name: string;
+  current: string;
+  onClose: () => void;
+}
+
+function ContextEditor({ name, current, onClose }: ContextEditorProps) {
+  const [content, setContent] = useState<string>(current || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const dirty = content !== (current || '');
+
+  const save = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateAgentContext(name, content);
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const tryClose = () => {
+    if (saving) return;
+    if (dirty && !confirm('Descartar alterações do mini-contexto?')) return;
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <FileText className="h-4 w-4" /> mini-contexto de {name}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              markdown injetado no prompt do agente a cada conversa
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={tryClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </header>
+        <div className="flex-1 overflow-hidden p-4">
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            spellCheck={false}
+            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-[11px] leading-snug focus:border-indigo-400 focus:outline-none"
+            placeholder={'# Responsabilidade\n...\n\n## Princípios\n...'}
+          />
+          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+            <span>{content.length} chars · markdown</span>
+            {dirty && <span className="text-amber-600">alterações não salvas</span>}
+          </div>
+          {err && (
+            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+              {err}
+            </div>
+          )}
+        </div>
+        <footer className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="outline" onClick={tryClose} disabled={saving}>
+            cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving || !dirty} className="gap-1.5">
             <Save className="h-3.5 w-3.5" />
             {saving ? 'salvando…' : 'salvar'}
           </Button>

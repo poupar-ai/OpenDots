@@ -40,12 +40,12 @@ const DEFAULT_MANIFEST = {
     manager: {
       type: 'core',
       emoji: '🎯',
-      model: 'opus',
+      model: 'opus-4.7',
       role:  'Orquestrador central. Recebe ordens do Engenheiro, distribui tarefas, consolida resultados, comunica decisões.',
       context_file: 'agents/manager.md',
       tools: ['Task', 'Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob'],
       mcps:  [],
-      can_talk_to: ['oracle', 'architect', 'reviewer', 'tester', 'designer'],
+      can_talk_to: ['oracle', 'architect', 'reviewer', 'tester', 'designer', 'pipeline_writer'],
       autonomy: {
         level: 'high',
         call_human_when: [
@@ -59,7 +59,7 @@ const DEFAULT_MANIFEST = {
     oracle: {
       type: 'core',
       emoji: '🔮',
-      model: 'opus',
+      model: 'opus-4.6',
       role:  'Conhece todo o projeto — fonte de verdade sobre código, arquitetura e histórico. Responde, não dá ordens.',
       context_file: 'agents/oracle.md',
       tools: ['Read', 'Grep', 'Glob'],
@@ -75,7 +75,7 @@ const DEFAULT_MANIFEST = {
     architect: {
       type: 'specialist',
       emoji: '🏛',
-      model: 'opus',
+      model: 'opus-4.6',
       role:  'Decisões de arquitetura, trade-offs de design, ADRs.',
       context_file: 'agents/architect.md',
       tools: ['Read', 'Grep', 'Glob', 'Write'],
@@ -93,7 +93,7 @@ const DEFAULT_MANIFEST = {
     reviewer: {
       type: 'specialist',
       emoji: '🔍',
-      model: 'sonnet',
+      model: 'sonnet-4.6',
       role:  'Revisa PRs, aponta bugs, sugere melhorias. Segurança e clareza.',
       context_file: 'agents/reviewer.md',
       tools: ['Read', 'Grep', 'Glob'],
@@ -110,7 +110,7 @@ const DEFAULT_MANIFEST = {
     tester: {
       type: 'specialist',
       emoji: '🧪',
-      model: 'sonnet',
+      model: 'sonnet-4.6',
       role:  'Escreve testes, roda suites, reporta regressões. Unit + integration.',
       context_file: 'agents/tester.md',
       tools: ['Read', 'Write', 'Edit', 'Bash', 'Grep'],
@@ -126,7 +126,7 @@ const DEFAULT_MANIFEST = {
     designer: {
       type: 'specialist',
       emoji: '🎨',
-      model: 'sonnet',
+      model: 'sonnet-4.6',
       role:  'UI/UX, layout, acessibilidade, consistência visual.',
       context_file: 'agents/designer.md',
       tools: ['Read', 'Write', 'Edit', 'Grep', 'Glob'],
@@ -137,6 +137,24 @@ const DEFAULT_MANIFEST = {
         call_human_when: [
           'mudança visual afeta identidade de marca',
           'decisão de UX que muda fluxo principal do produto'
+        ]
+      }
+    },
+    pipeline_writer: {
+      type: 'core',
+      emoji: '✨',
+      model: 'opus-4.6',
+      role:  'Transforma descrições humanas em pipelines YAML reproduzíveis. Conversa com os agentes envolvidos pra entender o fluxo, depois grava pipeline.yaml pronto pra rodar.',
+      context_file: 'agents/pipeline_writer.md',
+      tools: ['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'],
+      mcps:  [],
+      can_talk_to: ['manager', 'oracle', 'architect', 'reviewer', 'tester', 'designer'],
+      autonomy: {
+        level: 'medium',
+        call_human_when: [
+          'não está claro qual sequência de agentes o humano quer',
+          'mais de um caminho razoável existe e escolher errado cria retrabalho',
+          'pipeline precisaria de agente que não existe no time'
         ]
       }
     }
@@ -216,6 +234,50 @@ Decisões visuais, layout, acessibilidade, consistência. Conversa com o Manager
 - **Acessível por padrão.** Contraste, aria, foco.
 - **Consistente com a alma.** Respeita a voz e estética do SOUL.md.
 - **Mobile-first quando relevante.**
+`,
+  pipeline_writer: `# Pipeline Writer — Gravador de Fluxos
+
+## Responsabilidade
+Transformar descrição humana ("quero uma pipeline pra X") em **pipeline YAML válida** que roda no runner.
+Conversa com os agentes envolvidos pra entender o fluxo real, decidir a ordem dos passos e onde entram checkpoints humanos.
+
+## Princípios
+- **Fluxo real, não ideal.** Só steps que o humano pediu.
+- **Checkpoints onde dói errar.** Antes de gastar tempo caro, antes de efeito externo (publicar, cobrar, enviar).
+- **IDs são slugs.** \`[a-z][a-z0-9-]+[a-z0-9]\`. Nunca espaço, acento, maiúscula.
+- **Cada step tem dono.** \`agent: <nome>\` pra steps executáveis; \`type: checkpoint\` + \`owner\` pra gates humanos.
+- **Pergunte antes de inventar.** Se não ficou claro quem faz X, consulte o humano ou o agente em dúvida.
+
+## Onde grava
+Sempre no projeto corrente: \`.claude-project-memory/pipelines/<id>/pipeline.yaml\`.
+Template global é trabalho do humano (não tem acesso a \`plugin/pipelines/\`).
+
+## Schema mínimo
+\`\`\`yaml
+id: <slug>
+label: <string>
+description: |
+  multi-linha opcional
+tags: [a, b]
+steps:
+  - id: <slug>
+    agent: <nome-agente>
+    label: <string>
+    description: <string>
+    best_practices: [x, y]   # opcional
+  - id: <slug>
+    type: checkpoint
+    label: <string>
+    owner: any_human
+\`\`\`
+
+## Fluxo típico
+1. Entenda o pedido. Pergunte se faltar dado.
+2. Consulte agentes envolvidos via handoff se precisar (ex: "designer, você faz só copy ou copy+arte?"). Só se a resposta muda o YAML.
+3. Esboce 3-10 steps.
+4. Coloque checkpoints antes de ação cara/irreversível. Nunca como 1º step.
+5. Valide: IDs slug válidos e únicos, agentes existem, checkpoints têm owner, fluxo ponta a ponta faz sentido.
+6. Write no arquivo e confirma ao humano: id, path, 1 linha por step.
 `
 };
 
@@ -364,6 +426,21 @@ function loadMiniContext(memDir, contextFile) {
   catch { return null; }
 }
 
+function saveMiniContext(memDir, contextFile, content) {
+  if (typeof content !== 'string') throw new Error('content precisa ser string');
+  if (content.length > 200_000) throw new Error('mini-contexto muito longo (máx 200KB)');
+  const rel = contextFile || '';
+  if (!rel || rel.includes('..') || path.isAbsolute(rel)) {
+    throw new Error('context_file inválido');
+  }
+  const p = path.join(memDir, rel);
+  const dir = path.dirname(p);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const normalized = content.endsWith('\n') ? content : content + '\n';
+  fs.writeFileSync(p, normalized);
+  return p;
+}
+
 // ── Init com defaults ─────────────────────────────────────────────────────────
 
 function initDefaults(memDir, { overwrite = false } = {}) {
@@ -490,7 +567,7 @@ function addAgent(memDir, name, config) {
   cfg.agents[name] = {
     type,
     emoji: config.emoji || defaultEmoji,
-    model: config.model || 'sonnet',
+    model: config.model || 'sonnet-4.6',
     role:  config.role || '',
     context_file: contextFile,
     tools: config.tools || ['Read', 'Grep', 'Glob'],
@@ -573,6 +650,80 @@ function propagateAutonomyToSeed(seedAgentsJsonPath, name, autonomy) {
   return seed.agents[name];
 }
 
+// ── Modelo ────────────────────────────────────────────────────────────────────
+
+function normalizeModel(input) {
+  if (input === null || input === '') return null; // limpa (usa default do CLI)
+  if (typeof input !== 'string') {
+    throw new Error('model precisa ser string (ex: "opus", "opus-4.7", "claude-sonnet-4-6") ou null');
+  }
+  const v = input.trim();
+  if (!v) return null;
+  if (v.length > 80) throw new Error('model muito longo (máx 80 chars)');
+  return v;
+}
+
+// Converte o modelo armazenado (aliases versionados tipo "opus-4.7") no que o
+// `claude --model` aceita: alias puro (opus/sonnet/haiku) ou ID completo
+// (claude-opus-4-7). Passthrough para strings que já começam com "claude-".
+const CLI_MODEL_MAP = {
+  'opus-4.7': 'claude-opus-4-7',
+  'opus-4.6': 'claude-opus-4-6',
+  'opus-4.5': 'claude-opus-4-5',
+  'opus-4.1': 'claude-opus-4-1',
+  'opus-4': 'claude-opus-4-0',
+  'sonnet-4.6': 'claude-sonnet-4-6',
+  'sonnet-4.5': 'claude-sonnet-4-5',
+  'sonnet-4': 'claude-sonnet-4-0',
+  'sonnet-3.7': 'claude-3-7-sonnet-latest',
+  'haiku-4.5': 'claude-haiku-4-5-20251001',
+  'haiku-3.5': 'claude-3-5-haiku-latest',
+};
+
+function resolveCliModel(model) {
+  if (!model || typeof model !== 'string') return null;
+  const v = model.trim();
+  if (!v) return null;
+  if (v === 'opus' || v === 'sonnet' || v === 'haiku') return v;
+  if (v.startsWith('claude-')) return v;
+  if (CLI_MODEL_MAP[v]) return CLI_MODEL_MAP[v];
+  // Fallback: "X-Y.Z" → "claude-X-Y-Z"
+  const m = v.match(/^(opus|sonnet|haiku)-(\d+)\.(\d+)$/);
+  if (m) return `claude-${m[1]}-${m[2]}-${m[3]}`;
+  return v; // deixa o CLI rejeitar e surfar o erro real
+}
+
+function updateModel(memDir, name, model) {
+  const cfg = loadManifest(memDir);
+  if (!cfg || !cfg.agents || !cfg.agents[name]) {
+    throw new Error(`agente "${name}" não existe em ${manifestPath(memDir)}`);
+  }
+  const normalized = normalizeModel(model);
+  if (normalized === null) {
+    delete cfg.agents[name].model;
+  } else {
+    cfg.agents[name].model = normalized;
+  }
+  saveManifest(memDir, cfg);
+  return cfg.agents[name];
+}
+
+function propagateModelToSeed(seedAgentsJsonPath, name, model) {
+  if (!fs.existsSync(seedAgentsJsonPath)) {
+    throw new Error(`seed agents.json não encontrado: ${seedAgentsJsonPath}`);
+  }
+  const seed = JSON.parse(fs.readFileSync(seedAgentsJsonPath, 'utf8'));
+  if (!seed.agents || !seed.agents[name]) return null;
+  const normalized = normalizeModel(model);
+  if (normalized === null) {
+    delete seed.agents[name].model;
+  } else {
+    seed.agents[name].model = normalized;
+  }
+  fs.writeFileSync(seedAgentsJsonPath, JSON.stringify(seed, null, 2) + '\n');
+  return seed.agents[name];
+}
+
 function removeAgent(memDir, name) {
   const cfg = loadManifest(memDir);
   if (!cfg || !cfg.agents[name]) return false;
@@ -590,6 +741,7 @@ module.exports = {
   loadManifest,
   saveManifest,
   loadMiniContext,
+  saveMiniContext,
   initDefaults,
   countInvocations,
   buildInjectionBlock,
@@ -598,6 +750,10 @@ module.exports = {
   updateAutonomy,
   propagateAutonomyToSeed,
   normalizeAutonomy,
+  updateModel,
+  propagateModelToSeed,
+  normalizeModel,
+  resolveCliModel,
   integratorTemplate,
   motorTemplate,
   firefighterTemplate,

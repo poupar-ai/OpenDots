@@ -110,3 +110,45 @@ export async function cancelPipeline(reason?: string): Promise<{ state: Pipeline
 export async function clearPipeline(): Promise<void> {
   await fetch('/api/pipelines/clear', { method: 'POST' });
 }
+
+export interface PipelineRunSummary {
+  run_id: string;
+  pipeline_id: string;
+  title: string;
+  status: PipelineStatus;
+  started_at: string;
+  ended_at: string;
+  started_by: string | null;
+  total_steps: number;
+  steps_done: number;
+  steps_rejected: number;
+  duration_ms: number | null;
+  cancel_reason: string | null;
+}
+
+export async function listPipelineRuns(limit = 50): Promise<{ runs: PipelineRunSummary[] }> {
+  const r = await fetch(`/api/pipelines/runs?limit=${encodeURIComponent(limit)}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+export interface PipelineCreateInput {
+  id: string;
+  label: string;
+  description?: string;
+  tags?: string[];
+  steps: PipelineStepDef[];
+  scope?: 'template' | 'project';
+  overwrite?: boolean;
+}
+
+export async function createPipeline(input: PipelineCreateInput): Promise<{ ok: boolean; id: string; scope: string; path: string }> {
+  const r = await fetch('/api/pipelines/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}

@@ -599,7 +599,8 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
     });
 
     const args = ['-p', '--output-format', 'text'];
-    if (agentCfg.model) args.push('--model', agentCfg.model);
+    const resolvedModel = agents.resolveCliModel(agentCfg.model);
+    if (resolvedModel) args.push('--model', resolvedModel);
     const allowedTools = buildAllowedTools(agent, agentCfg);
     if (allowedTools.length) args.push('--allowed-tools', allowedTools.join(','));
     args.push(prompt);
@@ -1017,6 +1018,48 @@ async function handleHandoff(req, res) {
   res.end(JSON.stringify({ ok: true, ts, to, auto_queued: true }));
 }
 
+async function handleAgentModel(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { model, propagate_seed, seed_category, seed_slug } = body || {};
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+
+  let updated;
+  try {
+    updated = agents.updateModel(memDir, agentName, model);
+  } catch (err) {
+    return sendJson(res, 400, { error: err.message });
+  }
+
+  let propagated = null;
+  if (propagate_seed) {
+    const origin = manifest._meta && manifest._meta.agent_origin && manifest._meta.agent_origin[agentName];
+    const cat = seed_category || (origin && origin.category);
+    const slug = seed_slug || (origin && origin.slug);
+    if (!cat || !slug) {
+      return sendJson(res, 400, {
+        error: 'propagate_seed=true mas origem do seed desconhecida. Envie seed_category + seed_slug explicitamente.',
+        updated,
+      });
+    }
+    const seedPath = path.join(seed.SEEDS_DIR, cat, slug, 'agents.json');
+    try {
+      const r = agents.propagateModelToSeed(seedPath, agentName, model);
+      propagated = r ? { category: cat, slug, seedPath } : { skipped: true, reason: 'agente não existe no seed' };
+    } catch (err) {
+      return sendJson(res, 500, { error: `propagação falhou: ${err.message}`, updated });
+    }
+  }
+
+  sendJson(res, 200, { ok: true, agent: agentName, updated, propagated });
+}
+
 async function handleAgentAutonomy(agentName, req, res) {
   const raw = await readBody(req);
   let body;
@@ -1057,6 +1100,57 @@ async function handleAgentAutonomy(agentName, req, res) {
   }
 
   sendJson(res, 200, { ok: true, agent: agentName, updated, propagated });
+}
+
+const DOC_ALLOWLIST = new Set(['SOUL.md', 'PROJECT.md', 'DECISIONS.md', 'GOTCHAS.md', 'GLOSSARY.md', 'CODE_INDEX.md']);
+
+async function handleDocSave(docName, req, res) {
+  if (!DOC_ALLOWLIST.has(docName)) {
+    return sendJson(res, 404, { error: `doc "${docName}" não permitido` });
+  }
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { content } = body || {};
+  if (typeof content !== 'string') {
+    return sendJson(res, 400, { error: 'need {content: string}' });
+  }
+  if (content.length > 500_000) {
+    return sendJson(res, 400, { error: 'doc muito longo (máx 500KB)' });
+  }
+  try {
+    if (!fs.existsSync(memDir)) fs.mkdirSync(memDir, { recursive: true });
+    const p = path.join(memDir, docName);
+    const normalized = content.endsWith('\n') ? content : content + '\n';
+    fs.writeFileSync(p, normalized);
+    sendJson(res, 200, { ok: true, doc: docName, bytes: content.length });
+  } catch (err) {
+    sendJson(res, 500, { error: err.message });
+  }
+}
+
+async function handleAgentContext(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { content } = body || {};
+  if (typeof content !== 'string') {
+    return sendJson(res, 400, { error: 'need {content: string}' });
+  }
+  const manifest = agents.loadManifest(memDir);
+  const cfg = manifest && manifest.agents && manifest.agents[agentName];
+  if (!cfg) return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  const contextFile = cfg.context_file || `agents/${agentName}.md`;
+  try {
+    agents.saveMiniContext(memDir, contextFile, content);
+  } catch (err) {
+    return sendJson(res, 400, { error: err.message });
+  }
+  sendJson(res, 200, { ok: true, agent: agentName, context_file: contextFile, bytes: content.length });
 }
 
 function handleChatHistory(url, res) {
@@ -1133,7 +1227,8 @@ async function handleChatSend(req, res) {
   sse('start', { agent, ts: userTs });
 
   const args = ['-p', '--output-format', 'text'];
-  if (agentCfg.model) args.push('--model', agentCfg.model);
+  const resolvedModel = agents.resolveCliModel(agentCfg.model);
+  if (resolvedModel) args.push('--model', resolvedModel);
   const allowedTools = buildAllowedTools(agent, agentCfg);
   if (allowedTools.length) args.push('--allowed-tools', allowedTools.join(','));
   args.push(prompt);
@@ -1407,6 +1502,26 @@ async function handlePipelineCancel(req, res) {
 function handlePipelineClear(res) {
   pipelines.clear({ memDir });
   sendJson(res, 200, { ok: true });
+}
+
+function handlePipelineRuns(url, res) {
+  const limitRaw = url.searchParams.get('limit');
+  const limit = Number.parseInt(limitRaw || '50', 10);
+  const runs = pipelines.listRuns(memDir, Number.isFinite(limit) ? limit : 50);
+  sendJson(res, 200, { runs });
+}
+
+async function handlePipelineCreate(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { scope, overwrite, ...input } = body || {};
+  try {
+    const result = pipelines.create({ memDir, scope, input, overwrite: !!overwrite });
+    sendJson(res, 200, { ok: true, ...result });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
 }
 
 // ── Architect ───────────────────────────────────────────────────────────────
@@ -1697,6 +1812,24 @@ const server = http.createServer((req, res) => {
     handleAgentAutonomy(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
     return;
   }
+  const modelMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/model$/);
+  if (modelMatch && req.method === 'PATCH') {
+    const agentName = decodeURIComponent(modelMatch[1]);
+    handleAgentModel(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  const contextMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/context$/);
+  if (contextMatch && req.method === 'PUT') {
+    const agentName = decodeURIComponent(contextMatch[1]);
+    handleAgentContext(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  const docMatch = url.pathname.match(/^\/api\/docs\/([A-Z_]+\.md)$/);
+  if (docMatch && req.method === 'PUT') {
+    const docName = docMatch[1];
+    handleDocSave(docName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
 
   // Humanos
   if (url.pathname === '/api/humans' && req.method === 'GET') {
@@ -1759,6 +1892,9 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/pipelines/install' && req.method === 'POST') {
     handlePipelineInstall(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
   }
+  if (url.pathname === '/api/pipelines/create' && req.method === 'POST') {
+    handlePipelineCreate(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
   if (url.pathname === '/api/pipelines/state' && req.method === 'GET') {
     handlePipelineState(res); return;
   }
@@ -1770,6 +1906,9 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/pipelines/cancel' && req.method === 'POST') {
     handlePipelineCancel(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/pipelines/runs' && req.method === 'GET') {
+    return handlePipelineRuns(url, res);
   }
   if (url.pathname === '/api/pipelines/clear' && req.method === 'POST') {
     handlePipelineClear(res); return;

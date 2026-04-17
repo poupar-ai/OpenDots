@@ -136,7 +136,8 @@ Seja direto. Português. Máximo 12 linhas.`;
 function runClaude({ cwd, model, prompt, timeoutMs = 120_000 }) {
   return new Promise((resolve) => {
     const args = ['-p', '--output-format', 'text'];
-    if (model) args.push('--model', model);
+    const resolvedModel = agents.resolveCliModel(model);
+    if (resolvedModel) args.push('--model', resolvedModel);
     args.push(prompt);
 
     const proc = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });

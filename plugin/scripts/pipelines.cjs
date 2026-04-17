@@ -171,10 +171,157 @@ function install({ id, memDir, overwrite }) {
   return { installed: true };
 }
 
+// ── Create (via UI) ──────────────────────────────────────────────────────────
+
+const ID_RE = /^[a-z][a-z0-9-]{1,48}[a-z0-9]$/;
+
+function yamlEscape(s) {
+  if (s === null || s === undefined) return '';
+  const str = String(s);
+  // Bloco | se tem quebra de linha; senão aspas se tem : [ ] # ou começa com -
+  if (str.includes('\n')) return null; // caller handles block form
+  if (/[:\[\]#]|^-/.test(str)) return JSON.stringify(str);
+  return str;
+}
+
+function serializePipeline(def) {
+  const lines = [];
+  lines.push(`id: ${def.id}`);
+  if (def.label) lines.push(`label: ${yamlEscape(def.label) ?? JSON.stringify(def.label)}`);
+  if (def.description) {
+    if (def.description.includes('\n')) {
+      lines.push('description: |');
+      for (const l of def.description.split('\n')) lines.push(`  ${l}`);
+    } else {
+      const esc = yamlEscape(def.description);
+      lines.push(`description: ${esc !== null ? esc : JSON.stringify(def.description)}`);
+    }
+  }
+  if (def.tags && def.tags.length) {
+    lines.push(`tags: [${def.tags.map(t => t.trim()).filter(Boolean).join(', ')}]`);
+  }
+  lines.push('steps:');
+  for (const s of def.steps) {
+    lines.push(`  - id: ${s.id}`);
+    if (s.type && s.type !== 'agent') lines.push(`    type: ${s.type}`);
+    if (s.agent) lines.push(`    agent: ${s.agent}`);
+    if (s.label) {
+      const esc = yamlEscape(s.label);
+      lines.push(`    label: ${esc !== null ? esc : JSON.stringify(s.label)}`);
+    }
+    if (s.description) {
+      if (s.description.includes('\n')) {
+        lines.push('    description: |');
+        for (const l of s.description.split('\n')) lines.push(`      ${l}`);
+      } else {
+        const esc = yamlEscape(s.description);
+        lines.push(`    description: ${esc !== null ? esc : JSON.stringify(s.description)}`);
+      }
+    }
+    if (s.owner) lines.push(`    owner: ${s.owner}`);
+    if (s.best_practices && s.best_practices.length) {
+      lines.push(`    best_practices: [${s.best_practices.map(t => t.trim()).filter(Boolean).join(', ')}]`);
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+function validatePipelineInput(input) {
+  if (!input || typeof input !== 'object') throw new Error('payload inválido');
+  const { id, label, steps } = input;
+  if (typeof id !== 'string' || !ID_RE.test(id)) {
+    throw new Error('id deve ser slug a-z/0-9/- (3-50 chars, começa com letra)');
+  }
+  if (!label || typeof label !== 'string' || label.length > 120) {
+    throw new Error('label é obrigatório (máx 120 chars)');
+  }
+  if (!Array.isArray(steps) || steps.length === 0) {
+    throw new Error('pipeline precisa de pelo menos 1 step');
+  }
+  const stepIds = new Set();
+  for (const s of steps) {
+    if (!s || typeof s !== 'object') throw new Error('step inválido');
+    if (typeof s.id !== 'string' || !ID_RE.test(s.id)) {
+      throw new Error(`step.id "${s.id}" inválido (use slug a-z/0-9/-)`);
+    }
+    if (stepIds.has(s.id)) throw new Error(`step.id "${s.id}" duplicado`);
+    stepIds.add(s.id);
+    const type = s.type || 'agent';
+    if (!['agent', 'checkpoint'].includes(type)) {
+      throw new Error(`step.type inválido em "${s.id}" (use agent ou checkpoint)`);
+    }
+    if (type === 'agent' && !s.agent) {
+      throw new Error(`step "${s.id}" do tipo agent precisa de agent`);
+    }
+  }
+}
+
+function create({ memDir, scope, input, overwrite }) {
+  validatePipelineInput(input);
+  const scopeName = scope === 'template' ? 'template' : 'project';
+  const baseDir = scopeName === 'template'
+    ? PIPE_DIR
+    : path.join(memDir, 'pipelines');
+  const dstDir = path.join(baseDir, input.id);
+  const dst = path.join(dstDir, 'pipeline.yaml');
+  if (fs.existsSync(dst) && !overwrite) {
+    throw new Error(`pipeline "${input.id}" já existe em ${scopeName} — use overwrite`);
+  }
+  if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
+  fs.writeFileSync(dst, serializePipeline(input));
+  return { id: input.id, scope: scopeName, path: dst };
+}
+
 // ── State (run) ──────────────────────────────────────────────────────────────
 
 function statePath(memDir) {
   return path.join(memDir, 'pipeline-state.json');
+}
+
+function runsPath(memDir) {
+  return path.join(memDir, 'pipeline-runs.jsonl');
+}
+
+function summarizeRun(state) {
+  const doneCount = state.steps.filter(s => s.status === 'done').length;
+  const rejectedCount = state.steps.filter(s => s.status === 'rejected').length;
+  const startedMs = Date.parse(state.started_at);
+  const endedMs = Date.parse(state.updated_at);
+  const duration_ms = Number.isFinite(startedMs) && Number.isFinite(endedMs)
+    ? Math.max(0, endedMs - startedMs)
+    : null;
+  return {
+    run_id: state.run_id,
+    pipeline_id: state.pipeline_id,
+    title: state.title,
+    status: state.status,
+    started_at: state.started_at,
+    ended_at: state.updated_at,
+    started_by: state.started_by || null,
+    total_steps: state.total_steps,
+    steps_done: doneCount,
+    steps_rejected: rejectedCount,
+    duration_ms,
+    cancel_reason: state.cancel_reason || null,
+  };
+}
+
+function appendRun(memDir, state) {
+  if (!state || !state.run_id) return;
+  if (!fs.existsSync(memDir)) fs.mkdirSync(memDir, { recursive: true });
+  const entry = summarizeRun(state);
+  fs.appendFileSync(runsPath(memDir), JSON.stringify(entry) + '\n');
+}
+
+function listRuns(memDir, limit = 50) {
+  const f = runsPath(memDir);
+  if (!fs.existsSync(f)) return [];
+  const lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean);
+  const runs = [];
+  for (const line of lines) {
+    try { runs.push(JSON.parse(line)); } catch { /* skip malformed */ }
+  }
+  return runs.reverse().slice(0, Math.max(1, Math.min(limit, 500)));
 }
 
 function loadState(memDir) {
@@ -249,6 +396,7 @@ function advance({ memDir, stepId, note, decidedBy, decision }) {
     state.status = 'aborted';
     state.updated_at = now;
     saveState(memDir, state);
+    appendRun(memDir, state);
     return state;
   }
 
@@ -267,16 +415,19 @@ function advance({ memDir, stepId, note, decidedBy, decision }) {
   }
   state.updated_at = now;
   saveState(memDir, state);
+  if (state.status === 'done') appendRun(memDir, state);
   return state;
 }
 
 function cancel({ memDir, reason }) {
   const state = loadState(memDir);
   if (!state) return null;
+  const wasRunning = state.status === 'running';
   state.status = 'cancelled';
   state.updated_at = new Date().toISOString();
   if (reason) state.cancel_reason = reason;
   saveState(memDir, state);
+  if (wasRunning) appendRun(memDir, state);
   return state;
 }
 
@@ -292,9 +443,11 @@ module.exports = {
   list,
   loadDef,
   install,
+  create,
   loadState,
   start,
   advance,
   cancel,
   clear,
+  listRuns,
 };

@@ -79,6 +79,10 @@ export default function App() {
           onClose={() => setPipelinesOpen(false)}
           meHumanId={humanId}
           meHumanName={human?.name || null}
+          onOpenChat={(name) => {
+            setPipelinesOpen(false);
+            setSelected(name);
+          }}
         />
       )}
       {bestPracticesOpen && (

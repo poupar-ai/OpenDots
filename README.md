@@ -11,6 +11,49 @@ Cada projeto tem sua própria memória. O time inteiro compartilha o contexto ao
 
 ---
 
+## Filosofia
+
+O plugin organiza a memória do projeto em **camadas de identidade**, da mais volátil à mais estável:
+
+```
+           ┌────────────────────────┐
+           │   ✨  SOUL.md          │  ← ALMA: valores, filosofia, voz, não-negociáveis
+           │   (raramente muda)     │     — quem o projeto é
+           └────────────────────────┘
+           ┌────────────────────────┐
+           │   PROJECT.md           │  ← IDENTIDADE FACTUAL: stack, estrutura, padrões
+           │   (muda por release)   │     — o que o projeto é
+           └────────────────────────┘
+       ┌───────────────────────────────┐
+       │   DECISIONS / GOTCHAS /       │  ← APRENDIZADO: decisões, armadilhas, glossário
+       │   GLOSSARY                    │     — o que o projeto escolheu
+       └───────────────────────────────┘
+     ┌────────────────────────────────────┐
+     │   decisions / corrections /        │  ← LOGS: append-only, alimentado por hooks
+     │   gotchas (JSONL)                  │     e slash commands
+     └────────────────────────────────────┘
+   ┌──────────────────────────────────────────┐
+   │   observations.jsonl + graph.json        │  ← SINAL BRUTO: edições, diffs, comandos,
+   │                                          │     padrões detectados
+   └──────────────────────────────────────────┘
+```
+
+### As camadas
+
+- **Alma** (`SOUL.md`) — a identidade do projeto: valores, filosofia, voz, anti-padrões. Responde **"no que esse projeto acredita?"**. Raramente muda. É a **lente** pela qual os fatos são interpretados — por isso é injetada antes de qualquer coisa.
+- **Identidade factual** (`PROJECT.md`) — stack, arquitetura, padrões, como rodar. Responde **"o que esse projeto é?"**. Muda por release.
+- **Aprendizado** (`DECISIONS.md`, `GOTCHAS.md`, `GLOSSARY.md`) — renderizado automaticamente a partir dos JSONLs ao final de cada sessão.
+- **Logs curados** (`decisions.jsonl`, `corrections.jsonl`, `gotchas.jsonl`) — fatos pontuais alimentados por hooks (correções detectadas, armadilhas descobertas em `fail→retry→success`) e por slash commands (`/mem-decision`).
+- **Sinal bruto** (`observations.jsonl` + `graph.json`) — capturado automaticamente pelos hooks: edições com `git diff --numstat`, comandos com resumo de saída de testes/lint, e padrões derivados (arquivos ativos, acoplamentos, workflows).
+
+### A ideia central
+
+> O Claude não tem que lembrar. Mas também não deveria repetir erros, nem perder o "por quê" das decisões, **nem esquecer quem é o projeto**.
+
+O plugin é o contrato entre sessões — e entre você, seu time e o Claude.
+
+---
+
 ## O problema
 
 Toda vez que você abre o Claude Code, ele começa do zero. Não sabe:
@@ -89,10 +132,17 @@ meu-projeto/
 ├── .claude/
 │   └── CLAUDE.md                     ← gerado automaticamente pelo plugin (leitura nativa do Claude)
 └── .claude-project-memory/
+    ├── SOUL.md             ← alma: valores, filosofia, voz (raramente muda)
     ├── PROJECT.md          ← contexto permanente (stack, padrões, decisões)
+    ├── DECISIONS.md        ← log renderizado de decisões do projeto
+    ├── GOTCHAS.md          ← armadilhas detectadas ou registradas
+    ├── GLOSSARY.md         ← glossário de termos (se glossary.jsonl existir)
     ├── config.json         ← configurações do projeto (nome, versão, criação)
-    ├── sessions.jsonl      ← histórico de sessões com resumos
-    ├── observations.jsonl  ← edições e comandos registrados
+    ├── sessions.jsonl      ← histórico de sessões com resumos + kind
+    ├── observations.jsonl  ← edições (com diff stat) e comandos (com output summary)
+    ├── decisions.jsonl     ← decisões registradas via /mem-decision
+    ├── corrections.jsonl   ← correções detectadas nas mensagens do dev
+    ├── gotchas.jsonl       ← sequências fail→retry→success detectadas
     ├── graph.json          ← grafo de padrões detectados
     ├── stats.json          ← cache de contadores (usado pelo banner)
     └── tmp/                ← flags de sessão temporárias
@@ -166,6 +216,29 @@ A partir daí, o Claude nunca "esquece" o padrão do projeto.
 /mem-setup
 ```
 
+### `/mem-soul` — Curar a alma do projeto
+
+Abre uma conversa estruturada para criar ou atualizar `SOUL.md` — a camada de identidade do projeto. Valores, filosofia, estética de código, anti-padrões, voz.
+
+```
+/mem-soul                             # onboarding completo
+/mem-soul add: nunca logar CPF...     # adiciona um ponto
+/mem-soul update: Voz                 # atualiza uma seção
+```
+
+A alma é injetada no topo do contexto do Claude em toda sessão futura — antes do `PROJECT.md`. Pense nela como a lente pela qual o Claude deve interpretar as decisões do dia-a-dia.
+
+### `/mem-decision <o que> — <por quê>` — Registrar decisão
+
+Registra uma decisão técnica, arquitetural ou de produto. A decisão é append-only em `decisions.jsonl`, rendered em `DECISIONS.md`, e injetada em toda sessão futura.
+
+```
+/mem-decision gateway primário será Asaas — tem Pix + cartão 12x + menor taxa
+/mem-decision usar UUID v7 como PK: performance + ordenação temporal natural
+```
+
+Separadores aceitos: `—`, `--`, `:`, `porque`, `because`. Sem separador, o skill pergunta a motivação antes de salvar.
+
 ### `/mem-search <query>` — Busca no histórico
 
 ```
@@ -181,11 +254,18 @@ Filtros por prefixo: `file:`, `bash:`, `session:` — sem prefixo busca em tudo.
 
 ### `/mem-ui` — Interface web
 
-Sobe uma UI local em `http://localhost:37778` com:
-- Visualizador do `PROJECT.md`
-- Histórico de sessões com datas e resumos
-- Todas as observações com busca em tempo real
-- Atualização automática a cada 10 segundos
+Sobe uma UI local em `http://localhost:37778` com abas para toda a memória do projeto:
+
+- **✨ Alma** — `SOUL.md` com tratamento visual destacado (é a camada mais importante)
+- **PROJECT.md** — identidade factual do projeto
+- **Decisões** — cards com `what` + `why` de cada decisão registrada
+- **Correções** — mensagens do dev interpretadas como correção, com a ação anterior do Claude como contexto
+- **Armadilhas** — gotchas detectadas automaticamente (sequências `fail → edit → success`)
+- **Glossário** — termos do projeto, renderizado a partir de `glossary.jsonl`
+- **Sessões** — histórico com resumos, contagem de obs e classificação (`kind`)
+- **Observações** — todas as edições (com diff stats) e comandos (com output summary), com busca em tempo real
+
+Atualização automática a cada 10 segundos.
 
 ```
 /mem-ui
@@ -203,10 +283,29 @@ node /caminho/para/claude-project-memory/plugin/ui/server.cjs
 
 | Evento | O que grava |
 |--------|-------------|
-| `Write` / `Edit` / `MultiEdit` | Caminho relativo do arquivo editado |
-| `Bash` | Comando executado + exit code |
+| `Write` / `Edit` / `MultiEdit` | Caminho relativo + `git diff --numstat` (insertions/deletions) + preview das linhas alteradas |
+| `Bash` | Comando executado + exit code + resumo de saída (`pytest: 5 passed, 2 failed`, `ruff: ok`, etc.) |
+| `UserPromptSubmit` (correção) | Mensagem do dev começando com marcadores de correção (`não`, `pare`, `errado`, `stop`, `wrong`…), com a ação anterior do Claude como contexto |
+| `SessionEnd` (gotcha) | Sequências `bash falhou → editar arquivo → mesmo bash passou` viram entradas em `gotchas.jsonl` |
+| `SessionEnd` (kind) | Cada sessão recebe classificação: `feature`, `bugfix`, `refactor`, `docs`, `config`, `exploration` |
 
 Comandos triviais são ignorados (`ls`, `pwd`, `echo`, `cat`, `head`, `tail`, etc.).
+
+## O que é injetado no início de cada sessão
+
+O hook `UserPromptSubmit` monta um bloco de contexto com tudo que for relevante (em ordem):
+
+0. `SOUL.md` completo — alma do projeto (lente pela qual tudo é interpretado)
+1. `PROJECT.md` completo
+2. `DECISIONS.md`, `GOTCHAS.md`, `GLOSSARY.md` (se existirem)
+3. Estado do git — branch atual, modificados não commitados, últimos 5 commits
+4. ADRs do repo — lê `docs/adr/*.md` (ou `docs/adrs/`, `docs/decisions/`, `adr/`) e injeta título de cada
+5. Resumos das últimas 5 sessões (com `kind`)
+6. Últimas 5 decisões registradas
+7. Últimas 8 correções do dev — para não repetir erros já corrigidos
+8. Últimas 5 armadilhas detectadas
+9. Últimas 40 observações (edições com diff stat + comandos com output summary)
+10. Padrões do grafo (arquivos ativos, acoplamentos, workflows)
 
 ---
 
@@ -232,6 +331,8 @@ claude-project-memory/
     │   └── server.cjs              ← MCP server (mem_context, mem_search, mem_add_note)
     ├── skills/
     │   ├── mem-setup/SKILL.md      ← /mem-setup
+    │   ├── mem-soul/SKILL.md       ← /mem-soul
+    │   ├── mem-decision/SKILL.md   ← /mem-decision
     │   ├── mem-search/SKILL.md     ← /mem-search
     │   └── mem-ui/SKILL.md         ← /mem-ui
     └── ui/

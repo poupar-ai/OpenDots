@@ -12,13 +12,36 @@ const memDir      = getMemDir(cwd);
 const projectName = path.basename(projectRoot);
 const HTML_PATH   = path.join(__dirname, 'index.html');
 
+function readMdIfExists(file) {
+  const p = path.join(memDir, file);
+  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
+}
+
 function getData() {
   const sessionsRaw  = readJsonl(path.join(memDir, 'sessions.jsonl'));
   const observations = readJsonl(path.join(memDir, 'observations.jsonl'));
-  const projectMdPath = path.join(memDir, 'PROJECT.md');
-  const projectMd = fs.existsSync(projectMdPath)
-    ? fs.readFileSync(projectMdPath, 'utf8')
-    : null;
+  const decisions    = readJsonl(path.join(memDir, 'decisions.jsonl'));
+  const corrections  = readJsonl(path.join(memDir, 'corrections.jsonl'));
+  const gotchas      = readJsonl(path.join(memDir, 'gotchas.jsonl'));
+
+  const soulMd      = readMdIfExists('SOUL.md');
+  const projectMd   = readMdIfExists('PROJECT.md');
+  const decisionsMd = readMdIfExists('DECISIONS.md');
+  const gotchasMd   = readMdIfExists('GOTCHAS.md');
+  const glossaryMd  = readMdIfExists('GLOSSARY.md');
+  const codeIndexMd = readMdIfExists('CODE_INDEX.md');
+
+  let codeIndex = null;
+  try {
+    const idxFile = path.join(memDir, 'code_index.json');
+    if (fs.existsSync(idxFile)) codeIndex = JSON.parse(fs.readFileSync(idxFile, 'utf8'));
+  } catch {}
+
+  let stats = null;
+  try {
+    const statsFile = path.join(memDir, 'stats.json');
+    if (fs.existsSync(statsFile)) stats = JSON.parse(fs.readFileSync(statsFile, 'utf8'));
+  } catch {}
 
   const sessionMap = {};
   for (const s of sessionsRaw) {
@@ -29,15 +52,41 @@ function getData() {
     .filter(s => s.ended_at)
     .sort((a, b) => (b.ended_at || '').localeCompare(a.ended_at || ''));
 
+  const codeIndexStats = codeIndex ? {
+    files: Object.keys(codeIndex.files || {}).length,
+    symbols: Object.values(codeIndex.files || {}).reduce((n, f) => n + (f.symbols || []).length, 0),
+    generated_at: codeIndex.generated_at
+  } : null;
+
   return {
     project:      { name: projectName, root: projectRoot },
+    soulMd,
     projectMd,
+    decisionsMd,
+    gotchasMd,
+    glossaryMd,
+    codeIndexMd,
     sessions,
     observations: [...observations].reverse(),
+    decisions:    [...decisions].reverse(),
+    corrections:  [...corrections].reverse(),
+    gotchas:      [...gotchas].reverse(),
     stats: {
       sessions:     sessions.length,
       observations: observations.length,
-      hasProjectMd: !!projectMd
+      decisions:    decisions.length,
+      corrections:  corrections.length,
+      gotchas:      gotchas.length,
+      hasSoul:      !!soulMd,
+      hasProjectMd: !!projectMd,
+      codeIndex:    codeIndexStats,
+      tokens: stats ? {
+        last: stats.last_injection_tokens || 0,
+        budget: stats.last_injection_budget || 0,
+        blocks: stats.last_injection_blocks || [],
+        skipped: stats.last_injection_skipped || [],
+        at: stats.last_injection_at || null
+      } : null
     }
   };
 }

@@ -89,6 +89,16 @@ function readLastJsonlLine(file) {
   return null;
 }
 
+// ─── Token estimation ─────────────────────────────────────────────────────────
+//
+// Heurística: ~1 token por 3.5 caracteres para português/inglês misturados.
+// Suficiente para orçamentos de injeção (não precisa ser exato como tiktoken).
+
+function estimateTokens(str) {
+  if (!str) return 0;
+  return Math.ceil(str.length / 3.5);
+}
+
 // ─── Stats cache ──────────────────────────────────────────────────────────────
 
 function loadStats(memDir) {
@@ -207,5 +217,6 @@ module.exports = {
   initProjectConfig,
   syncClaudeMd,
   readStdin,
-  getCwd
+  getCwd,
+  estimateTokens
 };

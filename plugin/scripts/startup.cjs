@@ -76,6 +76,13 @@ if (!fs.existsSync(memDir)) {
 
   line += ` | ${sessions} sessões · ${observations} obs`;
   line += hasProjectMd ? ' | PROJECT.md ✓' : ' | PROJECT.md ✗ — rode /mem-setup';
+
+  if (stats && stats.last_injection_tokens) {
+    const budget  = stats.last_injection_budget || 4000;
+    const skipped = Array.isArray(stats.last_injection_skipped) ? stats.last_injection_skipped.length : 0;
+    line += ` | ~${stats.last_injection_tokens}/${budget}t${skipped > 0 ? ` (⚠${skipped} omitidos)` : ''}`;
+  }
+
   line += ` | UI → http://localhost:${PORT}`;
 }
 

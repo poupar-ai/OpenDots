@@ -169,8 +169,53 @@
     .obs-content { color: var(--text); word-break: break-all; }
     .obs-exit-ok { color: var(--green); margin-left: 6px; }
     .obs-exit-fail { color: var(--red); margin-left: 6px; }
+    .obs-extra { color: var(--muted); margin-left: 8px; font-size: 11px; }
 
     .count-badge { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+
+    /* Soul — tratamento especial, cor púrpura + aura */
+    .soul-md {
+      background: linear-gradient(180deg, rgba(163,113,247,0.08) 0%, var(--surface) 100%);
+      border: 1px solid var(--purple);
+      border-radius: 8px;
+      padding: 24px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+      box-shadow: 0 0 24px rgba(163,113,247,0.08);
+    }
+    .tab.soul.active { color: var(--purple); border-bottom-color: var(--purple); }
+    .tab.soul:hover { color: var(--purple); }
+
+    /* Generic markdown-ish panel (DECISIONS/GOTCHAS) */
+    .md-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* Cards for decisions / corrections / gotchas */
+    .entry-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 10px;
+    }
+    .entry-card .entry-date { color: var(--muted); font-size: 12px; font-family: monospace; margin-bottom: 4px; }
+    .entry-card .entry-what { color: var(--text); font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .entry-card .entry-why  { color: var(--muted); font-size: 13px; font-style: italic; }
+    .entry-card.correction  { border-left: 3px solid var(--yellow); }
+    .entry-card.gotcha      { border-left: 3px solid var(--red); }
+    .entry-card.decision    { border-left: 3px solid var(--accent); }
 
     .refresh-btn {
       background: var(--surface2);
@@ -195,15 +240,68 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-panel="project">PROJECT.md</div>
+  <div class="tab soul active" data-panel="soul">✨ Alma</div>
+  <div class="tab" data-panel="project">PROJECT.md</div>
+  <div class="tab" data-panel="decisions">Decisões</div>
+  <div class="tab" data-panel="corrections">Correções</div>
+  <div class="tab" data-panel="gotchas">Armadilhas</div>
+  <div class="tab" data-panel="glossary">Glossário</div>
+  <div class="tab" data-panel="code-index">Code Index</div>
   <div class="tab" data-panel="sessions">Sessões</div>
   <div class="tab" data-panel="observations">Observações</div>
 </div>
 
 <main>
+  <!-- SOUL.md -->
+  <div class="panel active" id="panel-soul">
+    <pre class="soul-md" id="soul-md-content">Carregando…</pre>
+  </div>
+
   <!-- PROJECT.md -->
-  <div class="panel active" id="panel-project">
+  <div class="panel" id="panel-project">
     <pre class="project-md" id="project-md-content">Carregando…</pre>
+  </div>
+
+  <!-- Decisions -->
+  <div class="panel" id="panel-decisions">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="count-badge" id="decisions-count"></span>
+      <button class="refresh-btn" onclick="load()">↺ Atualizar</button>
+    </div>
+    <div id="decisions-list"></div>
+  </div>
+
+  <!-- Corrections -->
+  <div class="panel" id="panel-corrections">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="count-badge" id="corrections-count"></span>
+      <button class="refresh-btn" onclick="load()">↺ Atualizar</button>
+    </div>
+    <div id="corrections-list"></div>
+  </div>
+
+  <!-- Gotchas -->
+  <div class="panel" id="panel-gotchas">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="count-badge" id="gotchas-count"></span>
+      <button class="refresh-btn" onclick="load()">↺ Atualizar</button>
+    </div>
+    <div id="gotchas-list"></div>
+  </div>
+
+  <!-- Glossary -->
+  <div class="panel" id="panel-glossary">
+    <pre class="md-panel" id="glossary-md-content">Carregando…</pre>
+  </div>
+
+  <!-- Code Index -->
+  <div class="panel" id="panel-code-index">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="count-badge" id="code-index-count"></span>
+      <button class="refresh-btn" onclick="load()">↺ Atualizar</button>
+      <span style="color:var(--muted);font-size:12px;margin-left:auto">Rode <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--accent)">/mem-index</code> pra rebuild completo</span>
+    </div>
+    <pre class="md-panel" id="code-index-md-content">Carregando…</pre>
   </div>
 
   <!-- Sessions -->
@@ -253,12 +351,38 @@
     // Header
     document.getElementById('proj-name').textContent = data.project.name;
     document.getElementById('stats-bar').innerHTML = `
-      <span class="stat-badge">${data.stats.sessions} sessões</span>
-      <span class="stat-badge">${data.stats.observations} obs</span>
-      <span class="stat-badge ${data.stats.hasProjectMd ? 'ok' : 'warn'}">
-        ${data.stats.hasProjectMd ? 'PROJECT.md ✓' : 'PROJECT.md ✗'}
+      <span class="stat-badge ${data.stats.hasSoul ? 'ok' : 'warn'}" style="${data.stats.hasSoul ? 'border-color:var(--purple);color:var(--purple)' : ''}">
+        ${data.stats.hasSoul ? '✨ alma ✓' : '✨ alma ✗'}
       </span>
+      <span class="stat-badge ${data.stats.hasProjectMd ? 'ok' : 'warn'}">
+        ${data.stats.hasProjectMd ? 'PROJECT ✓' : 'PROJECT ✗'}
+      </span>
+      <span class="stat-badge">${data.stats.decisions} dec</span>
+      <span class="stat-badge">${data.stats.corrections} corr</span>
+      <span class="stat-badge">${data.stats.gotchas} arm</span>
+      <span class="stat-badge">${data.stats.sessions} ses</span>
+      <span class="stat-badge">${data.stats.observations} obs</span>
+      ${data.stats.tokens && data.stats.tokens.last ? `
+        <span class="stat-badge ${data.stats.tokens.skipped.length > 0 ? 'warn' : 'ok'}" title="Última injeção no contexto do Claude">
+          ~${data.stats.tokens.last}/${data.stats.tokens.budget}t
+        </span>
+      ` : ''}
+      ${data.stats.codeIndex ? `
+        <span class="stat-badge">${data.stats.codeIndex.symbols} símbolos</span>
+      ` : ''}
     `;
+
+    // SOUL.md
+    const soul = document.getElementById('soul-md-content');
+    if (data.soulMd) {
+      soul.textContent = data.soulMd;
+    } else {
+      soul.innerHTML = `<div class="no-data">
+        Este projeto ainda não tem alma definida.<br><br>
+        Rode <code>/mem-soul</code> no Claude Code para iniciar a conversa sobre valores, filosofia e voz do projeto.<br><br>
+        <span style="color:var(--muted);font-size:12px">A alma é a camada mais estável da memória — define <em>quem</em> o projeto é, não <em>o que</em> ele fez.</span>
+      </div>`;
+    }
 
     // PROJECT.md
     const md = document.getElementById('project-md-content');
@@ -271,6 +395,62 @@
       </div>`;
     }
 
+    // Decisions
+    renderEntries('decisions', data.decisions, 'decision', d => ({
+      date:    (d.ts || '').slice(0, 10),
+      what:    d.what || d.text || '(sem título)',
+      why:     d.why || null
+    }));
+
+    // Corrections
+    renderEntries('corrections', data.corrections, 'correction', c => {
+      const prev = c.previous_action
+        ? (c.previous_action.type === 'file_edit'
+            ? `após editar ${c.previous_action.file}`
+            : `após rodar \`${c.previous_action.cmd}\``)
+        : 'sem ação anterior';
+      return {
+        date: (c.ts || '').slice(0, 10),
+        what: c.prompt || '',
+        why:  prev
+      };
+    });
+
+    // Gotchas
+    renderEntries('gotchas', data.gotchas, 'gotcha', g => ({
+      date: (g.ts || '').slice(0, 10),
+      what: g.description || '',
+      why:  g.failure_hint ? `Sintoma: ${g.failure_hint}` : (g.file || '')
+    }));
+
+    // Glossary
+    const gl = document.getElementById('glossary-md-content');
+    if (data.glossaryMd) {
+      gl.textContent = data.glossaryMd;
+    } else {
+      gl.innerHTML = `<div class="no-data">
+        Nenhum GLOSSARY.md encontrado.<br><br>
+        Alimente <code>.claude-project-memory/glossary.jsonl</code> com entradas <code>{"term": "…", "definition": "…"}</code> e o plugin gera o markdown ao final da sessão.
+      </div>`;
+    }
+
+    // Code Index
+    const ci = document.getElementById('code-index-md-content');
+    const ciCount = document.getElementById('code-index-count');
+    if (data.codeIndexMd && data.stats.codeIndex) {
+      ci.textContent = data.codeIndexMd;
+      const c = data.stats.codeIndex;
+      const genAt = (c.generated_at || '').slice(0, 16).replace('T', ' ');
+      ciCount.textContent = `${c.files} arquivos · ${c.symbols} símbolos · gerado ${genAt}`;
+    } else {
+      ci.innerHTML = `<div class="no-data">
+        Nenhum CODE_INDEX.md encontrado.<br><br>
+        Rode <code>/mem-index</code> no Claude Code para construir o mapa de símbolos.<br><br>
+        <span style="color:var(--muted);font-size:12px">Extração automática de funções, classes, endpoints e tabelas — atualizado a cada sessão.</span>
+      </div>`;
+      ciCount.textContent = '';
+    }
+
     // Sessions
     const sessList = document.getElementById('sessions-list');
     document.getElementById('sessions-count').textContent = `${data.sessions.length} sessões completadas`;
@@ -279,10 +459,12 @@
     } else {
       sessList.innerHTML = data.sessions.map(s => {
         const date = (s.ended_at || '').slice(0, 16).replace('T', ' ');
+        const kind = s.kind ? `<span class="session-obs" style="background:rgba(163,113,247,0.15);color:var(--purple)">${esc(s.kind)}</span>` : '';
         return `<div class="session-card">
           <div class="session-header">
             <span class="session-date">${date}</span>
             <span class="session-obs">${s.obs_count || 0} obs</span>
+            ${kind}
           </div>
           <div class="session-summary">${esc(s.summary || '—')}</div>
         </div>`;
@@ -290,6 +472,24 @@
     }
 
     renderObs();
+  }
+
+  function renderEntries(name, items, cssClass, mapFn) {
+    const list  = document.getElementById(`${name}-list`);
+    const count = document.getElementById(`${name}-count`);
+    count.textContent = `${items.length} ${name === 'decisions' ? 'decisões' : name === 'corrections' ? 'correções' : 'armadilhas'}`;
+    if (items.length === 0) {
+      list.innerHTML = `<div class="no-data">Nenhum registro ainda.</div>`;
+      return;
+    }
+    list.innerHTML = items.map(item => {
+      const m = mapFn(item);
+      return `<div class="entry-card ${cssClass}">
+        <div class="entry-date">${esc(m.date)}</div>
+        <div class="entry-what">${esc(m.what)}</div>
+        ${m.why ? `<div class="entry-why">${esc(m.why)}</div>` : ''}
+      </div>`;
+    }).join('');
   }
 
   function renderObs() {
@@ -317,13 +517,22 @@
     list.innerHTML = filtered.map(o => {
       const ts = (o.ts || '').slice(0, 16).replace('T', ' ');
       let content = '';
-      if (o.type === 'file_edit') content = esc(o.file || '');
+      if (o.type === 'file_edit') {
+        content = esc(o.file || '');
+        if (o.diff && typeof o.diff.ins === 'number') {
+          const tag = o.diff.tracked === false ? ' novo' : '';
+          content += `<span class="obs-extra">+${o.diff.ins}/-${o.diff.del || 0}${tag}</span>`;
+        }
+      }
       else if (o.type === 'bash') {
         content = esc((o.cmd || '').slice(0, 180));
         if (o.exit !== undefined && o.exit !== null) {
           content += o.exit === 0
             ? `<span class="obs-exit-ok">exit 0</span>`
             : `<span class="obs-exit-fail">exit ${o.exit}</span>`;
+        }
+        if (o.output_summary) {
+          content += `<span class="obs-extra">${esc(o.output_summary)}</span>`;
         }
       } else {
         content = esc(o.content || JSON.stringify(o));

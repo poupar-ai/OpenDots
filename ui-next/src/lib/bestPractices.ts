@@ -8,6 +8,18 @@ export interface BestPractice {
   dir?: string;
   available?: boolean;
   installed?: boolean;
+  source?: 'catalog' | 'local';
+}
+
+export interface CreateBestPracticeInput {
+  id: string;
+  name: string;
+  scope?: string;
+  tags?: string[];
+  when_to_use?: string;
+  not_for?: string;
+  content: string;
+  overwrite?: boolean;
 }
 
 export async function listBestPractices(): Promise<{ available: BestPractice[]; installed: string[] }> {
@@ -27,6 +39,17 @@ export async function applyBestPractices(ids: string[], overwrite = false): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids, overwrite }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+export async function createBestPractice(input: CreateBestPracticeInput): Promise<{ ok: boolean; id: string }> {
+  const r = await fetch('/api/best-practices/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);

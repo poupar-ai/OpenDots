@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { X, BookOpen, Check, Download } from 'lucide-react';
+import { X, BookOpen, Check, Download, Plus, Save, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   listBestPractices,
   getBestPractice,
   applyBestPractices,
+  createBestPractice,
   type BestPractice,
 } from '@/lib/bestPractices';
 
@@ -19,6 +20,7 @@ export function BestPracticesPanel({ onClose }: Props) {
   const [content, setContent] = useState<string>('');
   const [installing, setInstalling] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
 
   const reload = async () => {
     try {
@@ -62,9 +64,14 @@ export function BestPracticesPanel({ onClose }: Props) {
               conhecimento de domínio injetável nos agentes, versionado por projeto
             </p>
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> nova
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
 
         <div className="grid flex-1 grid-cols-[280px_1fr] overflow-hidden">
@@ -85,7 +92,12 @@ export function BestPracticesPanel({ onClose }: Props) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{p.name}</span>
-                  {p.installed && <Check className="h-3 w-3 text-emerald-600" />}
+                  <span className="flex items-center gap-1">
+                    {p.source === 'local' && (
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700">local</span>
+                    )}
+                    {p.installed && <Check className="h-3 w-3 text-emerald-600" />}
+                  </span>
                 </div>
                 <p className="mt-0.5 text-[10px] text-slate-500">{p.scope}</p>
                 {p.tags && p.tags.length > 0 && (
@@ -156,6 +168,200 @@ export function BestPracticesPanel({ onClose }: Props) {
             )}
           </main>
         </div>
+      </div>
+      {newOpen && (
+        <NewBestPracticeForm
+          existingIds={(items || []).map(p => p.id)}
+          onClose={() => setNewOpen(false)}
+          onCreated={async (id) => {
+            setNewOpen(false);
+            await reload();
+            setSelected(id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface NewFormProps {
+  existingIds: string[];
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+}
+
+function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) {
+  const [name, setName] = useState('');
+  const [id, setId] = useState('');
+  const [idEdited, setIdEdited] = useState(false);
+  const [scope, setScope] = useState('');
+  const [tagsText, setTagsText] = useState('');
+  const [whenToUse, setWhenToUse] = useState('');
+  const [notFor, setNotFor] = useState('');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const effectiveId = idEdited ? id : slugify(name);
+  const idTaken = existingIds.includes(effectiveId);
+  const idValid = /^[a-z][a-z0-9-]{1,48}[a-z0-9]$/.test(effectiveId);
+  const canSave = !!name.trim() && !!content.trim() && idValid && !idTaken && !saving;
+
+  const save = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
+      await createBestPractice({
+        id: effectiveId,
+        name: name.trim(),
+        scope: scope.trim() || undefined,
+        tags: tags.length ? tags : undefined,
+        when_to_use: whenToUse.trim() || undefined,
+        not_for: notFor.trim() || undefined,
+        content,
+      });
+      onCreated(effectiveId);
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao criar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const tryClose = () => {
+    if (saving) return;
+    const dirty = name || content || scope || whenToUse || notFor || tagsText;
+    if (dirty && !confirm('Descartar nova best-practice?')) return;
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="h-4 w-4" /> nova best-practice
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              fica em <code className="font-mono">.claude-project-memory/best-practices/&lt;id&gt;/</code> — versionada junto com o projeto
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={tryClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </header>
+
+        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">nome</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: Padrões de migrations Alembic"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">id (slug)</label>
+              <input
+                value={effectiveId}
+                onChange={(e) => { setId(e.target.value); setIdEdited(true); }}
+                placeholder="migrations-alembic"
+                className={`w-full rounded border bg-white px-2 py-1.5 font-mono text-[11px] focus:outline-none ${
+                  effectiveId && !idValid ? 'border-red-300 focus:border-red-400' : idTaken ? 'border-amber-300 focus:border-amber-400' : 'border-slate-200 focus:border-indigo-400'
+                }`}
+              />
+              {effectiveId && !idValid && (
+                <p className="mt-0.5 text-[10px] text-red-600">slug inválido (só letras minúsculas, dígitos, hífen)</p>
+              )}
+              {idValid && idTaken && (
+                <p className="mt-0.5 text-[10px] text-amber-600">já existe uma best-practice com esse id</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">scope</label>
+              <input
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                placeholder="backend / frontend / infra / …"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">tags (vírgulas)</label>
+              <input
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+                placeholder="sql, migrations, postgres"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">quando usar</label>
+            <input
+              value={whenToUse}
+              onChange={(e) => setWhenToUse(e.target.value)}
+              placeholder="quando for criar ou revisar uma migration Alembic"
+              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="mt-3">
+            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">não usar para</label>
+            <input
+              value={notFor}
+              onChange={(e) => setNotFor(e.target.value)}
+              placeholder="dados transacionais que precisam de raw SQL"
+              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+            />
+          </div>
+
+          <div className="mt-3">
+            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">conteúdo (markdown)</label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              spellCheck={false}
+              placeholder={'# Migrations Alembic\n\n## Regras\n- nunca alterar migration já aplicada\n- ...'}
+              className="h-64 w-full resize-y rounded border border-slate-200 bg-white p-2 font-mono text-[11px] leading-snug focus:border-indigo-400 focus:outline-none"
+            />
+            <p className="mt-0.5 text-[10px] text-slate-500">{content.length} chars</p>
+          </div>
+
+          {err && (
+            <div className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+              {err}
+            </div>
+          )}
+        </div>
+
+        <footer className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="outline" onClick={tryClose} disabled={saving}>
+            cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={!canSave} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'criando…' : 'criar'}
+          </Button>
+        </footer>
       </div>
     </div>
   );

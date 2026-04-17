@@ -131,9 +131,72 @@ function applyPractices({ ids, memDir, overwrite }) {
   return { copied, preserved, missing };
 }
 
+const ID_RE = /^[a-z][a-z0-9-]{1,48}[a-z0-9]$/;
+
+function listLocalPractices(memDir) {
+  const dir = path.join(memDir, 'best-practices');
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (!fs.statSync(full).isDirectory()) continue;
+    if (!fs.existsSync(path.join(full, 'practice.md'))) continue;
+    const metaFile = path.join(full, 'meta.json');
+    let meta = { id: entry };
+    if (fs.existsSync(metaFile)) {
+      try { meta = { ...meta, ...JSON.parse(fs.readFileSync(metaFile, 'utf8')) }; } catch {}
+    }
+    out.push({
+      id: meta.id || entry,
+      name: meta.name || meta.id || entry,
+      scope: meta.scope || '',
+      tags: Array.isArray(meta.tags) ? meta.tags : [],
+      when_to_use: meta.when_to_use || '',
+      not_for: meta.not_for || '',
+      dir: entry,
+      source: meta.source || 'local',
+      available: true,
+    });
+  }
+  return out;
+}
+
+function createLocalPractice({ memDir, input, overwrite = false }) {
+  const { id, name, scope, tags, when_to_use, not_for, content } = input || {};
+  if (!id || typeof id !== 'string' || !ID_RE.test(id)) {
+    throw new Error('id inválido (slug [a-z][a-z0-9-]+[a-z0-9], 3–50 chars)');
+  }
+  if (!name || typeof name !== 'string') throw new Error('name obrigatório');
+  if (typeof content !== 'string' || !content.trim()) throw new Error('content obrigatório');
+  if (content.length > 200_000) throw new Error('content muito longo (máx 200KB)');
+
+  const dir = path.join(memDir, 'best-practices', id);
+  const practiceFile = path.join(dir, 'practice.md');
+  if (fs.existsSync(practiceFile) && !overwrite) {
+    throw new Error(`best-practice "${id}" já existe — use overwrite=true pra substituir`);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const normalized = content.endsWith('\n') ? content : content + '\n';
+  fs.writeFileSync(practiceFile, normalized);
+
+  const meta = {
+    id,
+    name: String(name).trim(),
+    scope: scope ? String(scope).trim() : '',
+    tags: Array.isArray(tags) ? tags.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim()) : [],
+    when_to_use: when_to_use ? String(when_to_use).trim() : '',
+    not_for: not_for ? String(not_for).trim() : '',
+    source: 'local',
+  };
+  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(meta, null, 2) + '\n');
+  return { id, path: practiceFile, meta };
+}
+
 module.exports = {
   BP_DIR,
   listPractices,
+  listLocalPractices,
   loadPracticeContent,
   applyPractices,
+  createLocalPractice,
 };

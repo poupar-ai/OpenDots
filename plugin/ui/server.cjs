@@ -1390,18 +1390,31 @@ async function handleSeedsApply(req, res) {
 // ── Best-practices ──────────────────────────────────────────────────────────
 
 function handleBestPracticesList(res) {
-  const available = bestPractices.listPractices();
-  const installedDir = path.join(memDir, 'best-practices');
-  const installed = fs.existsSync(installedDir)
-    ? fs.readdirSync(installedDir).filter((d) => {
-        const p = path.join(installedDir, d);
-        return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'practice.md'));
-      })
-    : [];
-  sendJson(res, 200, {
-    available: available.map(p => ({ ...p, installed: installed.includes(p.id) })),
-    installed,
-  });
+  const catalog = bestPractices.listPractices();
+  const local = bestPractices.listLocalPractices(memDir);
+  const installed = local.map(p => p.id);
+  const installedSet = new Set(installed);
+  const catalogIds = new Set(catalog.map(p => p.id));
+  const localOnly = local.filter(p => !catalogIds.has(p.id));
+  const merged = [
+    ...catalog.map(p => ({ ...p, installed: installedSet.has(p.id), source: 'catalog' })),
+    ...localOnly.map(p => ({ ...p, installed: true })),
+  ];
+  sendJson(res, 200, { available: merged, installed });
+}
+
+async function handleBestPracticeCreate(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  try {
+    const r = bestPractices.createLocalPractice({ memDir, input: body, overwrite: !!body?.overwrite });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
 }
 
 function handleBestPracticeGet(id, res) {
@@ -1879,6 +1892,9 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/best-practices/apply' && req.method === 'POST') {
     handleBestPracticeApply(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/best-practices/create' && req.method === 'POST') {
+    handleBestPracticeCreate(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
   }
   const bpMatch = url.pathname.match(/^\/api\/best-practices\/([a-z0-9-]+)$/);
   if (bpMatch && req.method === 'GET') {

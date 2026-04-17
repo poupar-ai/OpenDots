@@ -8,6 +8,7 @@ export interface DepartmentInput {
   decor: DecorKind;
   agents: string[];
   color: number;
+  floor: number;
 }
 
 interface Cloud {
@@ -23,6 +24,7 @@ interface Room {
   decor: DecorKind;
   agents: string[];
   color: number;
+  floor: number;
   container: Container;
   decorContainer: Container;
   x: number;
@@ -39,9 +41,9 @@ interface Room {
   };
 }
 
-// Cenário: prédio em corte lateral. Céu + skyline no topo, salas lado a lado,
-// chão/calçada embaixo. Cada sala é um departamento com decor próprio e
-// posições alocadas para os sprites dos agentes.
+// Cenário 2D multi-andar (plataforma). Céu + skyline no topo, andares empilhados,
+// calçada/chão embaixo. O mundo pode ser maior que o viewport — câmera/scroll
+// fica a cargo do chamador (agentsPixi). Cada andar distribui salas horizontalmente.
 export class Office extends Container {
   private sky: Graphics;
   private skyline: Graphics;
@@ -50,15 +52,22 @@ export class Office extends Container {
   private roof: Graphics;
   private building: Container;
   private groundG: Graphics;
+  private floorDividers: Graphics;
   private rooms = new Map<string, Room>();
   private positions = new Map<string, [number, number]>();
   private pendingDepts: DepartmentInput[] | null = null;
-  private w = 0;
-  private h = 0;
+  private viewportW = 0;
+  private viewportH = 0;
+  private worldW = 0;
+  private worldH = 0;
+  private numFloors = 0;
   private t = 0;
 
   private readonly SKY_H = 64;
+  private readonly ROOF_H = 8;
+  private readonly FLOOR_H = 196;
   private readonly FLOOR_OFFSET = 42;
+  private readonly MIN_ROOM_W = 220;
 
   constructor() {
     super();
@@ -67,33 +76,38 @@ export class Office extends Container {
     this.cloudLayer = new Container();
     this.roof = new Graphics();
     this.building = new Container();
+    this.floorDividers = new Graphics();
     this.groundG = new Graphics();
     this.addChild(this.sky);
     this.addChild(this.cloudLayer);
     this.addChild(this.skyline);
     this.addChild(this.roof);
     this.addChild(this.building);
+    this.addChild(this.floorDividers);
     this.addChild(this.groundG);
   }
 
   resize(w: number, h: number) {
-    this.w = w;
-    this.h = h;
-    this.drawSky();
-    this.drawSkyline();
-    this.drawRoof();
-    this.seedClouds();
-    this.layoutRooms();
-    this.drawGround();
+    this.viewportW = w;
+    this.viewportH = h;
     if (this.pendingDepts) {
       const d = this.pendingDepts;
       this.pendingDepts = null;
       this.setDepartments(d);
+      return;
     }
+    this.relayoutAll();
+  }
+
+  getWorldSize(): { width: number; height: number } {
+    return {
+      width: this.worldW || this.viewportW,
+      height: this.worldH || this.viewportH,
+    };
   }
 
   setDepartments(depts: DepartmentInput[]) {
-    if (this.w === 0 || this.h === 0) {
+    if (this.viewportW === 0 || this.viewportH === 0) {
       this.pendingDepts = depts;
       return;
     }
@@ -109,6 +123,7 @@ export class Office extends Container {
         decor: d.decor,
         agents: [...d.agents],
         color: d.color,
+        floor: d.floor,
         container,
         decorContainer,
         x: 0,
@@ -118,14 +133,14 @@ export class Office extends Container {
         animState: {},
       });
     }
-    this.layoutRooms();
+    this.relayoutAll();
   }
 
   positionFor(name: string): [number, number] | null {
     return this.positions.get(name) || null;
   }
 
-  // limites físicos da sala à qual o agente pertence (usados pela física do canvas)
+  // limites físicos da sala à qual o agente pertence (world coords)
   getRoomBounds(name: string): { x1: number; x2: number; ceilingY: number; floorY: number } | null {
     for (const r of this.rooms.values()) {
       if (r.agents.includes(name)) {
@@ -144,7 +159,7 @@ export class Office extends Container {
     this.t += t.deltaTime;
     for (const c of this.clouds) {
       c.baseX -= c.drift * t.deltaTime;
-      if (c.baseX < -60) c.baseX = this.w + 60;
+      if (c.baseX < -60) c.baseX = this.worldW + 60;
       c.g.x = c.baseX;
     }
     for (const r of this.rooms.values()) {
@@ -180,14 +195,50 @@ export class Office extends Container {
     }
   }
 
-  // ── cenário fixo ───────────────────────────────────────────────
+  // ── layout geral ─────────────────────────────────────────────
+  private relayoutAll() {
+    this.computeWorldSize();
+    this.drawSky();
+    this.drawSkyline();
+    this.drawRoof();
+    this.seedClouds();
+    this.layoutRooms();
+    this.drawFloorDividers();
+    this.drawGround();
+  }
+
+  private computeWorldSize() {
+    const byFloor = new Map<number, Room[]>();
+    for (const r of this.rooms.values()) {
+      if (!byFloor.has(r.floor)) byFloor.set(r.floor, []);
+      byFloor.get(r.floor)!.push(r);
+    }
+    this.numFloors = byFloor.size;
+    let maxFloorMin = 0;
+    for (const rooms of byFloor.values()) {
+      maxFloorMin = Math.max(maxFloorMin, rooms.length * this.MIN_ROOM_W);
+    }
+    this.worldW = Math.max(this.viewportW, maxFloorMin || this.viewportW);
+    if (this.numFloors === 0) {
+      this.worldH = this.viewportH;
+    } else {
+      this.worldH = Math.max(
+        this.viewportH,
+        this.SKY_H + this.ROOF_H + this.numFloors * this.FLOOR_H + this.FLOOR_OFFSET,
+      );
+    }
+  }
+
+  // ── cenário ──────────────────────────────────────────────────
   private drawSky() {
     this.sky.clear();
     const bands = 16;
     for (let i = 0; i < bands; i++) {
       const t = i / (bands - 1);
       const c = lerpColor(0xbfdbfe, 0xfde4ff, t);
-      this.sky.rect(0, (this.SKY_H * i) / bands, this.w, this.SKY_H / bands + 1).fill({ color: c });
+      this.sky
+        .rect(0, (this.SKY_H * i) / bands, this.worldW, this.SKY_H / bands + 1)
+        .fill({ color: c });
     }
   }
 
@@ -200,7 +251,7 @@ export class Office extends Container {
       seed = (seed * 9301 + 49297) % 233280;
       return seed / 233280;
     };
-    while (x < this.w) {
+    while (x < this.worldW) {
       const bw = 20 + rnd() * 30;
       const bh = 14 + rnd() * 22;
       this.skyline.rect(x, baseY - bh, bw, bh).fill({ color: 0x64748b, alpha: 0.55 });
@@ -216,19 +267,19 @@ export class Office extends Container {
 
   private drawRoof() {
     this.roof.clear();
-    this.roof.rect(0, this.SKY_H, this.w, 6).fill({ color: 0x1e293b });
-    this.roof.rect(0, this.SKY_H + 6, this.w, 2).fill({ color: 0x334155 });
+    this.roof.rect(0, this.SKY_H, this.worldW, 6).fill({ color: 0x1e293b });
+    this.roof.rect(0, this.SKY_H + 6, this.worldW, 2).fill({ color: 0x334155 });
   }
 
   private seedClouds() {
     this.cloudLayer.removeChildren();
     this.clouds = [];
-    const n = Math.max(2, Math.floor(this.w / 260));
+    const n = Math.max(2, Math.floor(this.worldW / 260));
     for (let i = 0; i < n; i++) {
       const g = new Graphics();
       const r = 8 + Math.random() * 5;
       const y = 6 + Math.random() * (this.SKY_H - 20);
-      const baseX = Math.random() * this.w;
+      const baseX = Math.random() * this.worldW;
       g.circle(0, 0, r).fill({ color: 0xffffff, alpha: 0.85 });
       g.circle(r * 0.8, -r * 0.1, r * 0.7).fill({ color: 0xffffff, alpha: 0.85 });
       g.circle(-r * 0.8, -r * 0.05, r * 0.65).fill({ color: 0xffffff, alpha: 0.85 });
@@ -239,46 +290,71 @@ export class Office extends Container {
     }
   }
 
-  private drawGround() {
-    const floorY = this.h - this.FLOOR_OFFSET;
-    this.groundG.clear();
-    this.groundG.rect(0, floorY + 6, this.w, this.FLOOR_OFFSET).fill({ color: 0x475569 });
-    this.groundG.rect(0, floorY + 6, this.w, 2).fill({ color: 0x334155 });
-    for (let x = 0; x < this.w; x += 22) {
-      this.groundG.rect(x, floorY + 10, 1, this.FLOOR_OFFSET - 6).fill({ color: 0x334155, alpha: 0.4 });
+  private drawFloorDividers() {
+    this.floorDividers.clear();
+    if (this.numFloors <= 1) return;
+    for (let i = 1; i < this.numFloors; i++) {
+      const y = this.SKY_H + this.ROOF_H + i * this.FLOOR_H - 6;
+      this.floorDividers.rect(0, y, this.worldW, 6).fill({ color: 0x1f2937 });
+      this.floorDividers.rect(0, y + 6, this.worldW, 2).fill({ color: 0x0f172a, alpha: 0.7 });
     }
   }
 
-  // ── salas ──────────────────────────────────────────────────────
+  private drawGround() {
+    const floorY = this.worldH - this.FLOOR_OFFSET;
+    this.groundG.clear();
+    this.groundG.rect(0, floorY + 6, this.worldW, this.FLOOR_OFFSET).fill({ color: 0x475569 });
+    this.groundG.rect(0, floorY + 6, this.worldW, 2).fill({ color: 0x334155 });
+    for (let x = 0; x < this.worldW; x += 22) {
+      this.groundG
+        .rect(x, floorY + 10, 1, this.FLOOR_OFFSET - 6)
+        .fill({ color: 0x334155, alpha: 0.4 });
+    }
+  }
+
+  // ── salas ────────────────────────────────────────────────────
   private layoutRooms() {
     this.positions.clear();
-    if (this.rooms.size === 0 || this.w === 0 || this.h === 0) return;
+    if (this.rooms.size === 0 || this.worldW === 0 || this.worldH === 0) return;
 
-    const ceilY = this.SKY_H + 8;
-    const floorY = this.h - this.FLOOR_OFFSET;
-
-    const list = [...this.rooms.values()];
-    const totalWeight = list.reduce((s, r) => s + Math.max(1.3, r.agents.length), 0);
-    const available = this.w;
-
-    let x = 0;
-    const minRoomW = Math.min(150, Math.floor(this.w / list.length));
-    for (const r of list) {
-      const weight = Math.max(1.3, r.agents.length) / totalWeight;
-      const width = Math.max(minRoomW, Math.floor(available * weight));
-      r.x = x;
-      r.width = width;
-      r.ceilingY = ceilY;
-      r.floorY = floorY;
-      this.drawRoom(r, r.id === list[list.length - 1].id, r.id === list[0].id);
-      x += width;
+    const byFloor = new Map<number, Room[]>();
+    for (const r of this.rooms.values()) {
+      if (!byFloor.has(r.floor)) byFloor.set(r.floor, []);
+      byFloor.get(r.floor)!.push(r);
     }
 
-    // ajusta última sala pra preencher resto exato da tela
-    const last = list[list.length - 1];
-    if (last && last.x + last.width < this.w) {
-      last.width = this.w - last.x;
-      this.drawRoom(last, true, list.length === 1);
+    const floorIdxs = [...byFloor.keys()].sort((a, b) => b - a); // decrescente: maior andar no topo
+    const maxFloor = floorIdxs[0] ?? 0;
+
+    for (const fIdx of floorIdxs) {
+      const list = byFloor.get(fIdx)!;
+      list.sort((a, b) => a.id.localeCompare(b.id));
+
+      const slotIdxFromTop = maxFloor - fIdx; // 0 = topo (logo abaixo do telhado)
+      const ceilY = this.SKY_H + this.ROOF_H + slotIdxFromTop * this.FLOOR_H;
+      const floorY = ceilY + this.FLOOR_H - 6;
+
+      const totalWeight = list.reduce((s, r) => s + Math.max(1.3, r.agents.length), 0);
+      let x = 0;
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        const weight = Math.max(1.3, r.agents.length) / totalWeight;
+        const width = Math.max(this.MIN_ROOM_W, Math.floor(this.worldW * weight));
+        r.x = x;
+        r.width = width;
+        r.ceilingY = ceilY;
+        r.floorY = floorY;
+        const isFirst = i === 0;
+        const isLast = i === list.length - 1;
+        this.drawRoom(r, isLast, isFirst);
+        x += width;
+      }
+      // ajusta última sala pra fechar até worldW
+      const last = list[list.length - 1];
+      if (last && last.x + last.width < this.worldW) {
+        last.width = this.worldW - last.x;
+        this.drawRoom(last, true, list.length === 1);
+      }
     }
   }
 
@@ -294,28 +370,17 @@ export class Office extends Container {
 
     const bg = new Graphics();
     bg.rect(r.x, r.ceilingY, r.width, r.floorY - r.ceilingY).fill({ color: wallColor });
-    // rodapé mais escuro
     bg.rect(r.x, r.floorY - 14, r.width, 14).fill({ color: wallShade });
-    // linha de rodapé
     bg.rect(r.x, r.floorY - 14, r.width, 1).fill({ color: 0x334155, alpha: 0.45 });
-    // teto
     bg.rect(r.x, r.ceilingY, r.width, 4).fill({ color: ceilColor });
-    // chão
     bg.rect(r.x, r.floorY, r.width, 6).fill({ color: floorColor });
-    // paredes laterais
     if (isFirst) {
       bg.rect(r.x, r.ceilingY, 2, r.floorY - r.ceilingY + 6).fill({ color: 0x334155, alpha: 0.7 });
     }
-    if (!isLast) {
-      bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + 6)
-        .fill({ color: 0x334155, alpha: 0.7 });
-    } else {
-      bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + 6)
-        .fill({ color: 0x334155, alpha: 0.7 });
-    }
+    bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + 6)
+      .fill({ color: 0x334155, alpha: isLast ? 0.7 : 0.7 });
     r.container.addChild(bg);
 
-    // placa com nome do departamento
     const label = new Text({
       text: r.label,
       style: new TextStyle({
@@ -336,7 +401,6 @@ export class Office extends Container {
     r.container.addChild(signBg);
     r.container.addChild(label);
 
-    // decor da sala
     this.drawDecor(r);
     r.container.addChild(r.decorContainer);
 
@@ -359,24 +423,19 @@ export class Office extends Container {
         r.animState.cursors = [];
         for (const [sx] of slots) {
           const g = new Graphics();
-          // monitor atrás do agente
           g.rect(sx - 14, r.floorY - 58, 28, 30).fill({ color: 0x0f172a });
           g.rect(sx - 12, r.floorY - 56, 24, 26).fill({ color: 0x0ea5e9, alpha: 0.55 });
           for (let i = 0; i < 4; i++) {
             const lw = 4 + Math.random() * 16;
             g.rect(sx - 10, r.floorY - 54 + i * 4, lw, 1.4).fill({ color: 0x67e8f9 });
           }
-          // base/pé do monitor
           g.rect(sx - 3, r.floorY - 30, 6, 6).fill({ color: 0x334155 });
           g.rect(sx - 10, r.floorY - 25, 20, 2).fill({ color: 0x334155 });
-          // mesa
           g.rect(sx - 22, r.floorY - 22, 44, 4).fill({ color: 0x57534e });
           g.rect(sx - 20, r.floorY - 18, 3, 14).fill({ color: 0x44403c });
           g.rect(sx + 17, r.floorY - 18, 3, 14).fill({ color: 0x44403c });
-          // teclado
           g.rect(sx - 14, r.floorY - 24, 28, 2).fill({ color: 0x0f172a });
           d.addChild(g);
-          // cursor piscando
           const cursor = new Graphics();
           cursor.rect(0, 0, 2, 4).fill({ color: 0xfef08a });
           cursor.x = sx + 2;
@@ -389,7 +448,6 @@ export class Office extends Container {
       case 'command': {
         const cx = r.x + r.width / 2;
         const cy = inner.y1 + 28;
-        // radar
         const radar = new Graphics();
         radar.circle(cx, cy, 26).stroke({ width: 1.5, color: 0x475569, alpha: 0.75 });
         radar.circle(cx, cy, 18).stroke({ width: 1, color: 0x475569, alpha: 0.6 });
@@ -398,7 +456,6 @@ export class Office extends Container {
         radar.moveTo(cx, cy - 26).lineTo(cx, cy + 26).stroke({ width: 0.8, color: 0x475569, alpha: 0.4 });
         radar.circle(cx, cy, 2).fill({ color: 0x22c55e });
         d.addChild(radar);
-        // ponteiro
         const sweep = new Graphics();
         sweep
           .moveTo(0, 0)
@@ -410,12 +467,12 @@ export class Office extends Container {
         sweep.y = cy;
         d.addChild(sweep);
         r.animState.sweep = sweep;
-        // pins vermelhos
         const dots = new Graphics();
         for (let i = 0; i < 5; i++) {
           const a = Math.random() * Math.PI * 2;
           const rr = 5 + Math.random() * 20;
-          dots.circle(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 1.2)
+          dots
+            .circle(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 1.2)
             .fill({ color: 0xef4444, alpha: 0.8 });
         }
         d.addChild(dots);
@@ -424,19 +481,17 @@ export class Office extends Container {
       case 'desks': {
         const cx = r.x + r.width / 2;
         const g = new Graphics();
-        // quadro na parede
-        g.rect(r.x + 12, inner.y1 + 2, 34, 24).fill({ color: 0xf3f4f6 })
+        g.rect(r.x + 12, inner.y1 + 2, 34, 24)
+          .fill({ color: 0xf3f4f6 })
           .stroke({ width: 1, color: 0x57534e });
         g.moveTo(r.x + 16, inner.y1 + 20)
           .lineTo(r.x + 24, inner.y1 + 10)
           .lineTo(r.x + 32, inner.y1 + 18)
           .lineTo(r.x + 40, inner.y1 + 12)
           .stroke({ width: 1.2, color: 0x2563eb });
-        // mesa grande
         g.rect(cx - 34, r.floorY - 22, 68, 4).fill({ color: 0x78716c });
         g.rect(cx - 32, r.floorY - 18, 3, 14).fill({ color: 0x57534e });
         g.rect(cx + 29, r.floorY - 18, 3, 14).fill({ color: 0x57534e });
-        // luminária
         g.rect(cx - 26, r.floorY - 44, 2, 22).fill({ color: 0x0f172a });
         g.moveTo(cx - 28, r.floorY - 44)
           .lineTo(cx - 16, r.floorY - 44)
@@ -444,12 +499,11 @@ export class Office extends Container {
           .lineTo(cx - 26, r.floorY - 36)
           .closePath()
           .fill({ color: 0xfef3c7 });
-        // livros
         g.rect(cx + 10, r.floorY - 36, 4, 14).fill({ color: 0xef4444 });
         g.rect(cx + 15, r.floorY - 36, 4, 14).fill({ color: 0x2563eb });
         g.rect(cx + 20, r.floorY - 34, 4, 12).fill({ color: 0x16a34a });
-        // xícara
-        g.rect(cx - 6, r.floorY - 30, 6, 8).fill({ color: 0xffffff })
+        g.rect(cx - 6, r.floorY - 30, 6, 8)
+          .fill({ color: 0xffffff })
           .stroke({ width: 1, color: 0x475569 });
         d.addChild(g);
         break;
@@ -467,13 +521,11 @@ export class Office extends Container {
         for (let row = 0; row < 7; row++) {
           const yy = rackY + 5 + row * 9;
           g.rect(rackX + 4, yy, rackW - 8, 6).fill({ color: 0x334155 });
-          // ventilação
           for (let vx = 0; vx < rackW - 14; vx += 3) {
             g.rect(rackX + 6 + vx, yy + 2, 1, 2).fill({ color: 0x0f172a });
           }
         }
         d.addChild(g);
-        // LEDs piscando (animados)
         r.animState.leds = [];
         for (let row = 0; row < 7; row++) {
           const led = new Graphics();
@@ -483,12 +535,13 @@ export class Office extends Container {
           d.addChild(led);
           r.animState.leds.push({ g: led, phase: Math.random() * Math.PI * 2 });
         }
-        // cabos
         const cables = new Graphics();
-        cables.moveTo(rackX, rackY + rackH - 4)
+        cables
+          .moveTo(rackX, rackY + rackH - 4)
           .quadraticCurveTo(rackX - 10, r.floorY - 10, rackX - 4, r.floorY - 2)
           .stroke({ width: 2, color: 0x0f172a });
-        cables.moveTo(rackX + rackW, rackY + rackH - 8)
+        cables
+          .moveTo(rackX + rackW, rackY + rackH - 8)
           .quadraticCurveTo(rackX + rackW + 12, r.floorY - 12, rackX + rackW + 6, r.floorY - 2)
           .stroke({ width: 2, color: 0x0f172a });
         d.addChild(cables);
@@ -507,13 +560,15 @@ export class Office extends Container {
         d.addChild(gearB);
         r.animState.gearA = gearA;
         r.animState.gearB = gearB;
-        // painel com manômetro
         const panel = new Graphics();
-        panel.roundRect(r.x + r.width - 42, r.floorY - 30, 34, 20, 3)
+        panel
+          .roundRect(r.x + r.width - 42, r.floorY - 30, 34, 20, 3)
           .fill({ color: 0x0f172a });
-        panel.circle(r.x + r.width - 30, r.floorY - 20, 6)
+        panel
+          .circle(r.x + r.width - 30, r.floorY - 20, 6)
           .stroke({ width: 1, color: 0xfbbf24 });
-        panel.moveTo(r.x + r.width - 30, r.floorY - 20)
+        panel
+          .moveTo(r.x + r.width - 30, r.floorY - 20)
           .lineTo(r.x + r.width - 26, r.floorY - 24)
           .stroke({ width: 1.2, color: 0xef4444 });
         d.addChild(panel);
@@ -535,14 +590,13 @@ export class Office extends Container {
             bg.roundRect(xx, yy, cellW - 4, cellH, 2)
               .fill({ color: 0x0f172a })
               .stroke({ width: 1, color: 0x334155 });
-            // grid
-            bg.moveTo(xx + 2, yy + cellH / 2).lineTo(xx + cellW - 6, yy + cellH / 2)
+            bg.moveTo(xx + 2, yy + cellH / 2)
+              .lineTo(xx + cellW - 6, yy + cellH / 2)
               .stroke({ width: 0.4, color: 0x475569, alpha: 0.6 });
             d.addChild(bg);
             const graph = new Graphics();
             d.addChild(graph);
-            r.animState.graphs = r.animState.graphs || [];
-            r.animState.graphs.push({
+            r.animState.graphs!.push({
               g: graph,
               x: xx + 3,
               y: yy + cellH / 2,
@@ -567,8 +621,7 @@ export class Office extends Container {
   }
 }
 
-// distribui N slots dentro da sala — em linha, com wrap para outra fileira se
-// não couber.
+// distribui N slots dentro da sala — em linha, com wrap para outra fileira se não couber.
 function computeSlots(n: number, width: number, startX: number, floorY: number): [number, number][] {
   const pad = 18;
   const slotW = 56;
@@ -581,7 +634,6 @@ function computeSlots(n: number, width: number, startX: number, floorY: number):
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = startX + pad + cellW * (col + 0.5);
-    // fileira mais próxima do chão primeiro; fileiras adicionais empilham pra cima
     const y = floorY - 30 - (rows - 1 - row) * 56;
     out.push([x, y]);
   }

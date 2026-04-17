@@ -55,21 +55,33 @@ interface FlowDot {
   kind: 'out' | 'in';
 }
 
+interface PanState {
+  startX: number;   // viewport
+  startY: number;
+  startCamX: number;
+  startCamY: number;
+  pointerId: number;
+  moved: boolean;
+}
+
 export interface AgentCanvasOptions {
   onSelect?: (name: string) => void;
   selected?: string | null;
 }
 
 const MARGIN_X = 12;
-const MARGIN_TOP = 74;  // abaixo do teto da sala
-const MARGIN_BOTTOM = 50;
+const MARGIN_TOP = 80;    // abaixo do céu + telhado do mundo
+const MARGIN_BOTTOM = 52; // acima do chão/calçada
 
-// departamentos canônicos — ordem horizontal das salas no prédio
+// departamentos canônicos — cada um fica num andar do prédio (2D platform)
+// andar 2 (topo): núcleo de comando; andar 1: devs + equipe; andar 0 (térreo):
+// integrações, operações e monitoramento.
 interface DeptSpec {
   id: string;
   label: string;
   decor: DecorKind;
   color: number;
+  floor: number;
   match: (name: string, cfg: AgentCfg) => boolean;
 }
 
@@ -79,6 +91,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Comando',
     decor: 'command',
     color: 0x6366f1,
+    floor: 2,
     match: (_n, c) => (c.type || 'specialist') === 'core',
   },
   {
@@ -86,6 +99,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Devs',
     decor: 'computers',
     color: 0x16a34a,
+    floor: 1,
     match: (_n, c) => c.profession === 'devs',
   },
   {
@@ -93,6 +107,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Equipe',
     decor: 'desks',
     color: 0x0ea5e9,
+    floor: 1,
     match: (_n, c) => (c.type || 'specialist') === 'specialist' && !c.profession,
   },
   {
@@ -100,6 +115,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Integrações',
     decor: 'rack',
     color: 0xa855f7,
+    floor: 0,
     match: (_n, c) => c.type === 'integrator',
   },
   {
@@ -107,6 +123,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Operações',
     decor: 'gears',
     color: 0xf97316,
+    floor: 0,
     match: (_n, c) => c.type === 'motor',
   },
   {
@@ -114,6 +131,7 @@ const DEPARTMENTS: DeptSpec[] = [
     label: 'Monitoramento',
     decor: 'monitors',
     color: 0xef4444,
+    floor: 0,
     match: (_n, c) => c.type === 'firefighter',
   },
 ];
@@ -125,6 +143,7 @@ function edges(cfg: AgentCfg): string[] {
 export class AgentCanvas {
   private app: Application;
   private nodes = new Map<string, AgentNode>();
+  private worldContainer!: Container;
   private baseLinks!: Graphics;
   private office!: Office;
   private flowLinks!: Graphics;
@@ -136,6 +155,8 @@ export class AgentCanvas {
   private ticker: ((t: Ticker) => void) | null = null;
   private width = 600;
   private height = 420;
+  private cameraX = 0;
+  private cameraY = 0;
   private resizeObs: ResizeObserver | null = null;
   private workingName: string | null = null;
   private mounted = false;
@@ -145,7 +166,11 @@ export class AgentCanvas {
   private flowDots: FlowDot[] = [];
   private flowPulse = 0;
   private drag: DragState | null = null;
+  private pan: PanState | null = null;
+  private wheelHandler: ((e: WheelEvent) => void) | null = null;
+  private rootEl: HTMLElement | null = null;
   private readonly DRAG_THRESHOLD = 4;
+  private readonly PAN_THRESHOLD = 3;
 
   constructor(opts: AgentCanvasOptions = {}) {
     this.opts = opts;
@@ -167,9 +192,11 @@ export class AgentCanvas {
       return;
     }
     el.appendChild(this.app.canvas);
+    this.rootEl = el;
     this.width = el.clientWidth;
     this.height = el.clientHeight;
 
+    this.worldContainer = new Container();
     this.office = new Office();
     this.baseLinks = new Graphics();
     this.flowLinks = new Graphics();
@@ -177,21 +204,30 @@ export class AgentCanvas {
     this.flowLabelsLayer = new Container();
     this.layer = new Container();
 
-    this.app.stage.addChild(this.office);
-    this.app.stage.addChild(this.baseLinks);
-    this.app.stage.addChild(this.flowLinks);
-    this.app.stage.addChild(this.layer);
-    this.app.stage.addChild(this.flowDotsLayer);
-    this.app.stage.addChild(this.flowLabelsLayer);
+    // tudo que é desenhado em coordenadas de mundo fica dentro do worldContainer;
+    // a câmera é só uma translação negativa (worldContainer.x = -cameraX).
+    this.worldContainer.addChild(this.office);
+    this.worldContainer.addChild(this.baseLinks);
+    this.worldContainer.addChild(this.flowLinks);
+    this.worldContainer.addChild(this.layer);
+    this.worldContainer.addChild(this.flowDotsLayer);
+    this.worldContainer.addChild(this.flowLabelsLayer);
+    this.app.stage.addChild(this.worldContainer);
 
     this.office.resize(this.width, this.height);
+    this.clampAndApplyCamera();
 
-    // stage recebe os eventos de pointermove/up para suportar drag fora do sprite
+    // stage recebe os eventos de pointermove/up/down para suportar drag/pan fora do sprite
     this.app.stage.eventMode = 'static';
     this.app.stage.hitArea = this.app.screen;
+    this.app.stage.on('pointerdown', (e) => this.onStagePointerDown(e.global.x, e.global.y, e.pointerId));
     this.app.stage.on('pointermove', (e) => this.onPointerMove(e.global.x, e.global.y));
     this.app.stage.on('pointerup', (e) => this.onPointerUp(e.global.x, e.global.y));
     this.app.stage.on('pointerupoutside', (e) => this.onPointerUp(e.global.x, e.global.y));
+
+    // wheel: scroll horizontal + vertical pelo mundo
+    this.wheelHandler = (e: WheelEvent) => this.onWheel(e);
+    this.app.canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
 
     this.ticker = (t: Ticker) => this.tick(t);
     this.app.ticker.add(this.ticker);
@@ -201,6 +237,7 @@ export class AgentCanvas {
       this.width = el.clientWidth;
       this.height = el.clientHeight;
       this.office.resize(this.width, this.height);
+      this.clampAndApplyCamera();
       this.relayout();
     });
     this.resizeObs.observe(el);
@@ -221,6 +258,11 @@ export class AgentCanvas {
     this.destroyed = true;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
+    if (this.wheelHandler && this.app?.canvas) {
+      try { this.app.canvas.removeEventListener('wheel', this.wheelHandler); } catch {}
+    }
+    this.wheelHandler = null;
+    this.rootEl = null;
     if (!this.mounted) return;
     try { if (this.ticker) this.app.ticker.remove(this.ticker); } catch {}
     try { this.app.destroy(true, { children: true }); } catch {}
@@ -359,10 +401,12 @@ export class AgentCanvas {
         label: spec.label,
         decor: spec.decor,
         color: spec.color,
+        floor: spec.floor,
         agents: members,
       });
     }
     this.office.setDepartments(depts);
+    this.clampAndApplyCamera();
 
     const out: Record<string, [number, number]> = {};
     for (const n of names) {
@@ -438,10 +482,12 @@ export class AgentCanvas {
   private startDrag(name: string, gx: number, gy: number, pointerId: number) {
     const node = this.nodes.get(name);
     if (!node) return;
+    const wx = gx + this.cameraX;
+    const wy = gy + this.cameraY;
     this.drag = {
       name,
-      offX: node.x - gx,
-      offY: node.y - gy,
+      offX: node.x - wx,
+      offY: node.y - wy,
       moved: false,
       pointerId,
       lastX: node.x,
@@ -457,18 +503,44 @@ export class AgentCanvas {
     node.sprite.cursor = 'grabbing';
   }
 
+  private onStagePointerDown(gx: number, gy: number, pointerId: number) {
+    // se já estamos arrastando um sprite (sprite fez stopPropagation), ignora
+    if (this.drag) return;
+    this.pan = {
+      startX: gx,
+      startY: gy,
+      startCamX: this.cameraX,
+      startCamY: this.cameraY,
+      pointerId,
+      moved: false,
+    };
+  }
+
   private onPointerMove(gx: number, gy: number) {
+    if (this.drag) {
+      this.onDragMove(gx, gy);
+      return;
+    }
+    if (this.pan) {
+      this.onPanMove(gx, gy);
+      return;
+    }
+  }
+
+  private onDragMove(gx: number, gy: number) {
     if (!this.drag) return;
     const node = this.nodes.get(this.drag.name);
     if (!node) return;
-    const nx = clamp(gx + this.drag.offX, MARGIN_X, this.width - MARGIN_X);
-    const ny = clamp(gy + this.drag.offY, MARGIN_TOP, this.height - MARGIN_BOTTOM);
+    const { width: worldW, height: worldH } = this.office.getWorldSize();
+    const wx = gx + this.cameraX;
+    const wy = gy + this.cameraY;
+    const nx = clamp(wx + this.drag.offX, MARGIN_X, worldW - MARGIN_X);
+    const ny = clamp(wy + this.drag.offY, MARGIN_TOP, worldH - MARGIN_BOTTOM);
     if (!this.drag.moved) {
       const dx = nx - node.x;
       const dy = ny - node.y;
       if (Math.hypot(dx, dy) >= this.DRAG_THRESHOLD) this.drag.moved = true;
     }
-    // rastreia velocidade do ponteiro (EMA) pra uso no release
     const now = performance.now();
     const dt = Math.max(1, now - this.drag.lastT);
     const frames = dt / 16.666;
@@ -487,24 +559,64 @@ export class AgentCanvas {
     node.sprite.position.set(nx, ny);
   }
 
+  private onPanMove(gx: number, gy: number) {
+    if (!this.pan) return;
+    const dx = gx - this.pan.startX;
+    const dy = gy - this.pan.startY;
+    if (!this.pan.moved && Math.hypot(dx, dy) >= this.PAN_THRESHOLD) this.pan.moved = true;
+    // arrastar ponteiro p/ direita → puxa mundo p/ direita → câmera anda p/ esquerda
+    this.cameraX = this.pan.startCamX - dx;
+    this.cameraY = this.pan.startCamY - dy;
+    this.clampAndApplyCamera();
+  }
+
   private onPointerUp(_gx: number, _gy: number) {
-    if (!this.drag) return;
-    const { name, moved, vx, vy } = this.drag;
-    this.drag = null;
-    const node = this.nodes.get(name);
-    if (node) {
-      node.dragging = false;
-      node.sprite.cursor = 'pointer';
+    if (this.drag) {
+      const { name, moved, vx, vy } = this.drag;
+      this.drag = null;
+      const node = this.nodes.get(name);
+      if (node) {
+        node.dragging = false;
+        node.sprite.cursor = 'pointer';
+      }
+      if (!moved && node) {
+        node.sprite.greet();
+        this.opts.onSelect?.(name);
+      } else if (moved && node) {
+        node.pinned = true;
+        node.vx = clamp(vx, -THROW_CAP, THROW_CAP);
+        node.vy = clamp(vy, -THROW_CAP, THROW_CAP);
+      }
+      return;
     }
-    if (!moved && node) {
-      node.sprite.greet();
-      this.opts.onSelect?.(name);
-    } else if (moved && node) {
-      node.pinned = true;
-      // transfere velocidade do arremesso (com cap pra não voar pra fora)
-      node.vx = clamp(vx, -THROW_CAP, THROW_CAP);
-      node.vy = clamp(vy, -THROW_CAP, THROW_CAP);
+    if (this.pan) {
+      this.pan = null;
     }
+  }
+
+  private onWheel(e: WheelEvent) {
+    const { width: worldW, height: worldH } = this.office.getWorldSize();
+    const maxX = Math.max(0, worldW - this.width);
+    const maxY = Math.max(0, worldH - this.height);
+    if (maxX === 0 && maxY === 0) return;
+    e.preventDefault();
+    // shift inverte o eixo — mouse sem roda horizontal ainda consegue pan lateral
+    const dx = e.shiftKey ? e.deltaY : e.deltaX;
+    const dy = e.shiftKey ? 0 : e.deltaY;
+    this.cameraX += dx;
+    this.cameraY += dy;
+    this.clampAndApplyCamera();
+  }
+
+  private clampAndApplyCamera() {
+    if (!this.office) return;
+    const { width: worldW, height: worldH } = this.office.getWorldSize();
+    const maxX = Math.max(0, worldW - this.width);
+    const maxY = Math.max(0, worldH - this.height);
+    this.cameraX = clamp(this.cameraX, 0, maxX);
+    this.cameraY = clamp(this.cameraY, 0, maxY);
+    this.worldContainer.x = -this.cameraX;
+    this.worldContainer.y = -this.cameraY;
   }
 
   private tick(t: Ticker) {
@@ -552,10 +664,11 @@ export class AgentCanvas {
       node.y += node.vy * dt;
 
       const bounds = node.pinned ? null : this.office.getRoomBounds(node.name);
+      const world = this.office.getWorldSize();
       const minX = bounds ? bounds.x1 : MARGIN_X;
-      const maxX = bounds ? bounds.x2 : this.width - MARGIN_X;
+      const maxX = bounds ? bounds.x2 : world.width - MARGIN_X;
       const minY = bounds ? bounds.ceilingY + 40 : MARGIN_TOP;
-      const maxY = bounds ? bounds.floorY - 30 : this.height - MARGIN_BOTTOM;
+      const maxY = bounds ? bounds.floorY - 30 : world.height - MARGIN_BOTTOM;
       if (node.x < minX) { node.x = minX; node.vx = Math.abs(node.vx) * WALL_BOUNCE; }
       if (node.x > maxX) { node.x = maxX; node.vx = -Math.abs(node.vx) * WALL_BOUNCE; }
       if (node.y < minY) { node.y = minY; node.vy = Math.abs(node.vy) * WALL_BOUNCE; }

@@ -41,7 +41,7 @@ export interface HumanCreateInput {
 }
 
 export const HUMAN_LOCATIONS: { id: HumanLocation; label: string }[] = [
-  { id: 'core', label: 'Comando' },
+  { id: 'core', label: 'Controle' },
   { id: 'devs', label: 'Devs' },
   { id: 'specialists', label: 'Equipe' },
   { id: 'integrators', label: 'Integrações' },

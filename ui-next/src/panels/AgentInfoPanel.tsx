@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/CopyButton';
 import type { AgentCfg, AgentLogSummary, Manifest } from '@/lib/types';
 import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity } from 'lucide-react';
 
@@ -98,9 +99,10 @@ export function AgentInfoPanel({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-1.5">
             <span>{cfg.emoji || '🤖'}</span>
             {name}
+            <CopyButton value={name} label="copiar nome do agente" />
           </CardTitle>
           <Badge variant="outline">{type}</Badge>
         </div>

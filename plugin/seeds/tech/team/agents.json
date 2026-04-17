@@ -1,0 +1,277 @@
+{
+  "version": 1,
+  "manager": "manager",
+  "oracle": "oracle",
+  "rule": "Toda decisão relevante deve ser comunicada ao Manager antes de finalizar. O Engenheiro pode falar direto com qualquer agente, mas o Manager é notificado. Motores (ação no mundo real) sempre pedem confirmação ao Manager antes de executar.",
+  "agents": {
+    "manager": {
+      "emoji": "🎯",
+      "model": "opus",
+      "role": "Orquestrador central. Recebe ordens do Engenheiro, distribui tarefas, consolida resultados, comunica decisões.",
+      "context_file": "agents/manager.md",
+      "tools": [
+        "Task",
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "oracle",
+        "architect",
+        "reviewer",
+        "tester",
+        "designer",
+        "devs_techlead",
+        "internal_firefighter"
+      ],
+      "type": "core"
+    },
+    "oracle": {
+      "emoji": "🔮",
+      "model": "opus",
+      "role": "Conhece todo o projeto — fonte de verdade sobre código, arquitetura e histórico. Responde, não dá ordens.",
+      "context_file": "agents/oracle.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager"
+      ],
+      "type": "core"
+    },
+    "architect": {
+      "emoji": "🏛",
+      "model": "opus",
+      "role": "Decisões de arquitetura, trade-offs de design, ADRs.",
+      "context_file": "agents/architect.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager",
+        "oracle"
+      ],
+      "type": "specialist"
+    },
+    "reviewer": {
+      "emoji": "🔍",
+      "model": "sonnet",
+      "role": "Revisa PRs, aponta bugs, sugere melhorias. Segurança e clareza.",
+      "context_file": "agents/reviewer.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager",
+        "oracle"
+      ],
+      "type": "specialist"
+    },
+    "tester": {
+      "emoji": "🧪",
+      "model": "sonnet",
+      "role": "Escreve testes, roda suites, reporta regressões. Unit + integration.",
+      "context_file": "agents/tester.md",
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager",
+        "oracle"
+      ],
+      "type": "specialist"
+    },
+    "designer": {
+      "emoji": "🎨",
+      "model": "sonnet",
+      "role": "UI/UX, layout, acessibilidade, consistência visual.",
+      "context_file": "agents/designer.md",
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager"
+      ],
+      "type": "specialist"
+    },
+    "asaas": {
+      "type": "integrator",
+      "emoji": "💰",
+      "model": "sonnet",
+      "role": "Integrator para Asaas (gateway primário). Informa sobre API, webhooks e gotchas.",
+      "context_file": "agents/asaas.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager"
+      ]
+    },
+    "email_sender": {
+      "type": "motor",
+      "emoji": "✉️",
+      "model": "sonnet",
+      "role": "Motor de envio de emails transacionais via MCP resend.",
+      "context_file": "agents/email_sender.md",
+      "tools": [
+        "Read",
+        "Task"
+      ],
+      "mcps": [
+        "resend"
+      ],
+      "can_talk_to": [
+        "manager"
+      ]
+    },
+    "api_auth_firefighter": {
+      "type": "firefighter",
+      "emoji": "🚒",
+      "model": "sonnet",
+      "role": "Bombeiro do api_auth. Escuta Datadog, dispara triage ao cruzar threshold.",
+      "context_file": "agents/api_auth_firefighter.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager"
+      ],
+      "watch": {
+        "source": "datadog",
+        "query": "service:api_auth status:error",
+        "threshold": 5,
+        "window_minutes": 5,
+        "cooldown_seconds": 900,
+        "max_triages_per_hour": 4,
+        "env_vars": [
+          "DD_API_KEY",
+          "DD_APP_KEY",
+          "DD_SITE"
+        ]
+      }
+    },
+    "internal_firefighter": {
+      "type": "firefighter",
+      "emoji": "🧯",
+      "model": "sonnet",
+      "role": "Bombeiro organizacional. Roteia escaladas: subordinado bloqueado → manager; manager bloqueado → time de operações (motors). Não resolve, só escala.",
+      "context_file": "agents/internal_firefighter.md",
+      "tools": [
+        "Read",
+        "Write"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager",
+        "email_sender"
+      ]
+    },
+    "devs_techlead": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "🧭",
+      "model": "opus",
+      "role": "Líder técnico da squad. Full-stack. Decide contratos FE↔BE, coordena Seniors, reporta ao Manager.",
+      "context_file": "agents/devs_techlead.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Task"],
+      "mcps": [],
+      "can_talk_to": ["manager", "devs_senior_fe", "devs_senior_be", "architect", "oracle"]
+    },
+    "devs_senior_fe": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "🧑‍💻",
+      "model": "sonnet",
+      "role": "Dev Sênior Frontend. Tarefas complexas, review de Pleno FE, define padrões de componentes e estado.",
+      "context_file": "agents/devs_senior_fe.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_techlead", "devs_pleno_fe", "designer", "oracle"]
+    },
+    "devs_senior_be": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "🧑‍🔬",
+      "model": "sonnet",
+      "role": "Dev Sênior Backend. Tarefas complexas, review de Pleno BE, define padrões de módulos/migrations/workers.",
+      "context_file": "agents/devs_senior_be.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_techlead", "devs_pleno_be", "architect", "oracle"]
+    },
+    "devs_pleno_fe": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "👨‍💻",
+      "model": "sonnet",
+      "role": "Dev Pleno Frontend. Executa dentro de padrões estabelecidos, mentoria do Júnior FE.",
+      "context_file": "agents/devs_pleno_fe.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_senior_fe", "devs_junior_fe", "internal_firefighter"]
+    },
+    "devs_pleno_be": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "👩‍🔧",
+      "model": "sonnet",
+      "role": "Dev Pleno Backend. Executa CRUD/endpoints dentro de padrões, mentoria do Júnior BE.",
+      "context_file": "agents/devs_pleno_be.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_senior_be", "devs_junior_be", "internal_firefighter"]
+    },
+    "devs_junior_fe": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "🐣",
+      "model": "haiku",
+      "role": "Dev Júnior Frontend. Tarefas pequenas, com checklist, sob supervisão do Pleno FE.",
+      "context_file": "agents/devs_junior_fe.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_pleno_fe", "internal_firefighter"]
+    },
+    "devs_junior_be": {
+      "type": "specialist",
+      "profession": "devs",
+      "emoji": "🐥",
+      "model": "haiku",
+      "role": "Dev Júnior Backend. Tarefas pequenas, com checklist, sob supervisão do Pleno BE.",
+      "context_file": "agents/devs_junior_be.md",
+      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "mcps": [],
+      "can_talk_to": ["devs_pleno_be", "internal_firefighter"]
+    }
+  }
+}

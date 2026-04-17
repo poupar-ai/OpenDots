@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Send, X, Bot, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/CopyButton';
 import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
 import type { AgentCfg } from '@/lib/types';
 import { useChat } from '@/hooks/useChat';
@@ -127,8 +128,9 @@ export function ChatPanel({
           {agentCfg.emoji || '🤖'}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <h3 className="truncate text-sm font-semibold">{agent}</h3>
+            {agent && <CopyButton value={agent} label="copiar nome do agente" />}
             <Badge variant={TYPE_BADGE[type]}>{type}</Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">

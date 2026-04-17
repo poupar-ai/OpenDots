@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Send, X, Users, Ghost, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CopyButton } from '@/components/CopyButton';
 import { cn, fmtTime } from '@/lib/utils';
 import {
   listHumans,
@@ -169,6 +170,7 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
                   )}
                 />
                 <h3 className="text-sm font-semibold">{selectedHuman.name}</h3>
+                <CopyButton value={selectedHuman.name} label="copiar nome" />
                 {!selectedHuman.online && (
                   <Badge variant="secondary" className="gap-1">
                     <Ghost className="h-3 w-3" /> shadow responde

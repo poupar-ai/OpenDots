@@ -110,7 +110,7 @@ interface DeptSpec {
 const DEPARTMENTS: DeptSpec[] = [
   {
     id: 'core',
-    label: 'Comando',
+    label: 'Controle',
     decor: 'command',
     color: 0x6366f1,
     floor: 2,

@@ -77,6 +77,21 @@ if (!fs.existsSync(memDir)) {
   line += ` | ${sessions} sessões · ${observations} obs`;
   line += hasProjectMd ? ' | PROJECT.md ✓' : ' | PROJECT.md ✗ — rode /mem-setup';
 
+  // Dica para setup de agentes se ainda não houver (ou só os defaults core).
+  try {
+    const agentsPath = path.join(memDir, 'agents.json');
+    let agentCount = 0;
+    if (fs.existsSync(agentsPath)) {
+      const m = JSON.parse(fs.readFileSync(agentsPath, 'utf8'));
+      agentCount = Object.keys(m.agents || {}).length;
+    }
+    if (agentCount <= 2) {
+      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
+      const seedCli    = path.join(pluginRoot, 'scripts', 'seed.cjs');
+      line += ` | 👥 sem time — rode: node ${seedCli} setup`;
+    }
+  } catch {}
+
   if (stats && stats.last_injection_tokens) {
     const budget  = stats.last_injection_budget || 4000;
     const skipped = Array.isArray(stats.last_injection_skipped) ? stats.last_injection_skipped.length : 0;

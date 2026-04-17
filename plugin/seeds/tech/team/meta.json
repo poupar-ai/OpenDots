@@ -1,0 +1,4 @@
+{
+  "label": "Time de produto completo",
+  "description": "Core (manager, oracle) + especialistas (architect, reviewer, tester, designer) + devs em 4 senioridades × 2 stacks (be/fe) + firefighters + integradores (asaas, email_sender). Sirva como esqueleto — o contexto de cada agente deve ser adaptado ao projeto onde for instanciado."
+}

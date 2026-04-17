@@ -144,6 +144,130 @@ function getData() {
   };
 }
 
+// ── Humanos (perfis, sessões, presença) ─────────────────────────────────────
+// Cada humano que usa a UI ganha um perfil em `humans.json`. O perfil alimenta:
+// - atribuição nos prompts ("Tiago está perguntando X")
+// - canais humano↔humano
+// - modo "shadow" quando o humano está offline e alguém fala com ele
+//
+// Formato:
+//   humans.json = { humans: { "<id>": { id, name, description, skills[],
+//     important, offline_privacy: {never_share[]}, created_at, last_seen_at,
+//     notes } }, default_id }
+// Online/offline é derivado: last_seen_at a menos de ONLINE_WINDOW_MS atrás.
+
+const humansFile = path.join(memDir, 'humans.json');
+const humanChatsDir = path.join(memDir, 'human_chats');
+const humanLogDir = path.join(memDir, 'human_logs');
+const ONLINE_WINDOW_MS = 90 * 1000;
+
+function slugHuman(name) {
+  return String(name || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || `human-${Date.now()}`;
+}
+
+function loadHumans() {
+  if (!fs.existsSync(humansFile)) return { humans: {}, default_id: null };
+  try {
+    const raw = JSON.parse(fs.readFileSync(humansFile, 'utf8'));
+    if (!raw || typeof raw !== 'object') return { humans: {}, default_id: null };
+    return { humans: raw.humans || {}, default_id: raw.default_id || null };
+  } catch { return { humans: {}, default_id: null }; }
+}
+
+function saveHumans(data) {
+  try { fs.writeFileSync(humansFile, JSON.stringify(data, null, 2)); } catch {}
+}
+
+function humanIsOnline(h) {
+  if (!h || !h.last_seen_at) return false;
+  const last = Date.parse(h.last_seen_at);
+  if (!Number.isFinite(last)) return false;
+  return (Date.now() - last) < ONLINE_WINDOW_MS;
+}
+
+const HUMAN_LOCATIONS = ['core', 'devs', 'specialists', 'integrators', 'motors', 'firefighter'];
+
+function sanitizeLocation(v) {
+  if (typeof v !== 'string') return null;
+  return HUMAN_LOCATIONS.includes(v) ? v : null;
+}
+
+function sanitizeSkin(v) {
+  if (!v || typeof v !== 'object') return null;
+  const num = (x) => (typeof x === 'number' && x >= 0 && x <= 0xffffff ? (x | 0) : null);
+  const skinTone = num(v.skinTone);
+  const hair = num(v.hair);
+  const shirt = num(v.shirt);
+  const pants = num(v.pants);
+  if (skinTone === null && hair === null && shirt === null && pants === null) return null;
+  return {
+    skinTone: skinTone ?? 0xf1c27d,
+    hair: hair ?? 0x44403c,
+    shirt: shirt ?? 0x3b82f6,
+    pants: pants ?? 0x1f2937,
+  };
+}
+
+function humanSummary(h) {
+  return {
+    id: h.id,
+    name: h.name,
+    description: h.description || '',
+    skills: h.skills || [],
+    important: h.important || '',
+    offline_privacy: h.offline_privacy || { never_share: [] },
+    location: h.location || null,
+    skin: h.skin || null,
+    created_at: h.created_at,
+    last_seen_at: h.last_seen_at || null,
+    online: humanIsOnline(h),
+    notes: h.notes || '',
+  };
+}
+
+function touchHuman(id) {
+  const data = loadHumans();
+  if (!data.humans[id]) return null;
+  data.humans[id].last_seen_at = new Date().toISOString();
+  saveHumans(data);
+  return data.humans[id];
+}
+
+function humanPairKey(a, b) {
+  return [a, b].sort().join('__');
+}
+
+function humanChatPath(a, b) {
+  if (!fs.existsSync(humanChatsDir)) fs.mkdirSync(humanChatsDir, { recursive: true });
+  return path.join(humanChatsDir, `${humanPairKey(a, b)}.jsonl`);
+}
+
+function humanLogPath(id) {
+  if (!fs.existsSync(humanLogDir)) fs.mkdirSync(humanLogDir, { recursive: true });
+  return path.join(humanLogDir, `${id}.jsonl`);
+}
+
+function appendHumanLog(id, entry) {
+  try { fs.appendFileSync(humanLogPath(id), JSON.stringify(entry) + '\n'); } catch {}
+}
+
+function appendHumanChat(a, b, entry) {
+  try { fs.appendFileSync(humanChatPath(a, b), JSON.stringify(entry) + '\n'); } catch {}
+}
+
+function readHumanChat(a, b) {
+  const p = humanChatPath(a, b);
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, 'utf8').split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
 // ── Chat com agentes (spawn `claude -p`) ─────────────────────────────────────
 
 const chatDir = path.join(memDir, 'agent_chats');
@@ -228,6 +352,212 @@ async function drainAutoQueue(toAgent) {
     autoRunning.delete(toAgent);
     if ((autoPending.get(toAgent) || []).length) setImmediate(() => drainAutoQueue(toAgent));
   }
+}
+
+// ── Shadow agent: humano offline respondido por claude com base no perfil ───
+// Quando outro humano manda mensagem pra X e X está offline:
+// - Carrega perfil de X (descrição, skills, offline_privacy.never_share)
+// - Coleta histórico recente de X em todos os canais (humano↔humano +
+//   agent_chats onde X aparece como human_id)
+// - Spawn claude -p pra responder como se fosse X, respeitando o filtro de
+//   privacidade e marcando toda resposta como `shadow: true`.
+const shadowRunning = new Set();
+const shadowPending = new Map(); // meId -> Array<{fromHumanId, message}>
+const SHADOW_RATE_MAX = 20;
+const shadowRateStamps = [];
+
+function shadowRateOk() {
+  const now = Date.now();
+  while (shadowRateStamps.length && now - shadowRateStamps[0] > AUTO_RATE_WINDOW_MS) shadowRateStamps.shift();
+  if (shadowRateStamps.length >= SHADOW_RATE_MAX) return false;
+  shadowRateStamps.push(now);
+  return true;
+}
+
+function enqueueShadowTurn(meId, fromHumanId, message) {
+  if (!shadowRateOk()) {
+    appendHumanLog(meId, {
+      ts: new Date().toISOString(),
+      type: 'shadow_throttled',
+      from_human: fromHumanId,
+      reason: `rate limit ${SHADOW_RATE_MAX}/${AUTO_RATE_WINDOW_MS/1000}s`,
+    });
+    return;
+  }
+  if (!shadowPending.has(meId)) shadowPending.set(meId, []);
+  shadowPending.get(meId).push({ fromHumanId, message });
+  setImmediate(() => drainShadow(meId));
+}
+
+async function drainShadow(meId) {
+  if (shadowRunning.has(meId)) return;
+  const q = shadowPending.get(meId);
+  if (!q || !q.length) return;
+  shadowRunning.add(meId);
+  try {
+    while (q.length) {
+      const batch = q.splice(0);
+      const fromId = batch[0].fromHumanId;
+      const combined = batch.length === 1
+        ? batch[0].message
+        : batch.map(b => b.message).join('\n\n---\n\n');
+      await runShadowTurn(meId, fromId, combined);
+    }
+  } finally {
+    shadowRunning.delete(meId);
+    if ((shadowPending.get(meId) || []).length) setImmediate(() => drainShadow(meId));
+  }
+}
+
+function collectHumanHistory(meId, limit = 30) {
+  // Coleta atividade recente do humano: mensagens em human_chats e agent_chats
+  // (onde ele é o human_id). Ordenado por ts desc, cortado em `limit`.
+  const events = [];
+  if (fs.existsSync(humanChatsDir)) {
+    for (const f of fs.readdirSync(humanChatsDir)) {
+      if (!f.endsWith('.jsonl') || !f.includes(meId)) continue;
+      const lines = fs.readFileSync(path.join(humanChatsDir, f), 'utf8').split('\n').filter(Boolean);
+      for (const l of lines) {
+        try {
+          const e = JSON.parse(l);
+          if (e.from === meId || e.to === meId) {
+            events.push({
+              ts: e.ts,
+              channel: `humano:${e.from === meId ? e.to : e.from}`,
+              role: e.from === meId ? 'eu' : 'outro',
+              content: (e.content || '').slice(0, 600),
+            });
+          }
+        } catch {}
+      }
+    }
+  }
+  if (fs.existsSync(chatDir)) {
+    for (const f of fs.readdirSync(chatDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      const agentName = f.replace(/\.jsonl$/, '');
+      const lines = fs.readFileSync(path.join(chatDir, f), 'utf8').split('\n').filter(Boolean);
+      for (const l of lines) {
+        try {
+          const e = JSON.parse(l);
+          if (e.human_id === meId) {
+            events.push({
+              ts: e.ts,
+              channel: `agente:${agentName}`,
+              role: e.role === 'user' ? 'eu' : agentName,
+              content: (e.content || '').slice(0, 600),
+            });
+          }
+        } catch {}
+      }
+    }
+  }
+  events.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  return events.slice(0, limit).reverse();
+}
+
+function composeShadowPrompt(meHuman, fromHuman, incomingMessage) {
+  const events = collectHumanHistory(meHuman.id, 30);
+  const activity = events.length
+    ? events.map(e => `- [${e.ts.slice(0,16)}] canal ${e.channel} — ${e.role}: ${e.content}`).join('\n')
+    : '_(sem atividade recente registrada)_';
+  const neverShare = (meHuman.offline_privacy?.never_share || []).filter(Boolean);
+  const neverShareBlock = neverShare.length
+    ? neverShare.map(x => `- ${x}`).join('\n')
+    : '_(nenhum filtro definido)_';
+  const skills = (meHuman.skills || []).join(', ') || '_(não declarado)_';
+  return `Você está operando em **modo shadow** pelo humano **${meHuman.name}** (\`${meHuman.id}\`) — ele está offline e outro humano, **${fromHuman.name}**, mandou uma mensagem.
+
+Você **não é ${meHuman.name}**. Você é um assistente que responde **em nome dele**, limitado ao que ele já registrou no sistema. Deixe claro em UMA linha no fim da resposta que foi o shadow respondendo (ex: "_— shadow de ${meHuman.name} (ele está offline)_").
+
+## Perfil declarado de ${meHuman.name}
+- **Descrição:** ${meHuman.description || '_(não preenchido)_'}
+- **Skills:** ${skills}
+- **O que ele considera importante:** ${meHuman.important || '_(não preenchido)_'}
+- **Anotações:** ${meHuman.notes || '_(nenhuma)_'}
+
+## Filtro de privacidade — NUNCA compartilhar
+${meHuman.name} declarou que os tópicos abaixo **não devem sair** dele quando offline. Se a pergunta de ${fromHuman.name} tocar em algo dessa lista, responda: *"${meHuman.name} marcou esse assunto como privado quando offline — volte a falar com ele direto."* e **pare**. Nada de rodeio.
+${neverShareBlock}
+
+## Atividade recente de ${meHuman.name} no sistema
+${activity}
+
+## Regras absolutas
+- Responda com base no que está acima. **Nunca invente** decisões, promessas, opinião, código que ${meHuman.name} não escreveu.
+- Se a pergunta exige informação que você não tem, diga: *"Não tenho esse registro no histórico de ${meHuman.name} — precisa falar com ele quando voltar online."*
+- Sem simulação de diálogo ("${meHuman.name} diria…"). Ou você tem o dado no histórico, ou não tem.
+- Respeite 100% o filtro de privacidade. Na dúvida, trate como privado.
+- Português, direto, máximo ~8 linhas.
+
+## Mensagem de ${fromHuman.name}
+${incomingMessage}
+`;
+}
+
+function runShadowTurn(meId, fromHumanId, incomingMessage) {
+  return new Promise((resolve) => {
+    const data = loadHumans();
+    const meHuman = data.humans[meId];
+    const fromHuman = data.humans[fromHumanId];
+    if (!meHuman || !fromHuman) { resolve(); return; }
+
+    const prompt = composeShadowPrompt(meHuman, fromHuman, incomingMessage);
+    const startTs = new Date().toISOString();
+    appendHumanLog(meId, {
+      ts: startTs,
+      type: 'shadow_request',
+      from_human: fromHumanId,
+      prompt_chars: prompt.length,
+    });
+
+    const args = ['-p', '--output-format', 'text', '--model', 'claude-haiku-4-5-20251001', prompt];
+    const started = Date.now();
+    let proc;
+    try {
+      proc = spawn('claude', args, {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+      });
+    } catch (err) {
+      appendHumanLog(meId, {
+        ts: new Date().toISOString(), type: 'error', stage: 'shadow_spawn',
+        message: err.message,
+      });
+      resolve(); return;
+    }
+    let full = '', errBuf = '';
+    proc.stdout.on('data', c => { full += c.toString(); });
+    proc.stderr.on('data', c => { errBuf += c.toString(); });
+    proc.on('error', err => {
+      appendHumanLog(meId, {
+        ts: new Date().toISOString(), type: 'error', stage: 'shadow_proc',
+        message: err.message, duration_ms: Date.now() - started,
+      });
+      resolve();
+    });
+    proc.on('close', code => {
+      const duration_ms = Date.now() - started;
+      const ts = new Date().toISOString();
+      if (code !== 0 && !full) {
+        appendHumanLog(meId, {
+          ts, type: 'error', stage: 'shadow_exit',
+          code, stderr: errBuf.slice(0, 500), duration_ms,
+        });
+      } else {
+        appendHumanChat(meId, fromHumanId, {
+          ts, role: 'agent', from: meId, to: fromHumanId,
+          content: full, duration_ms, shadow: true,
+        });
+        appendHumanLog(meId, {
+          ts, type: 'shadow_response', to_human: fromHumanId,
+          response_chars: full.length, duration_ms, code,
+        });
+      }
+      resolve();
+    });
+  });
 }
 
 function runHeadlessTurn(agent, fromAgent, userMessage) {
@@ -446,10 +776,33 @@ function readBody(req) {
 function composePrompt(agent, agentCfg, miniContext, userMessage, history, opts = {}) {
   const isManager = agent === 'manager';
   const fromAgent = opts.fromAgent || null;
+  const human = opts.human || null;
   const canTalk = Array.isArray(agentCfg.can_talk_to) ? agentCfg.can_talk_to : [];
   const canTalkList = canTalk.length ? canTalk.map(n => `\`${n}\``).join(', ') : '_(nenhum)_';
   const canReplyBack = fromAgent && canTalk.includes(fromAgent);
-  const hist = (history || []).slice(-6).map(m => `**${m.role === 'user' ? (m.from ? m.from : 'Engenheiro') : agent}:** ${m.content}`).join('\n\n');
+  const engineerLabel = human ? human.name : 'Engenheiro';
+  const hist = (history || []).slice(-6).map(m => {
+    if (m.role === 'user') {
+      const who = m.from || (m.human_id ? m.human_id : 'Engenheiro');
+      return `**${who}:** ${m.content}`;
+    }
+    return `**${agent}:** ${m.content}`;
+  }).join('\n\n');
+
+  let humanSection = '';
+  if (human) {
+    const skills = (human.skills || []).length ? (human.skills || []).join(', ') : '_(não informado)_';
+    humanSection = `
+
+## Quem está falando agora
+Humano conectado a este chat:
+- **Nome:** ${human.name}
+- **Sobre:** ${human.description || '_(sem descrição)_'}
+- **Skills:** ${skills}
+- **O que considera importante:** ${human.important || '_(não informado)_'}
+
+Trate este humano como **${human.name}** em todas as referências. Se houver histórico de outros humanos (nomes diferentes nas mensagens), **não misture** — contextos são por humano, mas você pode cruzar se a informação coincidir (flag como: "o \`${human.name}\` e \`<outro>\` já discutiram X").`;
+  }
   return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo. A mensagem abaixo chega pela UI do project-mem.
 
 ## Seu mini-contexto
@@ -457,14 +810,15 @@ ${miniContext || '_(nenhum mini-contexto definido)_'}
 
 ## Atores e autoria
 Separe sempre quem pediu o quê:
-- **Engenheiro** — humano dono do projeto. É com ele que você está falando neste chat.
-- **Manager** — agente orquestrador. Coordena delegações entre agentes. **Não é o Engenheiro.** Tarefas que o Manager repassa chegam em outro canal (Task tool), não por este chat.
+- **${engineerLabel}** — humano com quem você está falando neste chat.
+- **Manager** — agente orquestrador. Coordena delegações entre agentes. **Não é o humano.** Tarefas que o Manager repassa chegam em outro canal (Task tool), não por este chat.
 - **Você (${agent})** — especialista na sua área.
+${humanSection}
 
 Regras de autoria nesta conversa:
-- Toda mensagem abaixo vem **do Engenheiro** (direto).
-- Se o Engenheiro relatar uma decisão/ordem que veio do Manager ("o manager decidiu X"), trate isso como fato reportado, não como pedido direto do Manager.
-- Nunca confunda "o Manager disse" com "o Engenheiro disse" ao registrar qualquer coisa — a origem importa.
+- Toda mensagem abaixo vem **de ${engineerLabel}** (direto).
+- Se ${engineerLabel} relatar uma decisão/ordem que veio do Manager ("o manager decidiu X"), trate isso como fato reportado, não como pedido direto do Manager.
+- Nunca confunda "o Manager disse" com "o humano disse" ao registrar qualquer coisa — a origem importa.
 
 ## Hierarquia e roteamento (obrigatório)
 Seus interlocutores permitidos (\`can_talk_to\`): ${canTalkList}.
@@ -551,7 +905,7 @@ Diretrizes:
 - Ao confirmar, responda em UMA linha: "registrei em <arquivo> (decisão/alma/gotcha) — origem: Engenheiro".
 - Se estiver inseguro entre dois destinos, faça UMA pergunta curta; se estiver entre registrar agora ou escalar ao Manager, **escalar**.
 ${hist ? '\n## Conversa recente\n' + hist + '\n' : ''}
-## Mensagem ${fromAgent ? `recebida de \`${fromAgent}\`` : 'do Engenheiro'}
+## Mensagem ${fromAgent ? `recebida de \`${fromAgent}\`` : `de ${engineerLabel}`}
 ${userMessage}
 ${fromAgent ? `
 ## Como responder a este handoff automático
@@ -615,8 +969,17 @@ async function handleHandoff(req, res) {
     target: to,
     chars: message.length,
   });
+  appendAgentLog(to, {
+    ts,
+    type: 'handoff_in',
+    source: from,
+    chars: message.length,
+  });
+  // Dispara auto-turn: o destinatário processa a mensagem sem precisar de
+  // intervenção humana. A fila garante ordem; o rate-limit quebra loops.
+  enqueueAutoTurn(to, from, message);
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ ok: true, ts, to }));
+  res.end(JSON.stringify({ ok: true, ts, to, auto_queued: true }));
 }
 
 function handleChatHistory(url, res) {
@@ -638,7 +1001,7 @@ async function handleChatSend(req, res) {
     return res.end(JSON.stringify({ error: 'invalid json' }));
   }
 
-  const { agent, message } = body || {};
+  const { agent, message, human_id } = body || {};
   if (!agent || !message || typeof message !== 'string') {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'need {agent, message}' }));
@@ -652,12 +1015,26 @@ async function handleChatSend(req, res) {
   }
   ensureAgentChannels(manifest);
 
+  let humanProfile = null;
+  if (human_id && typeof human_id === 'string') {
+    try {
+      const all = loadHumans();
+      humanProfile = (all.humans || []).find((h) => h.id === human_id) || null;
+      if (humanProfile) touchHuman(human_id);
+    } catch {}
+  }
+
   const miniContext = agents.loadMiniContext(memDir, agentCfg.context_file) || '';
   const history = readChat(agent);
-  const prompt = composePrompt(agent, agentCfg, miniContext, message, history);
+  const prompt = composePrompt(agent, agentCfg, miniContext, message, history, { human: humanProfile });
 
   const userTs = new Date().toISOString();
-  appendChat(agent, { ts: userTs, role: 'user', content: message });
+  const userEntry = { ts: userTs, role: 'user', content: message };
+  if (humanProfile) {
+    userEntry.human_id = humanProfile.id;
+    userEntry.from = humanProfile.name;
+  }
+  appendChat(agent, userEntry);
   appendAgentLog(agent, {
     ts: userTs,
     type: 'request',
@@ -666,6 +1043,7 @@ async function handleChatSend(req, res) {
     history_turns: history.length,
     model: agentCfg.model || null,
   });
+  autoRunning.add(agent);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -702,6 +1080,8 @@ async function handleChatSend(req, res) {
       message: err.message,
       duration_ms: 0,
     });
+    autoRunning.delete(agent);
+    setImmediate(() => drainAutoQueue(agent));
     return res.end();
   }
 
@@ -726,6 +1106,8 @@ async function handleChatSend(req, res) {
       message: err.message,
       duration_ms,
     });
+    autoRunning.delete(agent);
+    setImmediate(() => drainAutoQueue(agent));
     res.end();
   });
 
@@ -772,10 +1154,141 @@ async function handleChatSend(req, res) {
       });
     }
     sse('done', { duration_ms, code, violations: violations.length });
+    autoRunning.delete(agent);
+    setImmediate(() => drainAutoQueue(agent));
     res.end();
   });
 
   req.on('close', () => { try { proc.kill('SIGTERM'); } catch {} });
+}
+
+// ── Handlers HTTP: humanos ──────────────────────────────────────────────────
+
+function sendJson(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(body));
+}
+
+function handleHumansList(res) {
+  const data = loadHumans();
+  const list = Object.values(data.humans).map(humanSummary);
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  sendJson(res, 200, { humans: list, default_id: data.default_id });
+}
+
+async function handleHumansCreate(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { name, description, skills, important, offline_privacy, notes, location, skin } = body || {};
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return sendJson(res, 400, { error: 'need name' });
+  }
+  const data = loadHumans();
+  let id = slugHuman(name);
+  let base = id;
+  let n = 2;
+  while (data.humans[id]) { id = `${base}-${n++}`; }
+  const now = new Date().toISOString();
+  const human = {
+    id,
+    name: name.trim(),
+    description: (description || '').toString().slice(0, 4000),
+    skills: Array.isArray(skills) ? skills.slice(0, 40).map(s => String(s).slice(0, 60)) : [],
+    important: (important || '').toString().slice(0, 4000),
+    offline_privacy: {
+      never_share: Array.isArray(offline_privacy?.never_share)
+        ? offline_privacy.never_share.slice(0, 40).map(s => String(s).slice(0, 200))
+        : [],
+    },
+    notes: (notes || '').toString().slice(0, 2000),
+    location: sanitizeLocation(location),
+    skin: sanitizeSkin(skin),
+    created_at: now,
+    last_seen_at: now,
+  };
+  data.humans[id] = human;
+  if (!data.default_id) data.default_id = id;
+  saveHumans(data);
+  appendHumanLog(id, { ts: now, type: 'created', name: human.name });
+  sendJson(res, 201, { human: humanSummary(human) });
+}
+
+function handleHumanGet(id, res) {
+  const data = loadHumans();
+  const h = data.humans[id];
+  if (!h) return sendJson(res, 404, { error: 'not found' });
+  sendJson(res, 200, { human: humanSummary(h) });
+}
+
+async function handleHumanUpdate(id, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const data = loadHumans();
+  const h = data.humans[id];
+  if (!h) return sendJson(res, 404, { error: 'not found' });
+  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'skin'];
+  for (const f of fields) {
+    if (body[f] === undefined) continue;
+    if (f === 'skills') {
+      h.skills = Array.isArray(body.skills) ? body.skills.slice(0, 40).map(s => String(s).slice(0, 60)) : h.skills;
+    } else if (f === 'offline_privacy') {
+      const ns = Array.isArray(body.offline_privacy?.never_share)
+        ? body.offline_privacy.never_share.slice(0, 40).map(s => String(s).slice(0, 200))
+        : h.offline_privacy?.never_share || [];
+      h.offline_privacy = { never_share: ns };
+    } else if (f === 'location') {
+      h.location = sanitizeLocation(body.location);
+    } else if (f === 'skin') {
+      h.skin = sanitizeSkin(body.skin);
+    } else {
+      h[f] = (body[f] || '').toString().slice(0, 4000);
+    }
+  }
+  saveHumans(data);
+  appendHumanLog(id, { ts: new Date().toISOString(), type: 'updated' });
+  sendJson(res, 200, { human: humanSummary(h) });
+}
+
+function handleHumanHeartbeat(id, res) {
+  const h = touchHuman(id);
+  if (!h) return sendJson(res, 404, { error: 'not found' });
+  sendJson(res, 200, { ok: true, last_seen_at: h.last_seen_at, is_online: true });
+}
+
+async function handleHumanHandoff(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { from, to, message } = body || {};
+  if (!from || !to || !message || typeof message !== 'string') {
+    return sendJson(res, 400, { error: 'need {from, to, message}' });
+  }
+  const data = loadHumans();
+  if (!data.humans[from]) return sendJson(res, 404, { error: `from human "${from}" not found` });
+  if (!data.humans[to])   return sendJson(res, 404, { error: `to human "${to}" not found` });
+  if (from === to)        return sendJson(res, 400, { error: 'from and to must differ' });
+
+  const ts = new Date().toISOString();
+  appendHumanChat(from, to, { ts, role: 'user', from, to, content: message });
+  appendHumanLog(from, { ts, type: 'human_handoff_out', target: to, chars: message.length });
+  appendHumanLog(to,   { ts, type: 'human_handoff_in',  source: from, chars: message.length });
+
+  // Se o destinatário está offline, dispara shadow-agent (processa em background).
+  const target = data.humans[to];
+  if (!humanIsOnline(target)) {
+    enqueueShadowTurn(to, from, message);
+  }
+  sendJson(res, 200, { ok: true, ts, to, shadow_queued: !humanIsOnline(target) });
+}
+
+function handleHumanChatHistory(url, res) {
+  const me = url.searchParams.get('me');
+  const withId = url.searchParams.get('with');
+  if (!me || !withId) return sendJson(res, 400, { error: 'need me & with' });
+  const messages = readHumanChat(me, withId);
+  sendJson(res, 200, { me, with: withId, messages });
 }
 
 const server = http.createServer((req, res) => {
@@ -798,6 +1311,32 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: err.message }));
       } catch {}
     });
+    return;
+  }
+
+  // Humanos
+  if (url.pathname === '/api/humans' && req.method === 'GET') {
+    handleHumansList(res);
+    return;
+  }
+  if (url.pathname === '/api/humans' && req.method === 'POST') {
+    handleHumansCreate(req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  const humanMatch = url.pathname.match(/^\/api\/humans\/([^\/]+)(\/[a-z-]+)?$/);
+  if (humanMatch) {
+    const hid = decodeURIComponent(humanMatch[1]);
+    const sub = humanMatch[2];
+    if (!sub && req.method === 'GET')  { handleHumanGet(hid, res); return; }
+    if (!sub && req.method === 'PUT')  { handleHumanUpdate(hid, req, res).catch(err => sendJson(res, 500, { error: err.message })); return; }
+    if (sub === '/heartbeat' && req.method === 'POST') { handleHumanHeartbeat(hid, res); return; }
+  }
+  if (url.pathname === '/api/human-handoff' && req.method === 'POST') {
+    handleHumanHandoff(req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  if (url.pathname === '/api/human-chat/history' && req.method === 'GET') {
+    handleHumanChatHistory(url, res);
     return;
   }
 

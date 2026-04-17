@@ -11,7 +11,7 @@ type Stream = {
 
 type MsgLike = ChatMsg | Stream;
 
-export function useChat(agent: string | null) {
+export function useChat(agent: string | null, humanId: string | null = null) {
   const [history, setHistory] = useState<ChatMsg[]>([]);
   const [stream, setStream] = useState<Stream | null>(null);
   const [sending, setSending] = useState(false);
@@ -59,7 +59,7 @@ export function useChat(agent: string | null) {
         const r = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agent, message }),
+          body: JSON.stringify({ agent, message, human_id: humanId }),
           signal: ac.signal,
         });
         if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
@@ -113,7 +113,7 @@ export function useChat(agent: string | null) {
         abortRef.current = null;
       }
     },
-    [agent, sending],
+    [agent, sending, humanId],
   );
 
   const cancel = useCallback(() => {

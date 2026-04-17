@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, X, Bot, User as UserIcon, Brain } from 'lucide-react';
+import { Send, X, Bot, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
@@ -11,8 +11,17 @@ import { useChat } from '@/hooks/useChat';
 interface Props {
   agent: string | null;
   agentCfg: AgentCfg | null;
+  humanId?: string | null;
+  humanName?: string | null;
   onClose?: () => void;
   onStreamingChange?: (streaming: boolean) => void;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'> = {
@@ -23,8 +32,15 @@ const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'destructive' | 'succ
   firefighter: 'destructive',
 };
 
-export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props) {
-  const { messages, send, sending, err, isStreaming, streamingPhase } = useChat(agent);
+export function ChatPanel({
+  agent,
+  agentCfg,
+  humanId = null,
+  humanName = null,
+  onClose,
+  onStreamingChange,
+}: Props) {
+  const { messages, send, sending, err, isStreaming, streamingPhase } = useChat(agent, humanId);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -82,12 +98,25 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
     setInput('');
   };
 
+  const meInitials = humanName ? initials(humanName) : null;
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b bg-white px-4 py-3">
+        {humanName && (
+          <>
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground ring-2 ring-primary/20"
+              title={`você — ${humanName}`}
+            >
+              {meInitials}
+            </div>
+            <span className="select-none text-lg text-slate-300">↔</span>
+          </>
+        )}
         <div
           className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-full text-lg ring-2',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ring-2',
             type === 'core' && 'bg-indigo-50 ring-indigo-200',
             type === 'specialist' && 'bg-sky-50 ring-sky-200',
             type === 'integrator' && 'bg-purple-50 ring-purple-200',
@@ -103,6 +132,7 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
             <Badge variant={TYPE_BADGE[type]}>{type}</Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">
+            {humanName && <span className="text-slate-500">Você, {humanName} · </span>}
             {isStreaming ? (
               streamingPhase === 'thinking' ? (
                 <span className="inline-flex items-center gap-1 text-amber-600">
@@ -141,7 +171,7 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
               </span>
             </div>
           ) : (
-            <Bubble key={i} msg={item.msg} />
+            <Bubble key={i} msg={item.msg} humanName={humanName} />
           ),
         )}
         {err && (
@@ -170,7 +200,7 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
                 submit();
               }
             }}
-            placeholder={`Conversar com ${agent}…`}
+            placeholder={humanName ? `${humanName} → ${agent}…` : `Conversar com ${agent}…`}
             rows={3}
             className="chat-ta flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none"
             style={{ minHeight: 72 }}
@@ -195,6 +225,7 @@ export function ChatPanel({ agent, agentCfg, onClose, onStreamingChange }: Props
 
 function Bubble({
   msg,
+  humanName,
 }: {
   msg: {
     role: 'user' | 'agent';
@@ -202,11 +233,15 @@ function Bubble({
     ts: string;
     streaming?: boolean;
     phase?: 'thinking' | 'writing';
+    from?: string;
   };
+  humanName?: string | null;
 }) {
   const isUser = msg.role === 'user';
   const thinking = msg.streaming && msg.phase === 'thinking';
   const writing = msg.streaming && msg.phase === 'writing';
+  const userLabel = msg.from || humanName || 'Você';
+  const userInitials = initials(userLabel);
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'justify-end' : 'justify-start')}>
       {!isUser && (
@@ -240,7 +275,12 @@ function Bubble({
             <span className="ml-1 text-[11px] text-slate-500">pensando</span>
           </div>
         ) : isUser ? (
-          <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+          <>
+            <div className="mb-0.5 text-[11px] font-semibold text-white/90">
+              {userLabel}
+            </div>
+            <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+          </>
         ) : (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content || ' '}</ReactMarkdown>
         )}
@@ -256,8 +296,11 @@ function Bubble({
         )}
       </div>
       {isUser && (
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <UserIcon className="h-3.5 w-3.5 text-primary" />
+        <div
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground ring-2 ring-primary/20"
+          title={userLabel}
+        >
+          {userInitials}
         </div>
       )}
     </div>

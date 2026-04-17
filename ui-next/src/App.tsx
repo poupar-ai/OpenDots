@@ -1,16 +1,31 @@
 import { useMemo, useState } from 'react';
-import { Brain } from 'lucide-react';
+import { Brain, LogOut, Users } from 'lucide-react';
 import { useData } from '@/hooks/useData';
+import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { ModulesPanel } from '@/panels/ModulesPanel';
 import { AgentCanvas } from '@/panels/AgentCanvas';
 import { ChatPanel } from '@/panels/ChatPanel';
 import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
+import { HumansPanel } from '@/panels/HumansPanel';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { HumanOnboarding } from '@/components/HumanOnboarding';
+
+function humanInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [chatStreaming, setChatStreaming] = useState(false);
+  const [humansOpen, setHumansOpen] = useState(false);
+  const [humansPreselected, setHumansPreselected] = useState<string | null>(null);
+  const [humansTick, setHumansTick] = useState(0);
   const { data, err } = useData(10000, chatStreaming);
+  const { humanId, human, setCurrent } = useCurrentHuman();
 
   const agents = data?.agents ?? null;
   const agentCfg = useMemo(
@@ -22,8 +37,28 @@ export default function App() {
     [selected, agents],
   );
 
+  const showOnboarding = !humanId;
+
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-50 text-slate-900">
+      {showOnboarding && (
+        <HumanOnboarding
+          onDone={(id) => {
+            setCurrent(id);
+            setHumansTick((t) => t + 1);
+          }}
+        />
+      )}
+      {humansOpen && humanId && (
+        <HumansPanel
+          meId={humanId}
+          preselectedId={humansPreselected}
+          onClose={() => {
+            setHumansOpen(false);
+            setHumansPreselected(null);
+          }}
+        />
+      )}
       <header className="flex items-center justify-between border-b bg-white/70 px-6 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
@@ -40,6 +75,35 @@ export default function App() {
           {err && <Badge variant="destructive">offline</Badge>}
           {chatStreaming && <Badge variant="success">chat ao vivo</Badge>}
           {data && <Badge variant="outline">{data.stats?.sessions || 0} sessões</Badge>}
+          {human && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-2 gap-1.5"
+              onClick={() => setHumansOpen(true)}
+              title="falar com outros humanos"
+            >
+              <Users className="h-3.5 w-3.5" /> humanos
+            </Button>
+          )}
+          {human && (
+            <div className="ml-1 flex items-center gap-1.5 rounded-full border bg-white px-1 py-1 pr-2.5 text-xs">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                {humanInitials(human.name)}
+              </span>
+              <span className="font-medium">{human.name}</span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                onClick={() => setCurrent(null)}
+                aria-label="sair"
+                title="trocar humano"
+              >
+                <LogOut className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -67,7 +131,13 @@ export default function App() {
             agents={agents}
             selected={selected}
             onSelect={setSelected}
+            onHumanSelect={(id) => {
+              setHumansPreselected(id);
+              setHumansOpen(true);
+            }}
             workingAgent={chatStreaming ? selected : null}
+            meHumanId={humanId}
+            humansTick={humansTick}
           />
         </main>
 
@@ -75,6 +145,8 @@ export default function App() {
           <ChatPanel
             agent={selected}
             agentCfg={agentCfg}
+            humanId={humanId}
+            humanName={human?.name || null}
             onStreamingChange={setChatStreaming}
           />
         </aside>

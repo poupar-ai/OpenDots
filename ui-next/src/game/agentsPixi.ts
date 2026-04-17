@@ -1,6 +1,8 @@
 import { Application, Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
 import type { AgentCfg, AgentType, AgentsData } from '@/lib/types';
+import type { HumanProfile } from '@/lib/humans';
 import { AgentSprite } from './sprites/AgentSprite';
+import { HumanSprite } from './sprites/HumanSprite';
 import { Office, type DecorKind, type DepartmentInput } from './scene/Office';
 
 interface AgentNode {
@@ -66,7 +68,26 @@ interface PanState {
 
 export interface AgentCanvasOptions {
   onSelect?: (name: string) => void;
+  onHumanSelect?: (id: string) => void;
   selected?: string | null;
+  meHumanId?: string | null;
+}
+
+interface HumanNode {
+  id: string;
+  sprite: HumanSprite;
+  x: number;
+  y: number;
+  pinned?: boolean;
+  dragging?: boolean;
+}
+
+interface HumanDragState {
+  id: string;
+  offX: number;
+  offY: number;
+  moved: boolean;
+  pointerId: number;
 }
 
 const MARGIN_X = 12;
@@ -150,6 +171,11 @@ export class AgentCanvas {
   private flowDotsLayer!: Container;
   private flowLabelsLayer!: Container;
   private layer!: Container;
+  private humansLayer!: Container;
+  private humanNodes = new Map<string, HumanNode>();
+  private lastHumans: HumanProfile[] = [];
+  private pendingHumans: HumanProfile[] | null = null;
+  private meHumanId: string | null = null;
   private opts: AgentCanvasOptions;
   private selected: string | null = null;
   private ticker: ((t: Ticker) => void) | null = null;
@@ -166,6 +192,7 @@ export class AgentCanvas {
   private flowDots: FlowDot[] = [];
   private flowPulse = 0;
   private drag: DragState | null = null;
+  private humanDrag: HumanDragState | null = null;
   private pan: PanState | null = null;
   private wheelHandler: ((e: WheelEvent) => void) | null = null;
   private rootEl: HTMLElement | null = null;
@@ -175,6 +202,7 @@ export class AgentCanvas {
   constructor(opts: AgentCanvasOptions = {}) {
     this.opts = opts;
     this.selected = opts.selected ?? null;
+    this.meHumanId = opts.meHumanId ?? null;
     this.app = new Application();
   }
 
@@ -203,12 +231,14 @@ export class AgentCanvas {
     this.flowDotsLayer = new Container();
     this.flowLabelsLayer = new Container();
     this.layer = new Container();
+    this.humansLayer = new Container();
 
     // tudo que é desenhado em coordenadas de mundo fica dentro do worldContainer;
     // a câmera é só uma translação negativa (worldContainer.x = -cameraX).
     this.worldContainer.addChild(this.office);
     this.worldContainer.addChild(this.baseLinks);
     this.worldContainer.addChild(this.flowLinks);
+    this.worldContainer.addChild(this.humansLayer);
     this.worldContainer.addChild(this.layer);
     this.worldContainer.addChild(this.flowDotsLayer);
     this.worldContainer.addChild(this.flowLabelsLayer);
@@ -248,9 +278,131 @@ export class AgentCanvas {
       this.pendingData = null;
       this.update(d);
     }
+    if (this.pendingHumans) {
+      const h = this.pendingHumans;
+      this.pendingHumans = null;
+      this.updateHumans(h);
+    }
     for (const n of this.nodes.values()) n.sprite.setSelected(n.name === this.selected);
     if (this.workingName) this.nodes.get(this.workingName)?.sprite.setWorking(true);
     this.buildFlow();
+  }
+
+  setMeHumanId(id: string | null) {
+    if (this.meHumanId === id) return;
+    this.meHumanId = id;
+    // força recriar sprites pra atualizar estado "isMe"
+    if (this.mounted) {
+      for (const n of this.humanNodes.values()) {
+        this.humansLayer.removeChild(n.sprite);
+        n.sprite.destroy({ children: true });
+      }
+      this.humanNodes.clear();
+    }
+  }
+
+  updateHumans(humans: HumanProfile[]) {
+    if (!this.mounted) { this.pendingHumans = humans; return; }
+    if (this.destroyed) return;
+
+    this.lastHumans = humans;
+    const wanted = new Set(humans.map((h) => h.id));
+    for (const id of [...this.humanNodes.keys()]) {
+      if (!wanted.has(id)) {
+        const n = this.humanNodes.get(id)!;
+        this.humansLayer.removeChild(n.sprite);
+        n.sprite.destroy({ children: true });
+        this.humanNodes.delete(id);
+      }
+    }
+
+    // agrupa humanos por sala/departamento
+    const byRoom = new Map<string, HumanProfile[]>();
+    for (const h of humans) {
+      const loc = h.location;
+      if (!loc || !this.office.hasRoom(loc)) continue;
+      if (!byRoom.has(loc)) byRoom.set(loc, []);
+      byRoom.get(loc)!.push(h);
+    }
+
+    for (const [roomId, list] of byRoom) {
+      list.sort((a, b) => a.id.localeCompare(b.id));
+      list.forEach((h, idx) => {
+        const pos = this.office.humanPositionFor(roomId, idx);
+        if (!pos) return;
+        let node = this.humanNodes.get(h.id);
+        const isMe = this.meHumanId === h.id;
+        const online = h.online !== false;
+        if (!node) {
+          const sprite = new HumanSprite(
+            h.id,
+            h.name,
+            h.skin || { skinTone: 0xf1c27d, hair: 0x44403c, shirt: 0x3b82f6, pants: 0x1f2937 },
+            { isMe, online },
+          );
+          sprite.position.set(pos[0], pos[1]);
+          sprite.on('pointerdown', (e) => {
+            e.stopPropagation();
+            this.startHumanDrag(h.id, e.global.x, e.global.y, e.pointerId);
+          });
+          this.humansLayer.addChild(sprite);
+          node = { id: h.id, sprite, x: pos[0], y: pos[1] };
+          this.humanNodes.set(h.id, node);
+        } else if (!node.pinned && !node.dragging) {
+          node.sprite.position.set(pos[0], pos[1]);
+          node.x = pos[0];
+          node.y = pos[1];
+        }
+      });
+    }
+  }
+
+  private startHumanDrag(id: string, gx: number, gy: number, pointerId: number) {
+    const node = this.humanNodes.get(id);
+    if (!node) return;
+    const wx = gx + this.cameraX;
+    const wy = gy + this.cameraY;
+    this.humanDrag = {
+      id,
+      offX: node.x - wx,
+      offY: node.y - wy,
+      moved: false,
+      pointerId,
+    };
+    node.dragging = true;
+    this.humansLayer.addChild(node.sprite); // leva pro topo da camada
+    node.sprite.cursor = 'grabbing';
+  }
+
+  private onHumanDragMove(gx: number, gy: number) {
+    if (!this.humanDrag) return;
+    const node = this.humanNodes.get(this.humanDrag.id);
+    if (!node) return;
+    const { width: worldW, height: worldH } = this.office.getWorldSize();
+    const wx = gx + this.cameraX;
+    const wy = gy + this.cameraY;
+    const nx = clamp(wx + this.humanDrag.offX, MARGIN_X, worldW - MARGIN_X);
+    const ny = clamp(wy + this.humanDrag.offY, MARGIN_TOP, worldH - MARGIN_BOTTOM);
+    if (!this.humanDrag.moved) {
+      const dx = nx - node.x;
+      const dy = ny - node.y;
+      if (Math.hypot(dx, dy) >= this.DRAG_THRESHOLD) this.humanDrag.moved = true;
+    }
+    node.x = nx;
+    node.y = ny;
+    node.sprite.position.set(nx, ny);
+  }
+
+  private endHumanDrag() {
+    if (!this.humanDrag) return;
+    const { id, moved } = this.humanDrag;
+    this.humanDrag = null;
+    const node = this.humanNodes.get(id);
+    if (!node) return;
+    node.dragging = false;
+    node.sprite.cursor = 'pointer';
+    if (moved) node.pinned = true;
+    else if (id !== this.meHumanId) this.opts.onHumanSelect?.(id);
   }
 
   destroy() {
@@ -413,6 +565,7 @@ export class AgentCanvas {
     }
     this.office.setDepartments(depts);
     this.clampAndApplyCamera();
+    if (this.lastHumans.length) this.updateHumans(this.lastHumans);
 
     const out: Record<string, [number, number]> = {};
     for (const n of names) {
@@ -511,7 +664,7 @@ export class AgentCanvas {
 
   private onStagePointerDown(gx: number, gy: number, pointerId: number) {
     // se já estamos arrastando um sprite (sprite fez stopPropagation), ignora
-    if (this.drag) return;
+    if (this.drag || this.humanDrag) return;
     this.pan = {
       startX: gx,
       startY: gy,
@@ -525,6 +678,10 @@ export class AgentCanvas {
   private onPointerMove(gx: number, gy: number) {
     if (this.drag) {
       this.onDragMove(gx, gy);
+      return;
+    }
+    if (this.humanDrag) {
+      this.onHumanDragMove(gx, gy);
       return;
     }
     if (this.pan) {
@@ -577,6 +734,10 @@ export class AgentCanvas {
   }
 
   private onPointerUp(_gx: number, _gy: number) {
+    if (this.humanDrag) {
+      this.endHumanDrag();
+      return;
+    }
     if (this.drag) {
       const { name, moved, vx, vy } = this.drag;
       this.drag = null;
@@ -683,6 +844,8 @@ export class AgentCanvas {
       node.sprite.position.set(node.x, node.y);
       node.sprite.tick(t);
     }
+
+    for (const h of this.humanNodes.values()) h.sprite.tick(t);
 
     this.drawBaseLinks();
     this.drawFlow(dt);

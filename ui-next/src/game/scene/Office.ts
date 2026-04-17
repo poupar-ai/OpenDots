@@ -140,6 +140,26 @@ export class Office extends Container {
     return this.positions.get(name) || null;
   }
 
+  // Posição de um humano dentro da sala do departamento indicado.
+  // Humanos ficam próximos à porta (canto inferior direito), empilhando à esquerda
+  // conforme o `index` — 0 é o mais próximo da porta.
+  humanPositionFor(roomId: string, index: number): [number, number] | null {
+    const r = this.rooms.get(roomId);
+    if (!r) return null;
+    const doorW = 28;
+    const doorMarginRight = 14;
+    const doorX = r.x + r.width - doorMarginRight - doorW;
+    const spacing = 34;
+    const offsetX = 22 + index * spacing;
+    const x = Math.max(r.x + 26, doorX - offsetX);
+    const y = r.floorY - 30;
+    return [x, y];
+  }
+
+  hasRoom(roomId: string): boolean {
+    return this.rooms.has(roomId);
+  }
+
   // limites físicos da sala à qual o agente pertence (world coords)
   getRoomBounds(name: string): { x1: number; x2: number; ceilingY: number; floorY: number } | null {
     for (const r of this.rooms.values()) {
@@ -381,6 +401,38 @@ export class Office extends Container {
       .fill({ color: 0x334155, alpha: isLast ? 0.7 : 0.7 });
     r.container.addChild(bg);
 
+    // Porta no canto inferior direito + placa logo acima.
+    const doorW = 28;
+    const doorH = 46;
+    const doorMarginRight = 14;
+    const doorX = r.x + r.width - doorMarginRight - doorW;
+    const doorTop = r.floorY - doorH;
+
+    const door = new Graphics();
+    // Moldura / batente
+    door
+      .rect(doorX - 2, doorTop - 2, doorW + 4, doorH + 2)
+      .fill({ color: 0x0f172a, alpha: 0.55 });
+    // Folha da porta
+    const doorFill = lerpColor(r.color, 0x1e293b, 0.55);
+    door
+      .rect(doorX, doorTop, doorW, doorH)
+      .fill({ color: doorFill })
+      .stroke({ width: 1, color: 0x0f172a, alpha: 0.7 });
+    // Paineis decorativos
+    door
+      .rect(doorX + 4, doorTop + 5, doorW - 8, doorH * 0.38)
+      .stroke({ width: 0.8, color: 0x0f172a, alpha: 0.35 });
+    door
+      .rect(doorX + 4, doorTop + doorH * 0.5, doorW - 8, doorH * 0.38)
+      .stroke({ width: 0.8, color: 0x0f172a, alpha: 0.35 });
+    // Maçaneta
+    door
+      .circle(doorX + doorW - 6, doorTop + doorH / 2 + 3, 1.6)
+      .fill({ color: 0xfbbf24 });
+    r.container.addChild(door);
+
+    // Placa acima da porta
     const label = new Text({
       text: r.label,
       style: new TextStyle({
@@ -391,13 +443,23 @@ export class Office extends Container {
       }),
     });
     label.anchor.set(0.5, 0);
-    label.position.set(r.x + r.width / 2, r.ceilingY + 6);
+    const signH = 16;
+    const signW = Math.max(doorW + 8, label.width + 14);
+    const signX = doorX + doorW / 2 - signW / 2;
+    const signY = doorTop - signH - 3;
     const signBg = new Graphics();
-    const sw = label.width + 16;
     signBg
-      .roundRect(r.x + r.width / 2 - sw / 2, r.ceilingY + 4, sw, 16, 5)
+      .roundRect(signX, signY, signW, signH, 4)
       .fill({ color: r.color })
-      .stroke({ width: 1, color: 0x0f172a, alpha: 0.4 });
+      .stroke({ width: 1, color: 0x0f172a, alpha: 0.5 });
+    // Cordinha presa no teto da placa
+    signBg
+      .rect(signX + 3, signY - 3, 1, 3)
+      .fill({ color: 0x0f172a, alpha: 0.5 });
+    signBg
+      .rect(signX + signW - 4, signY - 3, 1, 3)
+      .fill({ color: 0x0f172a, alpha: 0.5 });
+    label.position.set(doorX + doorW / 2, signY + 2);
     r.container.addChild(signBg);
     r.container.addChild(label);
 
@@ -419,7 +481,7 @@ export class Office extends Container {
     switch (r.decor) {
       case 'computers': {
         const n = Math.max(1, r.agents.length);
-        const slots = computeSlots(n, r.width, r.x, r.floorY);
+        const slots = computeSlots(n, r.width, r.x, r.floorY, r.ceilingY);
         r.animState.cursors = [];
         for (const [sx] of slots) {
           const g = new Graphics();
@@ -614,27 +676,53 @@ export class Office extends Container {
   private allocateAgents(r: Room) {
     const n = r.agents.length;
     if (n === 0) return;
-    const slots = computeSlots(n, r.width, r.x, r.floorY);
+    // Reserva o canto inferior direito (porta + placa) — descontamos da largura útil
+    // para que nenhum agente pise na placa.
+    const DOOR_RESERVE = 46;
+    const usableWidth = Math.max(this.MIN_ROOM_W / 2, r.width - DOOR_RESERVE);
+    const slots = computeSlots(n, usableWidth, r.x, r.floorY, r.ceilingY);
     r.agents.forEach((name, i) => {
       this.positions.set(name, slots[i] || [r.x + r.width / 2, r.floorY - 30]);
     });
   }
 }
 
+// Reservado para a placa do departamento no teto + folga para a cabeça do sprite.
+const DEPT_LABEL_RESERVE = 48;
+
 // distribui N slots dentro da sala — em linha, com wrap para outra fileira se não couber.
-function computeSlots(n: number, width: number, startX: number, floorY: number): [number, number][] {
+// Respeita um topo mínimo para não colidir com a placa do departamento.
+function computeSlots(
+  n: number,
+  width: number,
+  startX: number,
+  floorY: number,
+  ceilingY: number,
+): [number, number][] {
   const pad = 18;
   const slotW = 56;
+  const rowH = 56;
   const maxCols = Math.max(1, Math.floor((width - pad * 2) / slotW));
-  const cols = Math.min(n, maxCols);
-  const rows = Math.ceil(n / cols);
+  const minTopY = ceilingY + DEPT_LABEL_RESERVE;
+
+  // Calcula cols/rows tentando caber 3 rows no máximo; se não couber, espreme colunas.
+  let cols = Math.min(n, maxCols);
+  let rows = Math.ceil(n / cols);
+  const baseTop = (r: number) => floorY - 30 - (r - 1) * rowH;
+  while (rows > 1 && baseTop(rows) < minTopY && cols < n) {
+    cols = Math.min(n, cols + 1);
+    rows = Math.ceil(n / cols);
+  }
+
   const cellW = (width - pad * 2) / cols;
   const out: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = startX + pad + cellW * (col + 0.5);
-    const y = floorY - 30 - (rows - 1 - row) * 56;
+    let y = floorY - 30 - (rows - 1 - row) * rowH;
+    // Última garantia: nunca deixar um slot invadir a placa do departamento.
+    if (y < minTopY) y = minTopY;
     out.push([x, y]);
   }
   return out;

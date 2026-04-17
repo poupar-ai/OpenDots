@@ -22,6 +22,9 @@ const path     = require('path');
 const readline = require('readline');
 
 const { findProjectRoot, MEM_DIR_NAME } = require('./lib.cjs');
+const bp = require('./best-practices.cjs');
+const skillsInstall = require('./skills-install.cjs');
+const ideAdapters   = require('./ide-adapters.cjs');
 
 const SEEDS_DIR = path.join(__dirname, '..', 'seeds');
 
@@ -128,7 +131,7 @@ function filterAgents(agents, onlyStr, excludeStr) {
 
 // ── Apply ────────────────────────────────────────────────────────────────────
 
-function apply({ ref, projectRoot, only, exclude, overwrite }) {
+function apply({ ref, projectRoot, only, exclude, overwrite, skills, ide }) {
   const { dir: packDir, manifest: src } = loadPackRef(ref);
 
   const memDir = path.join(projectRoot, MEM_DIR_NAME);
@@ -177,9 +180,52 @@ function apply({ ref, projectRoot, only, exclude, overwrite }) {
   if (!target.oracle  && src.oracle)  target.oracle  = src.oracle;
   if (!target.rule    && src.rule)    target.rule    = src.rule;
 
+  // Rastreia origem dos agentes pro UI saber onde propagar edições (ex: autonomia).
+  // Formato: _meta.agent_origin[<agente>] = { category, slug }
+  const [seedCategory, seedSlug] = (ref || '').split('/');
+  if (seedCategory && seedSlug) {
+    if (!target._meta) target._meta = {};
+    if (!target._meta.agent_origin) target._meta.agent_origin = {};
+    for (const name of Object.keys(srcAgents)) {
+      target._meta.agent_origin[name] = { category: seedCategory, slug: seedSlug };
+    }
+  }
+
   fs.writeFileSync(targetManifestPath, JSON.stringify(target, null, 2) + '\n');
 
-  return { added, replaced, skipped, mdCopied, mdSkipped, memDir };
+  // Best-practices — pack-level (meta.best_practices) + agent-level (cfg.best_practices).
+  const packMeta = readMeta(packDir);
+  const practiceIds = new Set([...(packMeta.best_practices || [])]);
+  for (const cfg of Object.values(srcAgents)) {
+    for (const id of cfg.best_practices || []) practiceIds.add(id);
+  }
+  const practicesReport = practiceIds.size
+    ? bp.applyPractices({ ids: [...practiceIds], memDir, overwrite })
+    : { copied: [], preserved: [], missing: [] };
+
+  // Skills — opt-in. Se `skills` é lista (mesmo vazia), aplica filtro; se
+  // true, aplica todas; se undefined/false, pula.
+  let skillsReport = { copied: [], preserved: [], mcp_added: [], mcp_preserved: [] };
+  if (skills) {
+    const [category, pack] = ref.split('/');
+    const names = Array.isArray(skills) ? skills : null;
+    skillsReport = skillsInstall.applySkills({
+      category, pack, names, memDir, projectRoot, overwrite,
+    });
+  }
+
+  // IDE adapter — opt-in. `ide` é string: claude-code | cursor | vscode-copilot | codex
+  let ideReport = null;
+  if (ide) {
+    ideReport = ideAdapters.apply({ ide, memDir, projectRoot });
+  }
+
+  return {
+    added, replaced, skipped, mdCopied, mdSkipped, memDir,
+    practices: practicesReport,
+    skills:    skillsReport,
+    ide:       ideReport,
+  };
 }
 
 // ── Pretty --list ────────────────────────────────────────────────────────────
@@ -209,6 +255,9 @@ function printResult(ref, r) {
   if (r.skipped.length)   console.log(`  = existentes (use --overwrite): ${r.skipped.join(', ')}`);
   if (r.mdCopied.length)  console.log(`  📄 contextos copiados: ${r.mdCopied.length}`);
   if (r.mdSkipped.length) console.log(`  = contextos preservados: ${r.mdSkipped.length}`);
+  if (r.practices?.copied?.length)    console.log(`  📚 práticas aplicadas: ${r.practices.copied.join(', ')}`);
+  if (r.practices?.preserved?.length) console.log(`  = práticas preservadas: ${r.practices.preserved.join(', ')}`);
+  if (r.practices?.missing?.length)   console.log(`  ! práticas não encontradas: ${r.practices.missing.join(', ')}`);
 }
 
 // ── Wizard ───────────────────────────────────────────────────────────────────

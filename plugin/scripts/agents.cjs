@@ -25,6 +25,12 @@ const DIR      = 'agents';
 //                 Diagnostica e escala ao Manager — não corrige sozinho.
 const AGENT_TYPES = new Set(['core', 'specialist', 'integrator', 'motor', 'firefighter']);
 
+// Níveis de autonomia:
+//   low    — escala quase tudo. Só responde factual sozinho.
+//   medium — decide em tarefa clara/reversível; escala ambíguo/consequência.
+//   high   — decide e executa; só escala pelos casos listados em call_human_when.
+const AUTONOMY_LEVELS = new Set(['low', 'medium', 'high']);
+
 const DEFAULT_MANIFEST = {
   version: 1,
   manager: 'manager',
@@ -39,7 +45,16 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/manager.md',
       tools: ['Task', 'Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob'],
       mcps:  [],
-      can_talk_to: ['oracle', 'architect', 'reviewer', 'tester', 'designer']
+      can_talk_to: ['oracle', 'architect', 'reviewer', 'tester', 'designer'],
+      autonomy: {
+        level: 'high',
+        call_human_when: [
+          'decisão envolve gastar dinheiro da empresa',
+          'mudança vai pra produção',
+          'decisão muda roadmap ou estratégia',
+          'dois especialistas discordam e o manager não tem dados para decidir'
+        ]
+      }
     },
     oracle: {
       type: 'core',
@@ -49,7 +64,13 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/oracle.md',
       tools: ['Read', 'Grep', 'Glob'],
       mcps:  [],
-      can_talk_to: ['manager']
+      can_talk_to: ['manager'],
+      autonomy: {
+        level: 'high',
+        call_human_when: [
+          'pergunta exige acesso a sistema externo que o oracle não tem'
+        ]
+      }
     },
     architect: {
       type: 'specialist',
@@ -59,7 +80,15 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/architect.md',
       tools: ['Read', 'Grep', 'Glob', 'Write'],
       mcps:  [],
-      can_talk_to: ['manager', 'oracle']
+      can_talk_to: ['manager', 'oracle'],
+      autonomy: {
+        level: 'medium',
+        call_human_when: [
+          'decisão arquitetural é irreversível',
+          'trade-off envolve custo recorrente',
+          'mudança de stack ou de linguagem'
+        ]
+      }
     },
     reviewer: {
       type: 'specialist',
@@ -69,7 +98,14 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/reviewer.md',
       tools: ['Read', 'Grep', 'Glob'],
       mcps:  [],
-      can_talk_to: ['manager', 'oracle']
+      can_talk_to: ['manager', 'oracle'],
+      autonomy: {
+        level: 'high',
+        call_human_when: [
+          'falha crítica de segurança que precisa decisão de bloqueio de merge',
+          'PR foge do escopo declarado de forma que afeta outras áreas'
+        ]
+      }
     },
     tester: {
       type: 'specialist',
@@ -79,7 +115,13 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/tester.md',
       tools: ['Read', 'Write', 'Edit', 'Bash', 'Grep'],
       mcps:  [],
-      can_talk_to: ['manager', 'oracle']
+      can_talk_to: ['manager', 'oracle'],
+      autonomy: {
+        level: 'high',
+        call_human_when: [
+          'teste revela bug em código já em produção'
+        ]
+      }
     },
     designer: {
       type: 'specialist',
@@ -89,7 +131,14 @@ const DEFAULT_MANIFEST = {
       context_file: 'agents/designer.md',
       tools: ['Read', 'Write', 'Edit', 'Grep', 'Glob'],
       mcps:  [],
-      can_talk_to: ['manager']
+      can_talk_to: ['manager'],
+      autonomy: {
+        level: 'medium',
+        call_human_when: [
+          'mudança visual afeta identidade de marca',
+          'decisão de UX que muda fluxo principal do produto'
+        ]
+      }
     }
   }
 };
@@ -472,6 +521,58 @@ function addAgent(memDir, name, config) {
   return cfg.agents[name];
 }
 
+// ── Autonomia ─────────────────────────────────────────────────────────────────
+
+function normalizeAutonomy(input) {
+  if (input === null) return null; // permite limpar
+  if (!input || typeof input !== 'object') {
+    throw new Error('autonomy precisa ser objeto { level, call_human_when } ou null');
+  }
+  const level = input.level;
+  if (!AUTONOMY_LEVELS.has(level)) {
+    throw new Error(`autonomy.level inválido. Use: ${[...AUTONOMY_LEVELS].join(', ')}`);
+  }
+  const raw = Array.isArray(input.call_human_when) ? input.call_human_when : [];
+  const call_human_when = raw
+    .map(s => typeof s === 'string' ? s.trim() : '')
+    .filter(Boolean);
+  return { level, call_human_when };
+}
+
+function updateAutonomy(memDir, name, autonomy) {
+  const cfg = loadManifest(memDir);
+  if (!cfg || !cfg.agents || !cfg.agents[name]) {
+    throw new Error(`agente "${name}" não existe em ${manifestPath(memDir)}`);
+  }
+  const normalized = normalizeAutonomy(autonomy);
+  if (normalized === null) {
+    delete cfg.agents[name].autonomy;
+  } else {
+    cfg.agents[name].autonomy = normalized;
+  }
+  saveManifest(memDir, cfg);
+  return cfg.agents[name];
+}
+
+// Propaga autonomia ao arquivo de seed (template). `seedAgentsJsonPath` é o
+// caminho absoluto pro `plugin/seeds/<cat>/<slug>/agents.json`. Retorna o
+// agents.json atualizado, ou null se o agente não existir no seed.
+function propagateAutonomyToSeed(seedAgentsJsonPath, name, autonomy) {
+  if (!fs.existsSync(seedAgentsJsonPath)) {
+    throw new Error(`seed agents.json não encontrado: ${seedAgentsJsonPath}`);
+  }
+  const seed = JSON.parse(fs.readFileSync(seedAgentsJsonPath, 'utf8'));
+  if (!seed.agents || !seed.agents[name]) return null;
+  const normalized = normalizeAutonomy(autonomy);
+  if (normalized === null) {
+    delete seed.agents[name].autonomy;
+  } else {
+    seed.agents[name].autonomy = normalized;
+  }
+  fs.writeFileSync(seedAgentsJsonPath, JSON.stringify(seed, null, 2) + '\n');
+  return seed.agents[name];
+}
+
 function removeAgent(memDir, name) {
   const cfg = loadManifest(memDir);
   if (!cfg || !cfg.agents[name]) return false;
@@ -494,12 +595,16 @@ module.exports = {
   buildInjectionBlock,
   addAgent,
   removeAgent,
+  updateAutonomy,
+  propagateAutonomyToSeed,
+  normalizeAutonomy,
   integratorTemplate,
   motorTemplate,
   firefighterTemplate,
   manifestPath,
   agentsDir,
   AGENT_TYPES,
+  AUTONOMY_LEVELS,
   DEFAULT_MANIFEST,
   DEFAULT_MINI_CONTEXTS
 };

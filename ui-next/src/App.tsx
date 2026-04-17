@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Brain, LogOut, Users, Package } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { ModulesPanel } from '@/panels/ModulesPanel';
@@ -9,6 +9,10 @@ import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
 import { HumansPanel } from '@/panels/HumansPanel';
 import { MyChatsPanel } from '@/panels/MyChatsPanel';
 import { SeedsPanel } from '@/panels/SeedsPanel';
+import { PipelinesPanel } from '@/panels/PipelinesPanel';
+import { BestPracticesPanel } from '@/panels/BestPracticesPanel';
+import { IdeExportPanel } from '@/panels/IdeExportPanel';
+import { ArchitectPanel } from '@/panels/ArchitectPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -28,6 +32,10 @@ export default function App() {
   const [myChatsOpen, setMyChatsOpen] = useState(false);
   const [humansTick, setHumansTick] = useState(0);
   const [seedsOpen, setSeedsOpen] = useState(false);
+  const [pipelinesOpen, setPipelinesOpen] = useState(false);
+  const [bestPracticesOpen, setBestPracticesOpen] = useState(false);
+  const [ideExportOpen, setIdeExportOpen] = useState(false);
+  const [architectOpen, setArchitectOpen] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
 
@@ -66,6 +74,25 @@ export default function App() {
       {seedsOpen && (
         <SeedsPanel onClose={() => setSeedsOpen(false)} />
       )}
+      {pipelinesOpen && (
+        <PipelinesPanel
+          onClose={() => setPipelinesOpen(false)}
+          meHumanId={humanId}
+          meHumanName={human?.name || null}
+        />
+      )}
+      {bestPracticesOpen && (
+        <BestPracticesPanel onClose={() => setBestPracticesOpen(false)} />
+      )}
+      {ideExportOpen && (
+        <IdeExportPanel onClose={() => setIdeExportOpen(false)} />
+      )}
+      {architectOpen && (
+        <ArchitectPanel
+          onClose={() => setArchitectOpen(false)}
+          onOpenChat={(name) => setSelected(name)}
+        />
+      )}
       {myChatsOpen && humanId && human && (
         <MyChatsPanel
           meId={humanId}
@@ -98,10 +125,46 @@ export default function App() {
             size="sm"
             variant="outline"
             className="ml-2 gap-1.5"
+            onClick={() => setArchitectOpen(true)}
+            title="arquiteto: desenha um time customizado"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> arquiteto
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
             onClick={() => setSeedsOpen(true)}
             title="instalar time de agentes a partir de templates"
           >
             <Package className="h-3.5 w-3.5" /> time
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setPipelinesOpen(true)}
+            title="rodar fluxos reproduzíveis com checkpoints"
+          >
+            <Workflow className="h-3.5 w-3.5" /> pipelines
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setBestPracticesOpen(true)}
+            title="biblioteca de best-practices"
+          >
+            <BookOpen className="h-3.5 w-3.5" /> práticas
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setIdeExportOpen(true)}
+            title="exportar agentes pro formato de cada IDE"
+          >
+            <Code2 className="h-3.5 w-3.5" /> ide
           </Button>
           {human && (
             <Button

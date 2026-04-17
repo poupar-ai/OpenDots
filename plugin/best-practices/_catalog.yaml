@@ -1,0 +1,56 @@
+version: 1
+# Best-practices são conhecimento de domínio injetável nos agentes.
+# Cada entrada aponta pra um diretório com practice.md (conteúdo) e
+# meta.yaml opcional. Seeds declaram IDs em best_practices: [...] e
+# o installer copia pra memDir/best-practices/.
+
+practices:
+  - id: copywriting
+    name: Copywriting e escrita persuasiva
+    scope: content
+    tags: [writing, marketing, sales]
+    when_to_use: |
+      Para agentes que escrevem landing, anúncios, e-mails de venda,
+      mensagens de WhatsApp e textos orientados a conversão.
+    not_for: technical-writing, internal-docs
+    dir: copywriting
+
+  - id: code-review
+    name: Revisão de código
+    scope: engineering
+    tags: [review, quality, security]
+    when_to_use: |
+      Para agentes que revisam PRs, apontam anti-padrões, caçam falhas
+      de segurança e validam testes.
+    not_for: code-generation
+    dir: code-review
+
+  - id: seller-onboarding
+    name: Onboarding de vendedor
+    scope: product
+    tags: [onboarding, seller, e-commerce]
+    when_to_use: |
+      Para agentes que guiam o vendedor no primeiro uso — KYC, criação
+      de loja, cadastro de produtos, configuração de pagamento.
+    not_for: support, billing
+    dir: seller-onboarding
+
+  - id: async-concurrency
+    name: Concorrência assíncrona
+    scope: engineering
+    tags: [async, performance, backend]
+    when_to_use: |
+      Para agentes que escrevem código Python async/await, workers,
+      filas SQS, locks distribuídos, idempotency.
+    not_for: frontend, sync-scripts
+    dir: async-concurrency
+
+  - id: accessibility
+    name: Acessibilidade (WCAG AA)
+    scope: frontend
+    tags: [a11y, wcag, inclusion]
+    when_to_use: |
+      Para agentes que criam componentes React, páginas Next.js, ARIA,
+      contraste, navegação por teclado, leitores de tela.
+    not_for: backend, cli
+    dir: accessibility

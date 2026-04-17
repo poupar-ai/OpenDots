@@ -1,4 +1,10 @@
 export type AgentType = 'core' | 'specialist' | 'integrator' | 'motor' | 'firefighter';
+export type AutonomyLevel = 'low' | 'medium' | 'high';
+
+export interface Autonomy {
+  level: AutonomyLevel;
+  call_human_when: string[];
+}
 
 export interface AgentCfg {
   type?: AgentType;
@@ -19,10 +25,19 @@ export interface AgentCfg {
     cooldown_seconds?: number;
     max_triages_per_hour?: number;
   };
+  autonomy?: Autonomy;
+}
+
+export interface AgentOrigin {
+  category: string;
+  slug: string;
 }
 
 export interface Manifest {
   agents: Record<string, AgentCfg>;
+  _meta?: {
+    agent_origin?: Record<string, AgentOrigin>;
+  };
 }
 
 export interface AgentLogSummary {

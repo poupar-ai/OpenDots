@@ -22,6 +22,8 @@ export interface SeedApplyInput {
   only?: string[];
   exclude?: string[];
   overwrite?: boolean;
+  skills?: boolean | string[];
+  ide?: 'claude-code' | 'cursor' | 'vscode-copilot' | 'codex' | null;
 }
 
 export interface SeedApplyResult {
@@ -32,6 +34,25 @@ export interface SeedApplyResult {
   mdCopied: string[];
   mdSkipped: string[];
   memDir: string;
+  practices?: { copied: string[]; preserved: string[]; missing: string[] };
+  skills?: { copied: string[]; preserved: string[]; mcp_added: string[]; mcp_preserved: string[] };
+  ide?: { written: string[] } | null;
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  scope: string;
+  version: string;
+  requires_mcp: boolean;
+  env: string[];
+  has_mcp: boolean;
+}
+
+export async function listSkillsInPack(category: string, pack: string): Promise<{ skills: SkillSummary[] }> {
+  const r = await fetch(`/api/skills?category=${encodeURIComponent(category)}&pack=${encodeURIComponent(pack)}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
 }
 
 export async function listSeeds(): Promise<SeedsListResponse> {

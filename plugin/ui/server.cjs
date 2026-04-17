@@ -7,6 +7,11 @@ const { spawn } = require('child_process');
 const { findProjectRoot, getMemDir, readJsonl } = require('../scripts/lib.cjs');
 const agents = require('../scripts/agents.cjs');
 const seed = require('../scripts/seed.cjs');
+const bestPractices = require('../scripts/best-practices.cjs');
+const pipelines = require('../scripts/pipelines.cjs');
+const architect = require('../scripts/architect.cjs');
+const skills = require('../scripts/skills-install.cjs');
+const ideAdapters = require('../scripts/ide-adapters.cjs');
 
 const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
 const cwd         = process.cwd();
@@ -783,6 +788,25 @@ function readBody(req) {
   });
 }
 
+function autonomyBlock(autonomy) {
+  if (!autonomy || typeof autonomy !== 'object' || !autonomy.level) return '';
+  const levelTxt = {
+    low:    'baixa — escale quase tudo ao Engenheiro. Responda perguntas factuais sozinho; para qualquer ação com consequência, peça decisão.',
+    medium: 'média — decida sozinho em tarefas claras e reversíveis. Se houver ambiguidade, duas alternativas igualmente válidas, ou consequência não-trivial, **chame o Engenheiro** antes de agir.',
+    high:   'alta — decida e execute sozinho sempre que possível. Só interrompa para chamar o Engenheiro nos casos listados abaixo.'
+  }[autonomy.level] || `${autonomy.level} (nível customizado)`;
+  const whens = Array.isArray(autonomy.call_human_when) ? autonomy.call_human_when.filter(s => typeof s === 'string' && s.trim()) : [];
+  const whenList = whens.length
+    ? '\n\n**Chame o Engenheiro sempre que:**\n' + whens.map(w => `- ${w}`).join('\n')
+    : '';
+  return `
+
+## Sua autonomia
+Nível: **${autonomy.level}** — ${levelTxt}${whenList}
+
+Quando for o caso de chamar o Engenheiro, responda em UMA linha no formato: **"Preciso de decisão humana: <o quê>. Alternativas que vejo: <lista curta>."** e pare. Não aja sem resposta.`;
+}
+
 function composePrompt(agent, agentCfg, miniContext, userMessage, history, opts = {}) {
   const isManager = agent === 'manager';
   const fromAgent = opts.fromAgent || null;
@@ -896,6 +920,7 @@ Trabalho é executado ou não é feito. Não existe "quase", "preparando", "fica
 ${isManager
   ? '- Você orquestra: decide quem faz o quê e responde com a decisão consolidada.'
   : '- Se o pedido é decisão ampla de projeto (stack, roadmap, valores, anti-padrões), responda que isso deve passar pelo Manager — **não decida sozinho**.'}
+${autonomyBlock(agentCfg.autonomy)}
 
 ## Persistência de anotações (project-mem)
 Quando o Engenheiro disser "anote", "registre", "salve" ou equivalente, **não pergunte onde** — classifique e grave. Siga a hierarquia do README:
@@ -990,6 +1015,48 @@ async function handleHandoff(req, res) {
   enqueueAutoTurn(to, from, message);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true, ts, to, auto_queued: true }));
+}
+
+async function handleAgentAutonomy(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { level, call_human_when, propagate_seed, seed_category, seed_slug } = body || {};
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+
+  let updated;
+  try {
+    updated = agents.updateAutonomy(memDir, agentName, { level, call_human_when });
+  } catch (err) {
+    return sendJson(res, 400, { error: err.message });
+  }
+
+  let propagated = null;
+  if (propagate_seed) {
+    const origin = manifest._meta && manifest._meta.agent_origin && manifest._meta.agent_origin[agentName];
+    const cat = seed_category || (origin && origin.category);
+    const slug = seed_slug || (origin && origin.slug);
+    if (!cat || !slug) {
+      return sendJson(res, 400, {
+        error: 'propagate_seed=true mas origem do seed desconhecida. Envie seed_category + seed_slug explicitamente.',
+        updated,
+      });
+    }
+    const seedPath = path.join(seed.SEEDS_DIR, cat, slug, 'agents.json');
+    try {
+      const r = agents.propagateAutonomyToSeed(seedPath, agentName, { level, call_human_when });
+      propagated = r ? { category: cat, slug, seedPath } : { skipped: true, reason: 'agente não existe no seed' };
+    } catch (err) {
+      return sendJson(res, 500, { error: `propagação falhou: ${err.message}`, updated });
+    }
+  }
+
+  sendJson(res, 200, { ok: true, agent: agentName, updated, propagated });
 }
 
 function handleChatHistory(url, res) {
@@ -1203,7 +1270,7 @@ async function handleSeedsApply(req, res) {
   const raw = await readBody(req);
   let body;
   try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
-  const { ref, only, exclude, overwrite } = body || {};
+  const { ref, only, exclude, overwrite, skills: skillsInput, ide } = body || {};
   if (!ref || typeof ref !== 'string' || !ref.includes('/')) {
     return sendJson(res, 400, { error: 'need ref as "<categoria>/<pack>"' });
   }
@@ -1216,11 +1283,182 @@ async function handleSeedsApply(req, res) {
       only: onlyStr,
       exclude: excludeStr,
       overwrite: !!overwrite,
+      skills: skillsInput,
+      ide: ide || null,
     });
     sendJson(res, 200, { ok: true, ...r });
   } catch (e) {
     sendJson(res, 400, { error: e.message });
   }
+}
+
+// ── Best-practices ──────────────────────────────────────────────────────────
+
+function handleBestPracticesList(res) {
+  const available = bestPractices.listPractices();
+  const installedDir = path.join(memDir, 'best-practices');
+  const installed = fs.existsSync(installedDir)
+    ? fs.readdirSync(installedDir).filter((d) => {
+        const p = path.join(installedDir, d);
+        return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'practice.md'));
+      })
+    : [];
+  sendJson(res, 200, {
+    available: available.map(p => ({ ...p, installed: installed.includes(p.id) })),
+    installed,
+  });
+}
+
+function handleBestPracticeGet(id, res) {
+  const installedPath = path.join(memDir, 'best-practices', id, 'practice.md');
+  const content = fs.existsSync(installedPath)
+    ? fs.readFileSync(installedPath, 'utf8')
+    : bestPractices.loadPracticeContent(id);
+  if (!content) return sendJson(res, 404, { error: 'practice not found' });
+  sendJson(res, 200, { id, content, installed: fs.existsSync(installedPath) });
+}
+
+async function handleBestPracticeApply(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { ids, overwrite } = body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return sendJson(res, 400, { error: 'ids must be non-empty array' });
+  }
+  try {
+    const r = bestPractices.applyPractices({ ids, memDir, overwrite: !!overwrite });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+// ── Pipelines ───────────────────────────────────────────────────────────────
+
+function handlePipelinesList(res) {
+  sendJson(res, 200, { pipelines: pipelines.list(memDir) });
+}
+
+function handlePipelineGet(id, res) {
+  const def = pipelines.loadDef(memDir, id);
+  if (!def) return sendJson(res, 404, { error: 'pipeline not found' });
+  sendJson(res, 200, def);
+}
+
+async function handlePipelineInstall(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { id, overwrite } = body || {};
+  if (!id) return sendJson(res, 400, { error: 'need id' });
+  try {
+    const r = pipelines.install({ id, memDir, overwrite: !!overwrite });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+function handlePipelineState(res) {
+  const state = pipelines.loadState(memDir);
+  if (!state) return sendJson(res, 200, { state: null });
+  sendJson(res, 200, { state });
+}
+
+async function handlePipelineStart(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { id, title, started_by } = body || {};
+  if (!id) return sendJson(res, 400, { error: 'need id' });
+  try {
+    const state = pipelines.start({ memDir, id, title, startedBy: started_by });
+    sendJson(res, 200, { state });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+async function handlePipelineAdvance(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { step_id, note, decided_by, decision } = body || {};
+  if (!step_id) return sendJson(res, 400, { error: 'need step_id' });
+  try {
+    const state = pipelines.advance({
+      memDir, stepId: step_id, note, decidedBy: decided_by, decision,
+    });
+    sendJson(res, 200, { state });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+async function handlePipelineCancel(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { body = {}; }
+  const state = pipelines.cancel({ memDir, reason: body.reason });
+  sendJson(res, 200, { state });
+}
+
+function handlePipelineClear(res) {
+  pipelines.clear({ memDir });
+  sendJson(res, 200, { ok: true });
+}
+
+// ── Architect ───────────────────────────────────────────────────────────────
+
+async function handleArchitectEnsure(_req, res) {
+  try {
+    architect.ensureInstalled({ memDir });
+    sendJson(res, 200, { ok: true });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+async function handleArchitectGenerate(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  try {
+    const r = architect.generateSeed(body || {});
+    sendJson(res, 200, r);
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+// ── Skills ──────────────────────────────────────────────────────────────────
+
+function handleSkillsList(url, res) {
+  const category = url.searchParams.get('category');
+  const pack     = url.searchParams.get('pack');
+  if (!category || !pack) return sendJson(res, 400, { error: 'need category and pack' });
+  sendJson(res, 200, { skills: skills.listSkillsInPack(category, pack) });
+}
+
+// ── IDE adapters ────────────────────────────────────────────────────────────
+
+async function handleIdeApply(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
+  const { ide } = body || {};
+  if (!ide) return sendJson(res, 400, { error: 'need ide' });
+  try {
+    const r = ideAdapters.apply({ ide, memDir, projectRoot });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+function handleIdeList(res) {
+  sendJson(res, 200, { supported: ideAdapters.SUPPORTED });
 }
 
 function handleHumansList(res) {
@@ -1453,6 +1691,12 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  const autonomyMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/autonomy$/);
+  if (autonomyMatch && req.method === 'PATCH') {
+    const agentName = decodeURIComponent(autonomyMatch[1]);
+    handleAgentAutonomy(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
 
   // Humanos
   if (url.pathname === '/api/humans' && req.method === 'GET') {
@@ -1494,6 +1738,66 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/seeds/apply' && req.method === 'POST') {
     handleSeedsApply(req, res).catch((e) => sendJson(res, 500, { error: e.message }));
     return;
+  }
+
+  // Best-practices
+  if (url.pathname === '/api/best-practices' && req.method === 'GET') {
+    handleBestPracticesList(res); return;
+  }
+  if (url.pathname === '/api/best-practices/apply' && req.method === 'POST') {
+    handleBestPracticeApply(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  const bpMatch = url.pathname.match(/^\/api\/best-practices\/([a-z0-9-]+)$/);
+  if (bpMatch && req.method === 'GET') {
+    handleBestPracticeGet(bpMatch[1], res); return;
+  }
+
+  // Pipelines
+  if (url.pathname === '/api/pipelines' && req.method === 'GET') {
+    handlePipelinesList(res); return;
+  }
+  if (url.pathname === '/api/pipelines/install' && req.method === 'POST') {
+    handlePipelineInstall(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/pipelines/state' && req.method === 'GET') {
+    handlePipelineState(res); return;
+  }
+  if (url.pathname === '/api/pipelines/start' && req.method === 'POST') {
+    handlePipelineStart(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/pipelines/advance' && req.method === 'POST') {
+    handlePipelineAdvance(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/pipelines/cancel' && req.method === 'POST') {
+    handlePipelineCancel(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/pipelines/clear' && req.method === 'POST') {
+    handlePipelineClear(res); return;
+  }
+  const pipeGetMatch = url.pathname.match(/^\/api\/pipelines\/([a-z0-9-]+)$/);
+  if (pipeGetMatch && req.method === 'GET') {
+    handlePipelineGet(pipeGetMatch[1], res); return;
+  }
+
+  // Architect
+  if (url.pathname === '/api/architect/ensure' && req.method === 'POST') {
+    handleArchitectEnsure(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+  if (url.pathname === '/api/architect/generate' && req.method === 'POST') {
+    handleArchitectGenerate(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+  }
+
+  // Skills
+  if (url.pathname === '/api/skills' && req.method === 'GET') {
+    handleSkillsList(url, res); return;
+  }
+
+  // IDE adapters
+  if (url.pathname === '/api/ides' && req.method === 'GET') {
+    handleIdeList(res); return;
+  }
+  if (url.pathname === '/api/ides/apply' && req.method === 'POST') {
+    handleIdeApply(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
   }
 
   if (url.pathname === '/api/agents/log' && req.method === 'GET') {

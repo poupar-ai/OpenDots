@@ -28,7 +28,14 @@
         "devs_techlead",
         "internal_firefighter"
       ],
-      "type": "core"
+      "type": "core",
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "qualquer ação que afete dados financeiros",
+          "decisão de produto que muda preço ou promessa ao comprador"
+        ]
+      }
     },
     "oracle": {
       "emoji": "🔮",
@@ -44,7 +51,13 @@
       "can_talk_to": [
         "manager"
       ],
-      "type": "core"
+      "type": "core",
+      "autonomy": {
+        "level": "high",
+        "call_human_when": [
+          "pergunta exige acesso a sistema externo que o oracle não tem"
+        ]
+      }
     },
     "architect": {
       "emoji": "🏛",
@@ -62,7 +75,15 @@
         "manager",
         "oracle"
       ],
-      "type": "specialist"
+      "type": "specialist",
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "decisão arquitetural é irreversível",
+          "trade-off envolve custo recorrente",
+          "mudança de stack ou de linguagem"
+        ]
+      }
     },
     "reviewer": {
       "emoji": "🔍",
@@ -79,7 +100,14 @@
         "manager",
         "oracle"
       ],
-      "type": "specialist"
+      "type": "specialist",
+      "autonomy": {
+        "level": "high",
+        "call_human_when": [
+          "falha crítica de segurança que precisa decisão de bloqueio de merge",
+          "PR foge do escopo declarado de forma que afeta outras áreas"
+        ]
+      }
     },
     "tester": {
       "emoji": "🧪",
@@ -98,7 +126,13 @@
         "manager",
         "oracle"
       ],
-      "type": "specialist"
+      "type": "specialist",
+      "autonomy": {
+        "level": "high",
+        "call_human_when": [
+          "teste revela bug em código já em produção"
+        ]
+      }
     },
     "designer": {
       "emoji": "🎨",
@@ -116,7 +150,14 @@
       "can_talk_to": [
         "manager"
       ],
-      "type": "specialist"
+      "type": "specialist",
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "mudança visual afeta identidade de marca",
+          "decisão de UX que muda fluxo principal do produto"
+        ]
+      }
     },
     "asaas": {
       "type": "integrator",
@@ -132,7 +173,13 @@
       "mcps": [],
       "can_talk_to": [
         "manager"
-      ]
+      ],
+      "autonomy": {
+        "level": "high",
+        "call_human_when": [
+          "pergunta exige credencial de produção ou dado sensível do gateway"
+        ]
+      }
     },
     "email_sender": {
       "type": "motor",
@@ -149,7 +196,15 @@
       ],
       "can_talk_to": [
         "manager"
-      ]
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "qualquer envio em massa",
+          "envio para lista não previamente aprovada",
+          "conteúdo com valor monetário ou promessa de compra"
+        ]
+      }
     },
     "api_auth_firefighter": {
       "type": "firefighter",
@@ -178,6 +233,13 @@
           "DD_APP_KEY",
           "DD_SITE"
         ]
+      },
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "incidente crítico em produção",
+          "padrão de erro novo sem runbook"
+        ]
       }
     },
     "internal_firefighter": {
@@ -194,7 +256,14 @@
       "can_talk_to": [
         "manager",
         "email_sender"
-      ]
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "escalada envolve mais de uma equipe",
+          "o manager está bloqueado e precisa decisão humana"
+        ]
+      }
     },
     "devs_techlead": {
       "type": "specialist",
@@ -203,9 +272,30 @@
       "model": "opus",
       "role": "Líder técnico da squad. Full-stack. Decide contratos FE↔BE, coordena Seniors, reporta ao Manager.",
       "context_file": "agents/devs_techlead.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Task"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Task"
+      ],
       "mcps": [],
-      "can_talk_to": ["manager", "devs_senior_fe", "devs_senior_be", "architect", "oracle"]
+      "can_talk_to": [
+        "manager",
+        "devs_senior_fe",
+        "devs_senior_be",
+        "architect",
+        "oracle"
+      ],
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "mudança de contrato público de API",
+          "decisão que afeta outra squad",
+          "escolha entre duas abordagens técnicas igualmente válidas"
+        ]
+      }
     },
     "devs_senior_fe": {
       "type": "specialist",
@@ -214,9 +304,29 @@
       "model": "sonnet",
       "role": "Dev Sênior Frontend. Tarefas complexas, review de Pleno FE, define padrões de componentes e estado.",
       "context_file": "agents/devs_senior_fe.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_techlead", "devs_pleno_fe", "designer", "oracle"]
+      "can_talk_to": [
+        "devs_techlead",
+        "devs_pleno_fe",
+        "designer",
+        "oracle"
+      ],
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "mudança estrutural de estado global",
+          "adoção de biblioteca nova",
+          "refatoração ampla fora do escopo do pedido"
+        ]
+      }
     },
     "devs_senior_be": {
       "type": "specialist",
@@ -225,9 +335,29 @@
       "model": "sonnet",
       "role": "Dev Sênior Backend. Tarefas complexas, review de Pleno BE, define padrões de módulos/migrations/workers.",
       "context_file": "agents/devs_senior_be.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_techlead", "devs_pleno_be", "architect", "oracle"]
+      "can_talk_to": [
+        "devs_techlead",
+        "devs_pleno_be",
+        "architect",
+        "oracle"
+      ],
+      "autonomy": {
+        "level": "medium",
+        "call_human_when": [
+          "migration que altera tabela com dados em produção",
+          "mudança de contrato público de endpoint",
+          "adição de dependência externa"
+        ]
+      }
     },
     "devs_pleno_fe": {
       "type": "specialist",
@@ -236,9 +366,27 @@
       "model": "sonnet",
       "role": "Dev Pleno Frontend. Executa dentro de padrões estabelecidos, mentoria do Júnior FE.",
       "context_file": "agents/devs_pleno_fe.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_senior_fe", "devs_junior_fe", "internal_firefighter"]
+      "can_talk_to": [
+        "devs_senior_fe",
+        "devs_junior_fe",
+        "internal_firefighter"
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "tarefa exige decisão fora do padrão estabelecido pelo Senior",
+          "aparece ambiguidade de requisito"
+        ]
+      }
     },
     "devs_pleno_be": {
       "type": "specialist",
@@ -247,9 +395,27 @@
       "model": "sonnet",
       "role": "Dev Pleno Backend. Executa CRUD/endpoints dentro de padrões, mentoria do Júnior BE.",
       "context_file": "agents/devs_pleno_be.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_senior_be", "devs_junior_be", "internal_firefighter"]
+      "can_talk_to": [
+        "devs_senior_be",
+        "devs_junior_be",
+        "internal_firefighter"
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "tarefa exige decisão fora do padrão estabelecido pelo Senior",
+          "aparece ambiguidade de requisito"
+        ]
+      }
     },
     "devs_junior_fe": {
       "type": "specialist",
@@ -258,9 +424,26 @@
       "model": "haiku",
       "role": "Dev Júnior Frontend. Tarefas pequenas, com checklist, sob supervisão do Pleno FE.",
       "context_file": "agents/devs_junior_fe.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_pleno_fe", "internal_firefighter"]
+      "can_talk_to": [
+        "devs_pleno_fe",
+        "internal_firefighter"
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "qualquer decisão fora do checklist explícito",
+          "dúvida sobre requisito ou sobre onde mexer"
+        ]
+      }
     },
     "devs_junior_be": {
       "type": "specialist",
@@ -269,9 +452,26 @@
       "model": "haiku",
       "role": "Dev Júnior Backend. Tarefas pequenas, com checklist, sob supervisão do Pleno BE.",
       "context_file": "agents/devs_junior_be.md",
-      "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],
+      "tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
       "mcps": [],
-      "can_talk_to": ["devs_pleno_be", "internal_firefighter"]
+      "can_talk_to": [
+        "devs_pleno_be",
+        "internal_firefighter"
+      ],
+      "autonomy": {
+        "level": "low",
+        "call_human_when": [
+          "qualquer decisão fora do checklist explícito",
+          "dúvida sobre requisito ou sobre onde mexer"
+        ]
+      }
     }
   }
 }

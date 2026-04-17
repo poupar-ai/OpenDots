@@ -1,0 +1,9 @@
+{
+  "name": "asaas",
+  "type": "http",
+  "url": "https://api.asaas.com/v3",
+  "headers": {
+    "access_token": "${ASAAS_API_KEY}"
+  },
+  "comment": "Skill Asaas — exige ASAAS_API_KEY no ambiente"
+}

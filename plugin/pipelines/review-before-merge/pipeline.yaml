@@ -1,0 +1,29 @@
+id: review-before-merge
+label: Review antes do merge
+description: |
+  Fluxo canônico de review de PR: arquiteto vê escopo, reviewer analisa o
+  diff, tester confirma cobertura. Humano aprova ou devolve.
+tags: [engineering, review, merge]
+steps:
+  - id: scope-check
+    agent: architect
+    label: Validar escopo do PR
+    description: Verifica se o PR se limita ao que propõe.
+  - id: code-review
+    agent: reviewer
+    label: Revisar código
+    description: Aponta anti-padrões, falhas de segurança e sugestões.
+    best_practices: [code-review]
+  - id: tests-audit
+    agent: tester
+    label: Auditar cobertura
+    description: Confirma que há teste para caminho feliz + edge case.
+  - id: checkpoint-approve
+    type: checkpoint
+    label: Aprovar merge
+    description: Humano dá go/no-go após ler relatórios dos agentes.
+    owner: any_human
+  - id: merge
+    agent: manager
+    label: Fazer merge
+    description: Squash + mensagem padronizada + deploy preview.

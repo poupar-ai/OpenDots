@@ -1,0 +1,34 @@
+id: content-carousel
+label: Carrossel de Instagram
+description: |
+  Pesquisa → pauta → copy → design → revisão. Humano aprova depois da copy
+  (antes de gastar tempo de designer).
+tags: [content, marketing, instagram]
+steps:
+  - id: research
+    agent: manager
+    label: Pesquisar tema
+    description: Levanta pontos relevantes, dados e referências.
+  - id: outline
+    agent: architect
+    label: Montar pauta
+    description: Define slides e a mensagem de cada um.
+  - id: copywrite
+    agent: designer
+    label: Escrever copy
+    description: Aplica AIDA ou PAS de acordo com objetivo.
+    best_practices: [copywriting]
+  - id: checkpoint-copy
+    type: checkpoint
+    label: Aprovar copy
+    description: Humano lê antes de partir pra arte.
+    owner: any_human
+  - id: design
+    agent: designer
+    label: Criar artes
+    description: Gera imagens dos slides baseado na copy.
+  - id: review
+    agent: reviewer
+    label: Revisão final
+    description: Checklist de qualidade e acessibilidade.
+    best_practices: [accessibility]

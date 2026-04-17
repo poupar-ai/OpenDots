@@ -1,0 +1,37 @@
+id: seller-onboarding
+label: Onboarding de novo vendedor
+description: |
+  Leva um seller do cadastro até o primeiro produto publicado. Usa checkpoint
+  humano antes do KYC e antes de publicar a loja.
+tags: [seller, onboarding, kyc]
+steps:
+  - id: collect-basics
+    agent: manager
+    label: Coletar dados básicos
+    description: E-mail, nome, celular do seller. Valida formato.
+  - id: kyc-request
+    agent: manager
+    label: Solicitar documentos para KYC
+    description: Gera link de upload e instruções.
+  - id: checkpoint-kyc
+    type: checkpoint
+    label: Aprovar envio ao KYC
+    description: Humano revisa documentos antes de submeter ao Big Data Corp.
+    owner: any_human
+  - id: kyc-submit
+    agent: asaas
+    label: Submeter ao provider de KYC
+    description: Envia docs e obtém score.
+  - id: store-setup
+    agent: designer
+    label: Criar identidade da loja
+    description: Nome, slug, paleta e primeiro produto skeleton.
+  - id: checkpoint-publish
+    type: checkpoint
+    label: Aprovar publicação
+    description: Humano revisa loja antes de ficar pública.
+    owner: any_human
+  - id: publish
+    agent: manager
+    label: Publicar loja
+    description: Ativa URL pública e envia link.

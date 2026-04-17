@@ -7,6 +7,11 @@ export interface HumanSkin {
   pants: number;
 }
 
+export interface HumanPosition {
+  x: number;
+  y: number;
+}
+
 export interface HumanProfile {
   id: string;
   name: string;
@@ -17,6 +22,7 @@ export interface HumanProfile {
   offline_privacy?: { never_share: string[] };
   location?: HumanLocation | null;
   skin?: HumanSkin | null;
+  position?: HumanPosition | null;
   created_at: string;
   last_seen_at?: string | null;
   online?: boolean;
@@ -31,6 +37,7 @@ export interface HumanCreateInput {
   offline_privacy?: { never_share: string[] };
   location?: HumanLocation | null;
   skin?: HumanSkin | null;
+  position?: HumanPosition | null;
 }
 
 export const HUMAN_LOCATIONS: { id: HumanLocation; label: string }[] = [
@@ -105,6 +112,11 @@ export async function heartbeatHuman(id: string): Promise<void> {
   await fetch(`/api/humans/${encodeURIComponent(id)}/heartbeat`, { method: 'POST' });
 }
 
+export async function deleteHuman(id: string): Promise<void> {
+  const r = await fetch(`/api/humans/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 export async function humanHandoff(from: string, to: string, message: string): Promise<void> {
   const r = await fetch('/api/human-handoff', {
     method: 'POST',
@@ -112,6 +124,35 @@ export async function humanHandoff(from: string, to: string, message: string): P
     body: JSON.stringify({ from, to, message }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+export interface AgentChatSummary {
+  agent: string;
+  count: number;
+  last_ts: string | null;
+  last_preview: string;
+  last_role: 'user' | 'agent' | null;
+}
+
+export interface HumanPeerChatSummary {
+  peer_id: string;
+  peer_name: string;
+  count: number;
+  last_ts: string | null;
+  last_preview: string;
+  last_from_me: boolean;
+}
+
+export interface HumanChatsSummary {
+  human_id: string;
+  agent_chats: AgentChatSummary[];
+  human_chats: HumanPeerChatSummary[];
+}
+
+export async function humanChatsSummary(id: string): Promise<HumanChatsSummary> {
+  const r = await fetch(`/api/humans/${encodeURIComponent(id)}/chats`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
 }
 
 export async function humanChatHistory(me: string, withHuman: string): Promise<HumanChatMsg[]> {

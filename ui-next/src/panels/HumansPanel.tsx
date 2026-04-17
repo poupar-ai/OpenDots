@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, X, Users, Ghost } from 'lucide-react';
+import { Send, X, Users, Ghost, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn, fmtTime } from '@/lib/utils';
@@ -7,6 +7,7 @@ import {
   listHumans,
   humanChatHistory,
   humanHandoff,
+  deleteHuman,
   type HumanProfile,
   type HumanChatMsg,
 } from '@/lib/humans';
@@ -79,6 +80,21 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
     finally { setSending(false); }
   }
 
+  async function removeHuman(id: string, name: string) {
+    const ok = window.confirm(
+      `Excluir o perfil de ${name}? O histórico de conversa não é apagado.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteHuman(id);
+      if (selected === id) {
+        setSelected(null);
+        setMessages([]);
+      }
+      await refreshHumans();
+    } catch {}
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
       <div className="flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-xl border bg-white shadow-2xl">
@@ -98,25 +114,42 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
               </p>
             )}
             {humans.map((h) => (
-              <button
+              <div
                 key={h.id}
-                onClick={() => setSelected(h.id)}
                 className={cn(
-                  'flex w-full items-center gap-2 border-b px-3 py-2.5 text-left text-xs hover:bg-slate-50',
+                  'group flex items-center border-b hover:bg-slate-50',
                   selected === h.id && 'bg-primary/5',
                 )}
               >
-                <span
-                  className={cn(
-                    'h-2 w-2 rounded-full',
-                    h.online ? 'bg-emerald-500' : 'bg-slate-300',
+                <button
+                  onClick={() => setSelected(h.id)}
+                  className="flex flex-1 items-center gap-2 px-3 py-2.5 text-left text-xs"
+                >
+                  <span
+                    className={cn(
+                      'h-2 w-2 rounded-full',
+                      h.online ? 'bg-emerald-500' : 'bg-slate-300',
+                    )}
+                  />
+                  <span className="flex-1 truncate font-medium">{h.name}</span>
+                  {!h.online && (
+                    <Ghost className="h-3 w-3 text-slate-400" aria-label="shadow ativa" />
                   )}
-                />
-                <span className="flex-1 truncate font-medium">{h.name}</span>
-                {!h.online && (
-                  <Ghost className="h-3 w-3 text-slate-400" aria-label="shadow ativa" />
-                )}
-              </button>
+                </button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="mr-1.5 h-6 w-6 shrink-0 text-slate-300 opacity-0 hover:text-red-600 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void removeHuman(h.id, h.name);
+                  }}
+                  title="excluir perfil"
+                  aria-label={`excluir ${h.name}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             ))}
           </div>
         </aside>
@@ -141,6 +174,16 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
                     <Ghost className="h-3 w-3" /> shadow responde
                   </Badge>
                 )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="ml-auto h-7 w-7 text-slate-400 hover:text-red-600"
+                  onClick={() => void removeHuman(selectedHuman.id, selectedHuman.name)}
+                  title="excluir perfil"
+                  aria-label="excluir perfil"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </header>
 
               <div

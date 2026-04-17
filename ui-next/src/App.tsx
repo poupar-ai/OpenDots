@@ -7,6 +7,7 @@ import { AgentCanvas } from '@/panels/AgentCanvas';
 import { ChatPanel } from '@/panels/ChatPanel';
 import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
 import { HumansPanel } from '@/panels/HumansPanel';
+import { MyChatsPanel } from '@/panels/MyChatsPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -23,6 +24,7 @@ export default function App() {
   const [chatStreaming, setChatStreaming] = useState(false);
   const [humansOpen, setHumansOpen] = useState(false);
   const [humansPreselected, setHumansPreselected] = useState<string | null>(null);
+  const [myChatsOpen, setMyChatsOpen] = useState(false);
   const [humansTick, setHumansTick] = useState(0);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
@@ -56,6 +58,18 @@ export default function App() {
           onClose={() => {
             setHumansOpen(false);
             setHumansPreselected(null);
+          }}
+        />
+      )}
+      {myChatsOpen && humanId && human && (
+        <MyChatsPanel
+          meId={humanId}
+          meName={human.name}
+          onClose={() => setMyChatsOpen(false)}
+          onOpenAgent={(name) => setSelected(name)}
+          onOpenHuman={(id) => {
+            setHumansPreselected(id);
+            setHumansOpen(true);
           }}
         />
       )}
@@ -130,10 +144,17 @@ export default function App() {
           <AgentCanvas
             agents={agents}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={(n) => setSelected((prev) => (prev === n ? null : n))}
             onHumanSelect={(id) => {
-              setHumansPreselected(id);
-              setHumansOpen(true);
+              if (id === humanId) {
+                setMyChatsOpen((o) => !o);
+              } else if (humansOpen && humansPreselected === id) {
+                setHumansOpen(false);
+                setHumansPreselected(null);
+              } else {
+                setHumansPreselected(id);
+                setHumansOpen(true);
+              }
             }}
             workingAgent={chatStreaming ? selected : null}
             meHumanId={humanId}
@@ -147,6 +168,7 @@ export default function App() {
             agentCfg={agentCfg}
             humanId={humanId}
             humanName={human?.name || null}
+            onClose={() => setSelected(null)}
             onStreamingChange={setChatStreaming}
           />
         </aside>

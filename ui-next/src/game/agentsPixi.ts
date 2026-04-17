@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
 import type { AgentCfg, AgentType, AgentsData } from '@/lib/types';
 import type { HumanProfile } from '@/lib/humans';
+import { updateHuman } from '@/lib/humans';
 import { AgentSprite } from './sprites/AgentSprite';
 import { HumanSprite } from './sprites/HumanSprite';
 import { Office, type DecorKind, type DepartmentInput } from './scene/Office';
@@ -333,6 +334,11 @@ export class AgentCanvas {
         let node = this.humanNodes.get(h.id);
         const isMe = this.meHumanId === h.id;
         const online = h.online !== false;
+        const saved = h.position && typeof h.position.x === 'number' && typeof h.position.y === 'number'
+          ? h.position
+          : null;
+        const initX = saved ? saved.x : pos[0];
+        const initY = saved ? saved.y : pos[1];
         if (!node) {
           const sprite = new HumanSprite(
             h.id,
@@ -340,18 +346,19 @@ export class AgentCanvas {
             h.skin || { skinTone: 0xf1c27d, hair: 0x44403c, shirt: 0x3b82f6, pants: 0x1f2937 },
             { isMe, online },
           );
-          sprite.position.set(pos[0], pos[1]);
+          sprite.position.set(initX, initY);
           sprite.on('pointerdown', (e) => {
             e.stopPropagation();
             this.startHumanDrag(h.id, e.global.x, e.global.y, e.pointerId);
           });
           this.humansLayer.addChild(sprite);
-          node = { id: h.id, sprite, x: pos[0], y: pos[1] };
+          node = { id: h.id, sprite, x: initX, y: initY, pinned: !!saved };
           this.humanNodes.set(h.id, node);
         } else if (!node.pinned && !node.dragging) {
-          node.sprite.position.set(pos[0], pos[1]);
-          node.x = pos[0];
-          node.y = pos[1];
+          node.sprite.position.set(initX, initY);
+          node.x = initX;
+          node.y = initY;
+          if (saved) node.pinned = true;
         }
       });
     }
@@ -401,8 +408,14 @@ export class AgentCanvas {
     if (!node) return;
     node.dragging = false;
     node.sprite.cursor = 'pointer';
-    if (moved) node.pinned = true;
-    else if (id !== this.meHumanId) this.opts.onHumanSelect?.(id);
+    // Sempre fixa a posição atual: garante que mesmo micro-arrastes (abaixo do
+    // threshold de "clique") sejam preservados. Clique puro ainda dispara o chat.
+    node.pinned = true;
+    if (moved) {
+      void updateHuman(id, { position: { x: node.x, y: node.y } }).catch(() => {});
+    } else {
+      this.opts.onHumanSelect?.(id);
+    }
   }
 
   destroy() {

@@ -213,6 +213,14 @@ function sanitizeSkin(v) {
   };
 }
 
+function sanitizePosition(v) {
+  if (!v || typeof v !== 'object') return null;
+  const x = typeof v.x === 'number' && Number.isFinite(v.x) ? v.x : null;
+  const y = typeof v.y === 'number' && Number.isFinite(v.y) ? v.y : null;
+  if (x === null || y === null) return null;
+  return { x, y };
+}
+
 function humanSummary(h) {
   return {
     id: h.id,
@@ -223,6 +231,7 @@ function humanSummary(h) {
     offline_privacy: h.offline_privacy || { never_share: [] },
     location: h.location || null,
     skin: h.skin || null,
+    position: h.position || null,
     created_at: h.created_at,
     last_seen_at: h.last_seen_at || null,
     online: humanIsOnline(h),
@@ -1180,7 +1189,7 @@ async function handleHumansCreate(req, res) {
   const raw = await readBody(req);
   let body;
   try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
-  const { name, description, skills, important, offline_privacy, notes, location, skin } = body || {};
+  const { name, description, skills, important, offline_privacy, notes, location, skin, position } = body || {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     return sendJson(res, 400, { error: 'need name' });
   }
@@ -1204,6 +1213,7 @@ async function handleHumansCreate(req, res) {
     notes: (notes || '').toString().slice(0, 2000),
     location: sanitizeLocation(location),
     skin: sanitizeSkin(skin),
+    position: sanitizePosition(position),
     created_at: now,
     last_seen_at: now,
   };
@@ -1228,7 +1238,7 @@ async function handleHumanUpdate(id, req, res) {
   const data = loadHumans();
   const h = data.humans[id];
   if (!h) return sendJson(res, 404, { error: 'not found' });
-  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'skin'];
+  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'skin', 'position'];
   for (const f of fields) {
     if (body[f] === undefined) continue;
     if (f === 'skills') {
@@ -1242,6 +1252,8 @@ async function handleHumanUpdate(id, req, res) {
       h.location = sanitizeLocation(body.location);
     } else if (f === 'skin') {
       h.skin = sanitizeSkin(body.skin);
+    } else if (f === 'position') {
+      h.position = sanitizePosition(body.position);
     } else {
       h[f] = (body[f] || '').toString().slice(0, 4000);
     }
@@ -1255,6 +1267,20 @@ function handleHumanHeartbeat(id, res) {
   const h = touchHuman(id);
   if (!h) return sendJson(res, 404, { error: 'not found' });
   sendJson(res, 200, { ok: true, last_seen_at: h.last_seen_at, is_online: true });
+}
+
+function handleHumanDelete(id, res) {
+  const data = loadHumans();
+  if (!data.humans[id]) return sendJson(res, 404, { error: 'not found' });
+  const name = data.humans[id].name;
+  delete data.humans[id];
+  if (data.default_id === id) {
+    const remaining = Object.keys(data.humans);
+    data.default_id = remaining[0] || null;
+  }
+  saveHumans(data);
+  appendHumanLog(id, { ts: new Date().toISOString(), type: 'deleted', name });
+  sendJson(res, 200, { ok: true, id });
 }
 
 async function handleHumanHandoff(req, res) {
@@ -1289,6 +1315,75 @@ function handleHumanChatHistory(url, res) {
   if (!me || !withId) return sendJson(res, 400, { error: 'need me & with' });
   const messages = readHumanChat(me, withId);
   sendJson(res, 200, { me, with: withId, messages });
+}
+
+// Resumo de todas as conversas do humano (com agentes + com outros humanos).
+// Varre agent_chats/* filtrando por human_id e human_chats/* pelos pares que
+// contêm o id. Retorna last_ts + last_preview + count por canal.
+function handleHumanChatsSummary(hid, res) {
+  const agentChats = [];
+  if (fs.existsSync(chatDir)) {
+    for (const f of fs.readdirSync(chatDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      const agentName = f.replace(/\.jsonl$/, '');
+      const lines = fs.readFileSync(path.join(chatDir, f), 'utf8').split('\n').filter(Boolean);
+      let count = 0;
+      let lastTs = null;
+      let lastPreview = '';
+      let lastRole = null;
+      for (const l of lines) {
+        let e;
+        try { e = JSON.parse(l); } catch { continue; }
+        if (e.role === 'user' && e.human_id !== hid) continue;
+        // mensagens de agente contam sempre que houver contexto do humano na conversa
+        if (e.role === 'agent' && count === 0) continue;
+        count++;
+        lastTs = e.ts || lastTs;
+        lastPreview = String(e.content || '').slice(0, 140);
+        lastRole = e.role;
+      }
+      if (count > 0) agentChats.push({ agent: agentName, count, last_ts: lastTs, last_preview: lastPreview, last_role: lastRole });
+    }
+  }
+  agentChats.sort((a, b) => (b.last_ts || '').localeCompare(a.last_ts || ''));
+
+  const humanChats = [];
+  if (fs.existsSync(humanChatsDir)) {
+    const allProfiles = (() => { try { return loadHumans().humans || {}; } catch { return {}; } })();
+    const nameOf = (id) => (allProfiles[id] && allProfiles[id].name) || id;
+    for (const f of fs.readdirSync(humanChatsDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      const pair = f.replace(/\.jsonl$/, '').split('__');
+      if (pair.length !== 2 || !pair.includes(hid)) continue;
+      const peerId = pair[0] === hid ? pair[1] : pair[0];
+      const lines = fs.readFileSync(path.join(humanChatsDir, f), 'utf8').split('\n').filter(Boolean);
+      let count = 0;
+      let lastTs = null;
+      let lastPreview = '';
+      let lastFrom = null;
+      for (const l of lines) {
+        let e;
+        try { e = JSON.parse(l); } catch { continue; }
+        count++;
+        lastTs = e.ts || lastTs;
+        lastPreview = String(e.content || '').slice(0, 140);
+        lastFrom = e.from || null;
+      }
+      if (count > 0) {
+        humanChats.push({
+          peer_id: peerId,
+          peer_name: nameOf(peerId),
+          count,
+          last_ts: lastTs,
+          last_preview: lastPreview,
+          last_from_me: lastFrom === hid,
+        });
+      }
+    }
+  }
+  humanChats.sort((a, b) => (b.last_ts || '').localeCompare(a.last_ts || ''));
+
+  sendJson(res, 200, { human_id: hid, agent_chats: agentChats, human_chats: humanChats });
 }
 
 const server = http.createServer((req, res) => {
@@ -1329,7 +1424,9 @@ const server = http.createServer((req, res) => {
     const sub = humanMatch[2];
     if (!sub && req.method === 'GET')  { handleHumanGet(hid, res); return; }
     if (!sub && req.method === 'PUT')  { handleHumanUpdate(hid, req, res).catch(err => sendJson(res, 500, { error: err.message })); return; }
+    if (!sub && req.method === 'DELETE') { handleHumanDelete(hid, res); return; }
     if (sub === '/heartbeat' && req.method === 'POST') { handleHumanHeartbeat(hid, res); return; }
+    if (sub === '/chats' && req.method === 'GET') { handleHumanChatsSummary(hid, res); return; }
   }
   if (url.pathname === '/api/human-handoff' && req.method === 'POST') {
     handleHumanHandoff(req, res).catch(err => sendJson(res, 500, { error: err.message }));

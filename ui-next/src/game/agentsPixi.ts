@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
 import type { AgentCfg, AgentType, AgentsData } from '@/lib/types';
 import { AgentSprite } from './sprites/AgentSprite';
-import { Backdrop } from './scene/Backdrop';
+import { Office, type DecorKind, type DepartmentInput } from './scene/Office';
 
 interface AgentNode {
   name: string;
@@ -11,6 +11,8 @@ interface AgentNode {
   targetY: number;
   x: number;
   y: number;
+  vx: number; // velocidade (px/tick)
+  vy: number;
   dragging?: boolean;
   pinned?: boolean; // posição definida pelo usuário; não recalcular pelo layout automático
 }
@@ -21,7 +23,20 @@ interface DragState {
   offY: number;
   moved: boolean;
   pointerId: number;
+  lastX: number;
+  lastY: number;
+  lastT: number;
+  vx: number; // velocidade acumulada do ponteiro, em px/frame
+  vy: number;
 }
+
+// constantes físicas
+const SPRING_K = 0.06;    // intensidade da mola pro alvo
+const DAMPING = 0.82;     // amortecimento por frame
+const REPEL_R = 40;       // raio de repulsão entre agentes
+const REPEL_K = 0.08;     // intensidade da repulsão
+const WALL_BOUNCE = 0.3;  // coeficiente de restituição nas paredes
+const THROW_CAP = 22;     // velocidade máxima ao arremessar
 
 interface FlowArrow {
   from: string;
@@ -45,10 +60,63 @@ export interface AgentCanvasOptions {
   selected?: string | null;
 }
 
-const SPRITE_MIN_DIST = 105; // distância mínima entre centros
-const MARGIN_X = 60;
-const MARGIN_TOP = 50;
-const MARGIN_BOTTOM = 80;
+const MARGIN_X = 12;
+const MARGIN_TOP = 74;  // abaixo do teto da sala
+const MARGIN_BOTTOM = 50;
+
+// departamentos canônicos — ordem horizontal das salas no prédio
+interface DeptSpec {
+  id: string;
+  label: string;
+  decor: DecorKind;
+  color: number;
+  match: (name: string, cfg: AgentCfg) => boolean;
+}
+
+const DEPARTMENTS: DeptSpec[] = [
+  {
+    id: 'core',
+    label: 'Comando',
+    decor: 'command',
+    color: 0x6366f1,
+    match: (_n, c) => (c.type || 'specialist') === 'core',
+  },
+  {
+    id: 'devs',
+    label: 'Devs',
+    decor: 'computers',
+    color: 0x16a34a,
+    match: (_n, c) => c.profession === 'devs',
+  },
+  {
+    id: 'specialists',
+    label: 'Equipe',
+    decor: 'desks',
+    color: 0x0ea5e9,
+    match: (_n, c) => (c.type || 'specialist') === 'specialist' && !c.profession,
+  },
+  {
+    id: 'integrators',
+    label: 'Integrações',
+    decor: 'rack',
+    color: 0xa855f7,
+    match: (_n, c) => c.type === 'integrator',
+  },
+  {
+    id: 'motors',
+    label: 'Operações',
+    decor: 'gears',
+    color: 0xf97316,
+    match: (_n, c) => c.type === 'motor',
+  },
+  {
+    id: 'firefighter',
+    label: 'Monitoramento',
+    decor: 'monitors',
+    color: 0xef4444,
+    match: (_n, c) => c.type === 'firefighter',
+  },
+];
 
 function edges(cfg: AgentCfg): string[] {
   return cfg.can_talk_to || cfg.consults || [];
@@ -58,7 +126,7 @@ export class AgentCanvas {
   private app: Application;
   private nodes = new Map<string, AgentNode>();
   private baseLinks!: Graphics;
-  private backdrop!: Backdrop;
+  private office!: Office;
   private flowLinks!: Graphics;
   private flowDotsLayer!: Container;
   private flowLabelsLayer!: Container;
@@ -102,21 +170,21 @@ export class AgentCanvas {
     this.width = el.clientWidth;
     this.height = el.clientHeight;
 
-    this.backdrop = new Backdrop();
+    this.office = new Office();
     this.baseLinks = new Graphics();
     this.flowLinks = new Graphics();
     this.flowDotsLayer = new Container();
     this.flowLabelsLayer = new Container();
     this.layer = new Container();
 
-    this.app.stage.addChild(this.backdrop);
+    this.app.stage.addChild(this.office);
     this.app.stage.addChild(this.baseLinks);
     this.app.stage.addChild(this.flowLinks);
     this.app.stage.addChild(this.layer);
     this.app.stage.addChild(this.flowDotsLayer);
     this.app.stage.addChild(this.flowLabelsLayer);
 
-    this.backdrop.resize(this.width, this.height);
+    this.office.resize(this.width, this.height);
 
     // stage recebe os eventos de pointermove/up para suportar drag fora do sprite
     this.app.stage.eventMode = 'static';
@@ -132,7 +200,7 @@ export class AgentCanvas {
       if (!this.mounted || this.destroyed) return;
       this.width = el.clientWidth;
       this.height = el.clientHeight;
-      this.backdrop.resize(this.width, this.height);
+      this.office.resize(this.width, this.height);
       this.relayout();
     });
     this.resizeObs.observe(el);
@@ -206,7 +274,7 @@ export class AgentCanvas {
           e.stopPropagation();
           this.startDrag(name, e.global.x, e.global.y, e.pointerId);
         });
-        node = { name, cfg, sprite, targetX: tx, targetY: ty, x: tx, y: ty };
+        node = { name, cfg, sprite, targetX: tx, targetY: ty, x: tx, y: ty, vx: 0, vy: 0 };
         this.nodes.set(name, node);
         this.layer.addChild(sprite);
       } else {
@@ -275,97 +343,31 @@ export class AgentCanvas {
     names: string[],
     agents: Record<string, AgentCfg>,
   ): Record<string, [number, number]> {
-    const cx = this.width / 2;
-    const cy = this.height / 2;
-    const out: Record<string, [number, number]> = {};
-    const byType: Record<string, string[]> = {};
-    for (const n of names) {
-      const t = (agents[n].type || 'specialist') as AgentType;
-      (byType[t] ||= []).push(n);
-    }
-
-    const manager = names.find((n) => n === 'manager') || (byType.core || [])[0];
-    if (manager) out[manager] = [cx, cy];
-
-    // raio mínimo pra caber N itens sem sobrepor
-    const minR = (count: number, base: number) =>
-      Math.max(base, (SPRITE_MIN_DIST * Math.max(count, 2)) / (2 * Math.PI));
-
-    const maxRadius = Math.min(this.width, this.height) / 2 - 80;
-    const cap = (r: number) => Math.min(r, maxRadius);
-
-    const rings: Array<{ type: AgentType; base: number }> = [
-      { type: 'core', base: 150 },
-      { type: 'specialist', base: 170 },
-      { type: 'integrator', base: 220 },
-      { type: 'motor', base: 250 },
-      { type: 'firefighter', base: 280 },
-    ];
-
-    for (const { type, base } of rings) {
-      const list = (byType[type] || []).filter((n) => n !== manager);
-      if (!list.length) continue;
-      // mantém agentes da mesma profissão adjacentes no anel
-      list.sort((a, b) => {
-        const pa = agents[a].profession || '~';
-        const pb = agents[b].profession || '~';
-        if (pa !== pb) return pa.localeCompare(pb);
+    // agrupa agentes em departamentos (ordem canônica)
+    const depts: DepartmentInput[] = [];
+    for (const spec of DEPARTMENTS) {
+      const members = names.filter((n) => spec.match(n, agents[n]));
+      if (!members.length) continue;
+      // manager sempre primeiro dentro do core; depois, ordem por nome
+      members.sort((a, b) => {
+        if (a === 'manager') return -1;
+        if (b === 'manager') return 1;
         return a.localeCompare(b);
       });
-      const r = cap(minR(list.length, base));
-      const step = (2 * Math.PI) / list.length;
-      const phase = -Math.PI / 2 + (type === 'specialist' ? 0 : step / 2);
-      list.forEach((n, i) => {
-        out[n] = [cx + r * Math.cos(phase + i * step), cy + r * Math.sin(phase + i * step)];
+      depts.push({
+        id: spec.id,
+        label: spec.label,
+        decor: spec.decor,
+        color: spec.color,
+        agents: members,
       });
     }
-    for (const n of names) if (!out[n]) out[n] = [cx, cy];
+    this.office.setDepartments(depts);
 
-    // puxa agentes da mesma profissão pro centróide do grupo (coesão visual)
-    const profGroups: Record<string, string[]> = {};
+    const out: Record<string, [number, number]> = {};
     for (const n of names) {
-      const p = agents[n].profession;
-      if (p) (profGroups[p] ||= []).push(n);
-    }
-    for (const group of Object.values(profGroups)) {
-      if (group.length < 2) continue;
-      let cxg = 0, cyg = 0;
-      for (const n of group) { cxg += out[n][0]; cyg += out[n][1]; }
-      cxg /= group.length; cyg /= group.length;
-      for (const n of group) {
-        out[n][0] += (cxg - out[n][0]) * 0.25;
-        out[n][1] += (cyg - out[n][1]) * 0.25;
-      }
-    }
-
-    // colisão: empurra pares próximos
-    for (let iter = 0; iter < 80; iter++) {
-      let moved = false;
-      for (let i = 0; i < names.length; i++) {
-        for (let j = i + 1; j < names.length; j++) {
-          const a = out[names[i]];
-          const b = out[names[j]];
-          const dx = b[0] - a[0];
-          const dy = b[1] - a[1];
-          const d = Math.hypot(dx, dy) || 0.001;
-          if (d < SPRITE_MIN_DIST) {
-            const push = (SPRITE_MIN_DIST - d) / 2 + 0.5;
-            const nx = dx / d;
-            const ny = dy / d;
-            // manager não se mexe; bombeiros resistem menos
-            if (names[i] !== manager) { a[0] -= nx * push; a[1] -= ny * push; }
-            if (names[j] !== manager) { b[0] += nx * push; b[1] += ny * push; }
-            moved = true;
-          }
-        }
-      }
-      if (!moved) break;
-    }
-
-    // clip no viewport
-    for (const n of names) {
-      out[n][0] = Math.max(MARGIN_X, Math.min(this.width - MARGIN_X, out[n][0]));
-      out[n][1] = Math.max(MARGIN_TOP, Math.min(this.height - MARGIN_BOTTOM, out[n][1]));
+      const p = this.office.positionFor(n);
+      out[n] = p || [this.width / 2, this.height / 2];
     }
     return out;
   }
@@ -436,7 +438,20 @@ export class AgentCanvas {
   private startDrag(name: string, gx: number, gy: number, pointerId: number) {
     const node = this.nodes.get(name);
     if (!node) return;
-    this.drag = { name, offX: node.x - gx, offY: node.y - gy, moved: false, pointerId };
+    this.drag = {
+      name,
+      offX: node.x - gx,
+      offY: node.y - gy,
+      moved: false,
+      pointerId,
+      lastX: node.x,
+      lastY: node.y,
+      lastT: performance.now(),
+      vx: 0,
+      vy: 0,
+    };
+    node.vx = 0;
+    node.vy = 0;
     node.dragging = true;
     this.layer.addChild(node.sprite); // leva pro topo
     node.sprite.cursor = 'grabbing';
@@ -453,6 +468,18 @@ export class AgentCanvas {
       const dy = ny - node.y;
       if (Math.hypot(dx, dy) >= this.DRAG_THRESHOLD) this.drag.moved = true;
     }
+    // rastreia velocidade do ponteiro (EMA) pra uso no release
+    const now = performance.now();
+    const dt = Math.max(1, now - this.drag.lastT);
+    const frames = dt / 16.666;
+    const vxp = (nx - this.drag.lastX) / frames;
+    const vyp = (ny - this.drag.lastY) / frames;
+    this.drag.vx = this.drag.vx * 0.4 + vxp * 0.6;
+    this.drag.vy = this.drag.vy * 0.4 + vyp * 0.6;
+    this.drag.lastX = nx;
+    this.drag.lastY = ny;
+    this.drag.lastT = now;
+
     node.x = nx;
     node.y = ny;
     node.targetX = nx;
@@ -462,9 +489,9 @@ export class AgentCanvas {
 
   private onPointerUp(_gx: number, _gy: number) {
     if (!this.drag) return;
-    const { name, moved } = this.drag;
-    const node = this.nodes.get(name);
+    const { name, moved, vx, vy } = this.drag;
     this.drag = null;
+    const node = this.nodes.get(name);
     if (node) {
       node.dragging = false;
       node.sprite.cursor = 'pointer';
@@ -474,22 +501,70 @@ export class AgentCanvas {
       this.opts.onSelect?.(name);
     } else if (moved && node) {
       node.pinned = true;
+      // transfere velocidade do arremesso (com cap pra não voar pra fora)
+      node.vx = clamp(vx, -THROW_CAP, THROW_CAP);
+      node.vy = clamp(vy, -THROW_CAP, THROW_CAP);
     }
   }
 
   private tick(t: Ticker) {
-    const dt = t.deltaTime;
-    this.backdrop?.tick(t);
-    for (const node of this.nodes.values()) {
-      if (!node.dragging) {
-        const dx = node.targetX - node.x;
-        const dy = node.targetY - node.y;
-        node.x += dx * 0.12 * dt;
-        node.y += dy * 0.12 * dt;
-        node.sprite.position.set(node.x, node.y);
+    const dt = Math.min(t.deltaTime, 2);
+    this.office?.tick(t);
+
+    const nodes = [...this.nodes.values()];
+
+    // 1) mola + amortecimento em direção ao target (pinados usam targetX/Y do release)
+    for (const node of nodes) {
+      if (node.dragging) continue;
+      node.vx += (node.targetX - node.x) * SPRING_K * dt;
+      node.vy += (node.targetY - node.y) * SPRING_K * dt;
+      const d = Math.pow(DAMPING, dt);
+      node.vx *= d;
+      node.vy *= d;
+    }
+
+    // 2) repulsão suave entre agentes
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 0.001;
+        if (d < REPEL_R) {
+          const overlap = REPEL_R - d;
+          const nx = dx / d;
+          const ny = dy / d;
+          const push = overlap * REPEL_K * dt;
+          if (!a.dragging) { a.vx -= nx * push; a.vy -= ny * push; }
+          if (!b.dragging) { b.vx += nx * push; b.vy += ny * push; }
+        }
       }
+    }
+
+    // 3) integra + colisão com paredes da sala (ou canvas se pinado)
+    for (const node of nodes) {
+      if (node.dragging) {
+        node.sprite.tick(t);
+        continue;
+      }
+      node.x += node.vx * dt;
+      node.y += node.vy * dt;
+
+      const bounds = node.pinned ? null : this.office.getRoomBounds(node.name);
+      const minX = bounds ? bounds.x1 : MARGIN_X;
+      const maxX = bounds ? bounds.x2 : this.width - MARGIN_X;
+      const minY = bounds ? bounds.ceilingY + 40 : MARGIN_TOP;
+      const maxY = bounds ? bounds.floorY - 30 : this.height - MARGIN_BOTTOM;
+      if (node.x < minX) { node.x = minX; node.vx = Math.abs(node.vx) * WALL_BOUNCE; }
+      if (node.x > maxX) { node.x = maxX; node.vx = -Math.abs(node.vx) * WALL_BOUNCE; }
+      if (node.y < minY) { node.y = minY; node.vy = Math.abs(node.vy) * WALL_BOUNCE; }
+      if (node.y > maxY) { node.y = maxY; node.vy = -Math.abs(node.vy) * WALL_BOUNCE; }
+
+      node.sprite.position.set(node.x, node.y);
       node.sprite.tick(t);
     }
+
     this.drawBaseLinks();
     this.drawFlow(dt);
   }

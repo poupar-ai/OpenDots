@@ -2,16 +2,56 @@
 
 // Fired on SessionStart (startup | clear | compact).
 // Shows a status banner. Uses stats.json cache to avoid reading full JSONL files.
+// Also ensures the UI server is running (spawns detached if not).
 
-const path = require('path');
-const fs   = require('fs');
+const path         = require('path');
+const fs           = require('fs');
+const os           = require('os');
+const { spawn }    = require('child_process');
 const { findProjectRoot, getMemDir, loadStats, readJsonl } = require('./lib.cjs');
 
 const cwd         = process.env.CLAUDE_CWD || process.env.PWD || process.cwd();
 const projectRoot = findProjectRoot(cwd);
 const projectName = path.basename(projectRoot);
 const memDir      = getMemDir(cwd);
-const PORT        = process.env.PROJECT_MEM_PORT || 37778;
+const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
+
+function ensureUiRunning() {
+  // Auto-start da UI. Usa lockfile com PID no tmpdir para evitar múltiplos servers.
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..');
+  const serverPath = path.join(pluginRoot, 'ui', 'server.cjs');
+  if (!fs.existsSync(serverPath)) return;
+
+  const lockPath = path.join(os.tmpdir(), `project-mem-ui-${PORT}.pid`);
+
+  // Se já há um PID vivo no lock, assume que o server está rodando.
+  try {
+    const existingPid = parseInt(fs.readFileSync(lockPath, 'utf8').trim(), 10);
+    if (existingPid) {
+      process.kill(existingPid, 0); // sinal 0 = checa se o processo existe
+      return;
+    }
+  } catch {
+    // Lock ausente ou PID morto — segue para spawn.
+  }
+
+  let out = 'ignore';
+  try {
+    out = fs.openSync(path.join(os.tmpdir(), 'project-mem-ui.log'), 'a');
+  } catch {}
+
+  const child = spawn(process.execPath, [serverPath], {
+    cwd,
+    env: { ...process.env, PROJECT_MEM_PORT: String(PORT) },
+    detached: true,
+    stdio: ['ignore', out, out],
+  });
+  child.unref();
+
+  try { fs.writeFileSync(lockPath, String(child.pid)); } catch {}
+}
+
+try { ensureUiRunning(); } catch {}
 
 let line = `🧠 project-mem | ${projectName}`;
 

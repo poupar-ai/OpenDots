@@ -176,6 +176,147 @@ function buildAllowedTools(_agent, _agentCfg) {
   return [];
 }
 
+// ── Auto-processing de handoffs ─────────────────────────────────────────────
+// Quando um agente chega mensagem via handoff, o destinatário é spawn-ado
+// automaticamente em headless mode. Fila por agente evita concorrência no mesmo
+// canal (chat humano + auto-turn simultâneos). Rate-limit global é circuit-breaker
+// contra loops A→B→A→B sem fim.
+const autoRunning = new Set();              // agentes com claude -p rodando (humano ou auto)
+const autoPending = new Map();              // agent -> Array<{ fromAgent, message }>
+const AUTO_RATE_WINDOW_MS = 60000;
+const AUTO_RATE_MAX = 40;
+const autoRateStamps = [];
+
+function autoRateOk() {
+  const now = Date.now();
+  while (autoRateStamps.length && now - autoRateStamps[0] > AUTO_RATE_WINDOW_MS) autoRateStamps.shift();
+  if (autoRateStamps.length >= AUTO_RATE_MAX) return false;
+  autoRateStamps.push(now);
+  return true;
+}
+
+function enqueueAutoTurn(toAgent, fromAgent, message) {
+  if (!autoRateOk()) {
+    appendAgentLog(toAgent, {
+      ts: new Date().toISOString(),
+      type: 'auto_turn_throttled',
+      from_agent: fromAgent,
+      reason: `rate limit global ${AUTO_RATE_MAX}/${AUTO_RATE_WINDOW_MS/1000}s`,
+    });
+    return;
+  }
+  if (!autoPending.has(toAgent)) autoPending.set(toAgent, []);
+  autoPending.get(toAgent).push({ fromAgent, message });
+  setImmediate(() => drainAutoQueue(toAgent));
+}
+
+async function drainAutoQueue(toAgent) {
+  if (autoRunning.has(toAgent)) return;
+  const q = autoPending.get(toAgent);
+  if (!q || !q.length) return;
+  autoRunning.add(toAgent);
+  try {
+    while (q.length) {
+      const batch = q.splice(0);
+      const fromLabel = batch.length === 1 ? batch[0].fromAgent : 'múltiplos agentes';
+      const combined = batch.length === 1
+        ? batch[0].message
+        : batch.map(b => `[${b.fromAgent}]: ${b.message}`).join('\n\n');
+      await runHeadlessTurn(toAgent, fromLabel, combined);
+    }
+  } finally {
+    autoRunning.delete(toAgent);
+    if ((autoPending.get(toAgent) || []).length) setImmediate(() => drainAutoQueue(toAgent));
+  }
+}
+
+function runHeadlessTurn(agent, fromAgent, userMessage) {
+  return new Promise((resolve) => {
+    const manifest = agents.loadManifest(memDir);
+    const agentCfg = manifest && manifest.agents && manifest.agents[agent];
+    if (!agentCfg) { resolve(); return; }
+    ensureAgentChannels(manifest);
+
+    const miniContext = agents.loadMiniContext(memDir, agentCfg.context_file) || '';
+    const history = readChat(agent);
+    const prompt = composePrompt(agent, agentCfg, miniContext, userMessage, history, { fromAgent });
+
+    const startTs = new Date().toISOString();
+    appendAgentLog(agent, {
+      ts: startTs,
+      type: 'request',
+      stage: 'auto_handoff',
+      from_agent: fromAgent,
+      prompt_chars: prompt.length,
+      user_chars: userMessage.length,
+      history_turns: history.length,
+      model: agentCfg.model || null,
+    });
+
+    const args = ['-p', '--output-format', 'text'];
+    if (agentCfg.model) args.push('--model', agentCfg.model);
+    const allowedTools = buildAllowedTools(agent, agentCfg);
+    if (allowedTools.length) args.push('--allowed-tools', allowedTools.join(','));
+    args.push(prompt);
+
+    const beforeSizes = snapshotChannelSizes();
+    const started = Date.now();
+    let proc;
+    try {
+      proc = spawn('claude', args, {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+      });
+    } catch (err) {
+      appendAgentLog(agent, {
+        ts: new Date().toISOString(),
+        type: 'error', stage: 'auto_spawn', message: err.message, duration_ms: 0,
+      });
+      resolve(); return;
+    }
+
+    let full = '', errBuf = '';
+    proc.stdout.on('data', c => { full += c.toString(); });
+    proc.stderr.on('data', c => { errBuf += c.toString(); });
+    proc.on('error', err => {
+      appendAgentLog(agent, {
+        ts: new Date().toISOString(),
+        type: 'error', stage: 'auto_proc', message: err.message,
+        duration_ms: Date.now() - started,
+      });
+      resolve();
+    });
+    proc.on('close', code => {
+      const duration_ms = Date.now() - started;
+      const agentTs = new Date().toISOString();
+      const afterSizes = snapshotChannelSizes();
+      const violations = detectChannelViolations(agent, agentCfg, beforeSizes, afterSizes);
+      for (const v of violations) {
+        appendAgentLog(agent, {
+          ts: agentTs, type: 'violation', stage: 'channel_write',
+          channel: v.channel, growth: v.growth,
+          message: `agente ${agent} escreveu em ${v.channel} — fora de can_talk_to`,
+        });
+      }
+      if (code !== 0 && !full) {
+        appendAgentLog(agent, {
+          ts: agentTs, type: 'error', stage: 'auto_exit',
+          code, stderr: errBuf.slice(0, 500), duration_ms,
+        });
+      } else {
+        appendChat(agent, { ts: agentTs, role: 'agent', content: full, duration_ms, auto: true });
+        appendAgentLog(agent, {
+          ts: agentTs, type: 'response', stage: 'auto',
+          response_chars: full.length, duration_ms, code,
+          stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
+        });
+      }
+      resolve();
+    });
+  });
+}
+
 // Tira um snapshot do tamanho de cada canal — usado pra detectar writes não
 // autorizados feitos por um agente durante sua execução (defesa em profundidade
 // complementar ao --allowed-tools).
@@ -302,11 +443,13 @@ function readBody(req) {
   });
 }
 
-function composePrompt(agent, agentCfg, miniContext, userMessage, history) {
+function composePrompt(agent, agentCfg, miniContext, userMessage, history, opts = {}) {
   const isManager = agent === 'manager';
+  const fromAgent = opts.fromAgent || null;
   const canTalk = Array.isArray(agentCfg.can_talk_to) ? agentCfg.can_talk_to : [];
   const canTalkList = canTalk.length ? canTalk.map(n => `\`${n}\``).join(', ') : '_(nenhum)_';
-  const hist = (history || []).slice(-6).map(m => `**${m.role === 'user' ? 'Engenheiro' : agent}:** ${m.content}`).join('\n\n');
+  const canReplyBack = fromAgent && canTalk.includes(fromAgent);
+  const hist = (history || []).slice(-6).map(m => `**${m.role === 'user' ? (m.from ? m.from : 'Engenheiro') : agent}:** ${m.content}`).join('\n\n');
   return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo. A mensagem abaixo chega pela UI do project-mem.
 
 ## Seu mini-contexto
@@ -408,9 +551,19 @@ Diretrizes:
 - Ao confirmar, responda em UMA linha: "registrei em <arquivo> (decisão/alma/gotcha) — origem: Engenheiro".
 - Se estiver inseguro entre dois destinos, faça UMA pergunta curta; se estiver entre registrar agora ou escalar ao Manager, **escalar**.
 ${hist ? '\n## Conversa recente\n' + hist + '\n' : ''}
-## Mensagem do Engenheiro
+## Mensagem ${fromAgent ? `recebida de \`${fromAgent}\`` : 'do Engenheiro'}
 ${userMessage}
-`;
+${fromAgent ? `
+## Como responder a este handoff automático
+Esta mensagem chegou pelo canal de handoff automático — não é o Engenheiro falando, é o agente \`${fromAgent}\`.
+
+- Processe e execute dentro do seu escopo. Sem simulação, sem "eu diria…", sem encenação.
+- ${canReplyBack
+  ? `Se precisar devolver uma resposta pro \`${fromAgent}\`, faça handoff inverso via curl (ele **está** na sua can_talk_to).`
+  : `\`${fromAgent}\` **não está** na sua can_talk_to — você **não responde direto a ele**. Faça o trabalho que dá pra fazer aqui, deixe o resultado na sua própria conversa; quem te acionou vai ler seu canal.`}
+- Se o pedido precisa de escalada pra outro agente, só handoff pra quem está na sua \`can_talk_to\`. Nada de "pra agilizar vou chamar X" se X não estiver na lista.
+- Não responda "ok, vou fazer" e parar. Execute agora ou declare o bloqueio em uma linha.
+` : ''}`;
 }
 
 async function handleHandoff(req, res) {
@@ -534,7 +687,11 @@ async function handleChatSend(req, res) {
   const started = Date.now();
   let proc;
   try {
-    proc = spawn('claude', args, { cwd: projectRoot, stdio: ['ignore', 'pipe', 'pipe'] });
+    proc = spawn('claude', args, {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+    });
   } catch (err) {
     sse('error', { message: `falha ao iniciar claude CLI: ${err.message}` });
     sse('done', { duration_ms: 0 });

@@ -46,6 +46,11 @@
             "type": "command",
             "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.cjs\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-end-memory-save.sh\"",
+            "timeout": 60
           }
         ]
       }

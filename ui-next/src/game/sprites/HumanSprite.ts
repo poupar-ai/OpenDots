@@ -23,6 +23,8 @@ export class HumanSprite extends Container {
   private t = 0;
   private blinkT = 0;
   private blinkClose = 0;
+  private falling = false;
+  private landAnim = 0; // frames restantes da animação de pouso (squash & stretch)
 
   constructor(
     humanId: string,
@@ -221,8 +223,40 @@ export class HumanSprite extends Container {
     this.t += dt;
     this.blinkT += dt;
 
-    // respiração leve
-    this.body.y = Math.sin(this.t * 0.06) * 0.8;
+    // respiração leve (só quando parado no chão)
+    if (!this.falling && this.landAnim <= 0) {
+      this.body.y = Math.sin(this.t * 0.06) * 0.8;
+      this.body.scale.set(1, 1);
+      this.body.rotation = 0;
+    } else if (this.falling) {
+      // queda: corpo levemente oscilando como se estivesse solto no ar
+      this.body.y = 0;
+      this.body.scale.set(1, 1);
+      this.body.rotation = Math.sin(this.t * 0.18) * 0.12;
+    } else if (this.landAnim > 0) {
+      // pouso: squash & stretch (achata, depois estica, depois volta)
+      this.landAnim -= dt;
+      const p = 1 - this.landAnim / 18; // 0→1
+      // squash nos primeiros 40%, stretch leve até 80%, normal depois
+      let sx = 1;
+      let sy = 1;
+      if (p < 0.4) {
+        const k = p / 0.4;
+        sy = 1 - 0.25 * (1 - k);
+        sx = 1 + 0.18 * (1 - k);
+      } else if (p < 0.8) {
+        const k = (p - 0.4) / 0.4;
+        sy = 0.75 + 0.3 * k;
+        sx = 1.18 - 0.22 * k;
+      } else {
+        const k = (p - 0.8) / 0.2;
+        sy = 1.05 - 0.05 * k;
+        sx = 0.96 + 0.04 * k;
+      }
+      this.body.scale.set(sx, sy);
+      this.body.y = 0;
+      this.body.rotation = 0;
+    }
 
     if (this.blinkClose > 0) {
       this.blinkClose -= dt;
@@ -241,6 +275,16 @@ export class HumanSprite extends Container {
       const s = 1 + Math.sin(this.t * 0.1) * 0.05;
       this.ring.scale.set(s);
     }
+  }
+
+  public setFalling(on: boolean) {
+    this.falling = on;
+    if (!on) this.body.rotation = 0;
+  }
+
+  public landBounce() {
+    this.falling = false;
+    this.landAnim = 18;
   }
 
   private drawBadgeBg() {

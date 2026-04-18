@@ -40,6 +40,10 @@ const REPEL_R = 40;       // raio de repulsão entre agentes
 const REPEL_K = 0.08;     // intensidade da repulsão
 const WALL_BOUNCE = 0.3;  // coeficiente de restituição nas paredes
 const THROW_CAP = 22;     // velocidade máxima ao arremessar
+// gravidade para humanos (arrastar-e-soltar do alto faz cair)
+const HUMAN_GRAVITY = 0.7;
+const HUMAN_FALL_SPEED_MAX = 28;
+const HUMAN_DROP_THRESHOLD = 4; // px abaixo do piso já dispara queda
 
 interface FlowArrow {
   from: string;
@@ -81,6 +85,9 @@ interface HumanNode {
   y: number;
   pinned?: boolean;
   dragging?: boolean;
+  vy?: number;
+  falling?: boolean;
+  pendingSave?: boolean; // salvar posição após pousar
 }
 
 interface HumanDragState {
@@ -453,10 +460,21 @@ export class AgentCanvas {
     // Sempre fixa a posição atual: garante que mesmo micro-arrastes (abaixo do
     // threshold de "clique") sejam preservados. Clique puro ainda dispara o chat.
     node.pinned = true;
-    if (moved) {
-      void updateHuman(id, { position: { x: node.x, y: node.y } }).catch(() => {});
-    } else {
+    if (!moved) {
       this.opts.onHumanSelect?.(id);
+      return;
+    }
+    // Se soltou acima do piso da sala (ou do mundo), aplica gravidade até pousar.
+    const landY = this.office.landingYAt(node.x, node.y);
+    if (node.y < landY - HUMAN_DROP_THRESHOLD) {
+      node.falling = true;
+      node.vy = 0;
+      node.sprite.setFalling(true);
+      node.pendingSave = true;
+    } else {
+      node.y = landY;
+      node.sprite.position.set(node.x, node.y);
+      void updateHuman(id, { position: { x: node.x, y: node.y } }).catch(() => {});
     }
   }
 
@@ -926,7 +944,28 @@ export class AgentCanvas {
       node.sprite.tick(t);
     }
 
-    for (const h of this.humanNodes.values()) h.sprite.tick(t);
+    // gravidade para humanos em queda livre
+    for (const h of this.humanNodes.values()) {
+      if (h.falling && !h.dragging) {
+        h.vy = Math.min((h.vy || 0) + HUMAN_GRAVITY * dt, HUMAN_FALL_SPEED_MAX);
+        h.y += h.vy * dt;
+        const landY = this.office.landingYAt(h.x, h.y);
+        if (h.y >= landY) {
+          h.y = landY;
+          h.vy = 0;
+          h.falling = false;
+          h.sprite.landBounce();
+          h.sprite.position.set(h.x, h.y);
+          if (h.pendingSave) {
+            h.pendingSave = false;
+            void updateHuman(h.id, { position: { x: h.x, y: h.y } }).catch(() => {});
+          }
+        } else {
+          h.sprite.position.set(h.x, h.y);
+        }
+      }
+      h.sprite.tick(t);
+    }
 
     this.drawBaseLinks();
     this.drawFlow(dt);

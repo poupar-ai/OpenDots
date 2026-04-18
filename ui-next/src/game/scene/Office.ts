@@ -249,6 +249,21 @@ export class Office extends Container {
     return this.rooms.has(roomId);
   }
 
+  // Acha o Y do centro do sprite humano quando ele pousa num piso embaixo
+  // da coordenada (x, y) dada. Se nenhum quarto tem piso abaixo, usa o chão do mundo.
+  // O offset FEET_OFFSET compensa a diferença entre o ponto âncora do sprite
+  // (centro do corpo) e a base dos pés (~30px abaixo).
+  landingYAt(x: number, y: number, feetOffset = 30): number {
+    const worldFloorY = this.worldH - this.FLOOR_OFFSET;
+    let candidate = worldFloorY;
+    for (const r of this.rooms.values()) {
+      if (x < r.x || x > r.x + r.width) continue;
+      if (r.floorY < y + feetOffset) continue; // piso está acima dos pés (já estamos abaixo dele)
+      if (r.floorY < candidate) candidate = r.floorY;
+    }
+    return candidate - feetOffset;
+  }
+
   // limites físicos da sala à qual o agente pertence (world coords)
   getRoomBounds(name: string): { x1: number; x2: number; ceilingY: number; floorY: number } | null {
     for (const r of this.rooms.values()) {
@@ -703,13 +718,11 @@ export class Office extends Container {
       windowG
         .rect(x - 2, winY - 2, winW + 4, winH + 4)
         .fill({ color: 0x334155 });
-      // Vidro — céu visível por trás. Usa cor do céu com leve transparência
-      // e brilho sutil para parecer vidro limpo (sem reflexo diagonal).
-      const skyColors = SKY_GRADIENT[this.day.phase] || SKY_GRADIENT.midday;
-      const glassTop = lerpColor(skyColors[0], 0xffffff, 0.15);
-      const glassBot = lerpColor(skyColors[1], 0xffffff, 0.05);
-      windowG.rect(x, winY, winW, winH / 2).fill({ color: glassTop, alpha: 0.9 });
-      windowG.rect(x, winY + winH / 2, winW, winH / 2).fill({ color: glassBot, alpha: 0.9 });
+      // Vidro — tom translúcido neutro (azul-acinzentado), independente do céu.
+      // Não compete com o cenário, só sugere "janela".
+      windowG.rect(x, winY, winW, winH).fill({ color: 0xbfdbfe, alpha: 0.35 });
+      // Brilho horizontal sutil no topo do vidro
+      windowG.rect(x + 2, winY + 2, winW - 4, 2).fill({ color: 0xffffff, alpha: 0.25 });
       // Cruz (caixilho)
       windowG.rect(x + winW / 2 - 1, winY, 2, winH).fill({ color: 0x334155 });
       windowG.rect(x, winY + winH / 2 - 1, winW, 2).fill({ color: 0x334155 });
@@ -723,7 +736,9 @@ export class Office extends Container {
     r.container.addChild(windowG);
   }
 
-  // ── sol/lua aparecem só na janela mais próxima ─────────────────
+  // ── sol/lua discreto em no máximo uma janela por sala ─────────
+  // A janela escolhida por sala é a mais próxima (horizontalmente) do astro real.
+  // O astro é pequeno e translúcido pra não roubar atenção do escritório.
   private drawCelestialInWindows() {
     this.celestialInWindow.clear();
     const d = this.day;
@@ -731,51 +746,42 @@ export class Office extends Container {
     const showMoon = !d.isDay && d.moonAlt > 0;
     if (!showSun && !showMoon) return;
 
-    // Posição horizontal real do astro no mundo (mesmo cálculo do drawSun/drawMoon).
     const margin = 40;
     const celestialX = showSun
       ? margin + (this.worldW - margin * 2) * d.sunX
       : margin + (this.worldW - margin * 2) * d.moonX;
 
-    // Acha a janela mais próxima do astro (por distância horizontal).
-    let best: WindowRect | null = null;
-    let bestDist = Infinity;
     for (const r of this.rooms.values()) {
+      if (r.windows.length === 0) continue;
+      // Melhor janela desta sala: menor distância horizontal ao astro.
+      let best: WindowRect | null = null;
+      let bestDist = Infinity;
       for (const w of r.windows) {
         const dist = Math.abs(w.cx - celestialX);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = w;
-        }
+        if (dist < bestDist) { bestDist = dist; best = w; }
       }
+      if (!best) continue;
+      // Só desenha se o astro está razoavelmente acima/próximo desta sala.
+      if (bestDist > best.w * 3.5) continue;
+      this.renderCelestialDot(best, showSun, celestialX);
     }
-    if (!best) return;
+  }
 
-    // Só mostra o astro se a janela está razoavelmente perto (não força em janelas muito afastadas).
-    if (bestDist > best.w * 2.5) return;
-
+  private renderCelestialDot(win: WindowRect, isSun: boolean, celestialX: number) {
     const g = this.celestialInWindow;
-    const halfW = best.w / 2 - 3;
-    const halfH = best.h / 2 - 3;
-    // Limita o centro do astro dentro do vidro.
-    const cx = best.cx + Math.max(-halfW, Math.min(halfW, (celestialX - best.cx) * 0.25));
-    const cy = best.cy;
-    const R = Math.min(best.w, best.h) * 0.22;
+    const halfW = win.w / 2 - 4;
+    // Leve deslocamento horizontal seguindo a direção do astro (sutil).
+    const offsetX = Math.max(-halfW, Math.min(halfW, (celestialX - win.cx) * 0.15));
+    const cx = win.cx + offsetX;
+    const cy = win.cy - win.h * 0.1; // ligeiramente acima do centro
+    const R = Math.min(win.w, win.h) * 0.12; // bem menor
 
-    if (showSun) {
-      g.circle(cx, cy, R + 3).fill({ color: 0xfef3c7, alpha: 0.45 });
-      const sunColor = d.phase === 'dawn' || d.phase === 'dusk' ? 0xfb923c : 0xfcd34d;
-      g.circle(cx, cy, R).fill({ color: sunColor });
-      g.circle(cx - R * 0.3, cy - R * 0.3, R * 0.35)
-        .fill({ color: 0xffffff, alpha: 0.35 });
+    if (isSun) {
+      g.circle(cx, cy, R + 1.5).fill({ color: 0xfef3c7, alpha: 0.25 });
+      g.circle(cx, cy, R).fill({ color: 0xfcd34d, alpha: 0.6 });
     } else {
-      g.circle(cx, cy, R + 3).fill({ color: 0xe0e7ff, alpha: 0.25 });
-      g.circle(cx, cy, R).fill({ color: 0xf8fafc });
-      // cratera sutil
-      g.circle(cx + R * 0.35, cy - R * 0.1, R * 0.18)
-        .fill({ color: 0xcbd5e1, alpha: 0.7 });
-      g.circle(cx - R * 0.25, cy + R * 0.2, R * 0.12)
-        .fill({ color: 0xcbd5e1, alpha: 0.6 });
+      g.circle(cx, cy, R + 1.5).fill({ color: 0xe0e7ff, alpha: 0.18 });
+      g.circle(cx, cy, R).fill({ color: 0xf1f5f9, alpha: 0.75 });
     }
   }
 
@@ -822,10 +828,33 @@ export class Office extends Container {
         .stroke({ width: 1, color: 0x0f172a, alpha: 0.6 });
       fixture.rect(lx - 6, bulbY, 12, 1).fill({ color: 0x0f172a, alpha: 0.7 });
 
-      // Halo (luz) e bulbo — alpha controlado pelo tick
+      // Feixe triangular estilo 2D game — lados retos, sem glow redondo.
+      // Base larga, quase alcançando o chão, com alpha caindo em faixas
+      // horizontais pra fugir do "triângulo sólido" duro.
       const halo = new Graphics();
-      halo.circle(lx, bulbY + 9, 42).fill({ color: 0xfde68a, alpha: 0.22 });
-      halo.circle(lx, bulbY + 9, 24).fill({ color: 0xfef3c7, alpha: 0.35 });
+      const coneTopY = bulbY + 6;
+      const coneBotY = r.floorY - 6;
+      const topHalf = 2;
+      const outerBottomHalf = 110;
+      const coneH = coneBotY - coneTopY;
+      const bands = 12;
+      for (let i = 0; i < bands; i++) {
+        const t0 = i / bands;
+        const t1 = (i + 1) / bands;
+        const yTop = coneTopY + t0 * coneH;
+        const yBot = coneTopY + t1 * coneH;
+        const halfTop = topHalf + (outerBottomHalf - topHalf) * t0;
+        const halfBot = topHalf + (outerBottomHalf - topHalf) * t1;
+        const a = 0.15 * (1 - Math.pow(t1, 1.6));
+        if (a <= 0.005) continue;
+        halo
+          .moveTo(lx - halfTop, yTop)
+          .lineTo(lx + halfTop, yTop)
+          .lineTo(lx + halfBot, yBot)
+          .lineTo(lx - halfBot, yBot)
+          .closePath()
+          .fill({ color: 0xfef3c7, alpha: a });
+      }
       halo.alpha = this.day.lampIntensity;
 
       const bulb = new Graphics();

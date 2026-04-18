@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('http');
+const os   = require('os');
 const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -37,6 +38,45 @@ const projectName = path.basename(projectRoot);
 const HTML_PATH   = path.join(__dirname, 'index.html');
 const DIST_DIR    = path.resolve(__dirname, '../..', 'ui-next', 'dist');
 const HAS_DIST    = fs.existsSync(path.join(DIST_DIR, 'index.html'));
+
+// ── Configuração de rede (bind) ───────────────────────────────────────
+// Default: localhost (127.0.0.1). Pode ser mudado via UI pra LAN ou IP específico.
+// Persiste em <memDir>/network.json. Mudança exige restart do servidor.
+const NETWORK_CFG_PATH = path.join(memDir, 'network.json');
+function loadNetworkConfig() {
+  try {
+    const raw = fs.readFileSync(NETWORK_CFG_PATH, 'utf8');
+    const j = JSON.parse(raw);
+    const bind = ['localhost', 'lan', 'custom'].includes(j.bind) ? j.bind : 'localhost';
+    const customHost = typeof j.customHost === 'string' ? j.customHost.trim() : '';
+    return { bind, customHost };
+  } catch {
+    return { bind: 'localhost', customHost: '' };
+  }
+}
+function saveNetworkConfig(cfg) {
+  try { fs.mkdirSync(memDir, { recursive: true }); } catch {}
+  fs.writeFileSync(NETWORK_CFG_PATH, JSON.stringify(cfg, null, 2));
+}
+function listLanIps() {
+  const ips = [];
+  const ifs = os.networkInterfaces();
+  for (const name of Object.keys(ifs || {})) {
+    for (const info of ifs[name] || []) {
+      if (info.family === 'IPv4' && !info.internal) {
+        ips.push({ iface: name, address: info.address });
+      }
+    }
+  }
+  return ips;
+}
+const networkCfg = loadNetworkConfig();
+function resolveBindHost() {
+  if (networkCfg.bind === 'lan') return '0.0.0.0';
+  if (networkCfg.bind === 'custom' && networkCfg.customHost) return networkCfg.customHost;
+  return '127.0.0.1';
+}
+const BIND_HOST = resolveBindHost();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -2876,6 +2916,41 @@ const server = http.createServer((req, res) => {
       return sendJson(res, 500, { error: err.message });
     }
   }
+  if (url.pathname === '/api/network-config' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      bind: networkCfg.bind,
+      customHost: networkCfg.customHost,
+      activeHost: BIND_HOST,
+      port: PORT,
+      lanIps: listLanIps(),
+    });
+  }
+  if (url.pathname === '/api/network-config' && req.method === 'PUT') {
+    readBody(req).then(raw => {
+      let body;
+      try { body = JSON.parse(raw); } catch {
+        return sendJson(res, 400, { error: 'invalid json' });
+      }
+      const bind = ['localhost', 'lan', 'custom'].includes(body?.bind) ? body.bind : null;
+      if (!bind) return sendJson(res, 400, { error: 'bind inválido (localhost|lan|custom)' });
+      const customHost = typeof body.customHost === 'string'
+        ? body.customHost.trim().replace(/[^0-9a-zA-Z.\-:]/g, '')
+        : '';
+      if (bind === 'custom' && !customHost) {
+        return sendJson(res, 400, { error: 'customHost é obrigatório quando bind=custom' });
+      }
+      const next = { bind, customHost };
+      saveNetworkConfig(next);
+      return sendJson(res, 200, {
+        ...next,
+        activeHost: BIND_HOST,
+        port: PORT,
+        restart_required: true,
+        note: 'reinicie o servidor pra aplicar',
+      });
+    }).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
   if (url.pathname === '/api/agents' && req.method === 'POST') {
     handleAgentCreate(req, res).catch(err => sendJson(res, 500, { error: err.message }));
     return;
@@ -3047,6 +3122,16 @@ const server = http.createServer((req, res) => {
     `localhost:${PORT}`,
     `127.0.0.1:${PORT}`,
   ]);
+  // Se o servidor está exposto na LAN/custom, libera também o IP/host vinculado.
+  if (networkCfg.bind === 'lan') {
+    for (const ip of listLanIps()) {
+      VAULT_ALLOWED_HOSTS.add(`${ip.address}:${PORT}`);
+      VAULT_ALLOWED_ORIGINS.add(`http://${ip.address}:${PORT}`);
+    }
+  } else if (networkCfg.bind === 'custom' && networkCfg.customHost) {
+    VAULT_ALLOWED_HOSTS.add(`${networkCfg.customHost}:${PORT}`);
+    VAULT_ALLOWED_ORIGINS.add(`http://${networkCfg.customHost}:${PORT}`);
+  }
   const guardVaultRequest = (_req, _res) => {
     const host = (_req.headers.host || '').toLowerCase();
     if (!VAULT_ALLOWED_HOSTS.has(host)) {
@@ -3457,8 +3542,15 @@ const server = http.createServer((req, res) => {
   res.end('Not found');
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\nproject-mem UI rodando em: http://localhost:${PORT}`);
+server.listen(PORT, BIND_HOST, () => {
+  const displayHost = BIND_HOST === '0.0.0.0' ? 'localhost' : BIND_HOST;
+  console.log(`\nproject-mem UI rodando em: http://${displayHost}:${PORT}`);
+  console.log(`Bind: ${BIND_HOST} (${networkCfg.bind})`);
+  if (networkCfg.bind === 'lan') {
+    for (const ip of listLanIps()) {
+      console.log(`  também: http://${ip.address}:${PORT} (${ip.iface})`);
+    }
+  }
   console.log(`Projeto: ${projectName}`);
   console.log(`Memória: ${memDir}`);
   console.log(`UI: ${HAS_DIST ? 'ui-next/dist (React)' : 'plugin/ui/index.html (legacy)'}`);

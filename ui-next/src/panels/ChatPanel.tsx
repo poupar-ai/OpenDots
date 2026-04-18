@@ -53,9 +53,8 @@ export function ChatPanel({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    el.scrollTop = el.scrollHeight;
+  }, [messages, agent]);
 
   const autoResize = (ta: HTMLTextAreaElement | null) => {
     if (!ta) return;
@@ -173,7 +172,7 @@ export function ChatPanel({
               </span>
             </div>
           ) : (
-            <Bubble key={i} msg={item.msg} humanName={humanName} />
+            <Bubble key={i} msg={item.msg} humanName={humanName} agentEmoji={agentCfg.emoji} />
           ),
         )}
         {err && (
@@ -228,6 +227,7 @@ export function ChatPanel({
 function Bubble({
   msg,
   humanName,
+  agentEmoji,
 }: {
   msg: {
     role: 'user' | 'agent';
@@ -238,6 +238,7 @@ function Bubble({
     from?: string;
   };
   humanName?: string | null;
+  agentEmoji?: string;
 }) {
   const isUser = msg.role === 'user';
   const thinking = msg.streaming && msg.phase === 'thinking';
@@ -249,12 +250,14 @@ function Bubble({
       {!isUser && (
         <div
           className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px]',
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm',
             thinking ? 'bg-amber-100' : 'bg-slate-200',
           )}
         >
           {thinking ? (
             <Brain className="h-3.5 w-3.5 text-amber-600" />
+          ) : agentEmoji ? (
+            <span className="leading-none">{agentEmoji}</span>
           ) : (
             <Bot className="h-3.5 w-3.5 text-slate-600" />
           )}

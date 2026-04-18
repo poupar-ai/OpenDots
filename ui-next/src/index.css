@@ -24,23 +24,23 @@
     --radius: 0.6rem;
   }
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 10%;
-    --card-foreground: 210 40% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 7%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 96%;
-    --destructive: 0 74% 50%;
-    --destructive-foreground: 210 40% 96%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 224 76% 60%;
+    --background: 224 14% 6%;
+    --foreground: 220 14% 92%;
+    --card: 224 12% 9%;
+    --card-foreground: 220 14% 92%;
+    --primary: 217 91% 62%;
+    --primary-foreground: 224 14% 6%;
+    --secondary: 224 10% 14%;
+    --secondary-foreground: 220 14% 92%;
+    --muted: 224 10% 13%;
+    --muted-foreground: 220 8% 62%;
+    --accent: 224 10% 15%;
+    --accent-foreground: 220 14% 92%;
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 220 14% 96%;
+    --border: 224 10% 16%;
+    --input: 224 10% 16%;
+    --ring: 217 91% 62%;
   }
   * { @apply border-border; }
   body {
@@ -51,73 +51,99 @@
   }
 }
 
-/* ── Dark-mode overrides para classes hardcoded ──────────────────────────── */
-/* A base de código usa muitas cores fixas (slate-*, white, indigo-50, etc.).  */
-/* Em vez de tocar em 15+ arquivos, re-mapeamos aqui quando .dark está ativo.   */
+/* ── Dark-mode overrides ──────────────────────────────────────────────────── */
+/* A base usa classes fixas (slate-*, white, indigo-50, etc.). Remapeamos aqui  */
+/* com elevação consistente: background → surface → elevated → hover.           */
+/*   Level 0  bg       hsl(224 14% 6%)                                          */
+/*   Level 1  bg-slate-50, bg-muted/30                                          */
+/*   Level 2  bg-white (cards)          hsl(224 12% 10%)                        */
+/*   Level 3  bubble agente             hsl(224 10% 13%)                        */
+/*   Level 4  hover                     hsl(224 10% 16%)                        */
+/*   Borders ficam sutis (~18% lightness) pra não "gritar"                       */
 
-.dark .bg-white { background-color: hsl(222 47% 10%) !important; }
-.dark .bg-white\/70 { background-color: hsl(222 47% 10% / 0.7) !important; }
-.dark .bg-white\/60 { background-color: hsl(222 47% 10% / 0.6) !important; }
-.dark .bg-white\/80 { background-color: hsl(222 47% 10% / 0.8) !important; }
+.dark .bg-white { background-color: hsl(224 12% 10%) !important; }
+.dark .bg-white\/70 { background-color: hsl(224 12% 10% / 0.72) !important; }
+.dark .bg-white\/60 { background-color: hsl(224 12% 10% / 0.62) !important; }
+.dark .bg-white\/80 { background-color: hsl(224 12% 10% / 0.82) !important; }
 
-.dark .bg-slate-50 { background-color: hsl(222 47% 9%) !important; }
-.dark .bg-slate-100 { background-color: hsl(217 33% 14%) !important; }
-.dark .bg-slate-50\/70 { background-color: hsl(222 47% 9% / 0.7) !important; }
-.dark .bg-slate-50\/40 { background-color: hsl(222 47% 9% / 0.4) !important; }
-.dark .bg-muted\/30 { background-color: hsl(217 33% 17% / 0.3) !important; }
+.dark .bg-slate-50 { background-color: hsl(224 12% 8%) !important; }
+.dark .bg-slate-50\/70 { background-color: hsl(224 12% 8% / 0.72) !important; }
+.dark .bg-slate-50\/40 { background-color: hsl(224 12% 8% / 0.42) !important; }
+.dark .bg-slate-100 { background-color: hsl(224 10% 13%) !important; }
+.dark .bg-slate-200 { background-color: hsl(224 10% 18%) !important; }
+.dark .bg-muted\/30 { background-color: hsl(224 10% 13% / 0.3) !important; }
 
-.dark .text-slate-900 { color: hsl(210 40% 96%) !important; }
-.dark .text-slate-800 { color: hsl(210 40% 92%) !important; }
-.dark .text-slate-700 { color: hsl(214 32% 82%) !important; }
-.dark .text-slate-600 { color: hsl(215 20% 70%) !important; }
-.dark .text-slate-500 { color: hsl(215 20% 60%) !important; }
-.dark .text-slate-400 { color: hsl(215 16% 55%) !important; }
+.dark .text-slate-900 { color: hsl(220 14% 94%) !important; }
+.dark .text-slate-800 { color: hsl(220 12% 88%) !important; }
+.dark .text-slate-700 { color: hsl(220 10% 80%) !important; }
+.dark .text-slate-600 { color: hsl(220 8% 66%) !important; }
+.dark .text-slate-500 { color: hsl(220 7% 54%) !important; }
+.dark .text-slate-400 { color: hsl(220 7% 46%) !important; }
+.dark .text-slate-300 { color: hsl(220 7% 40%) !important; }
 
-.dark .border-slate-200 { border-color: hsl(217 33% 22%) !important; }
-.dark .border-slate-300 { border-color: hsl(217 33% 28%) !important; }
+.dark .border-slate-200 { border-color: hsl(224 8% 18%) !important; }
+.dark .border-slate-300 { border-color: hsl(224 8% 24%) !important; }
 
-/* Soft semantic backgrounds (badges/seções): escurece mas preserva matiz */
-.dark .bg-indigo-50 { background-color: hsl(231 55% 18%) !important; }
-.dark .bg-indigo-50\/40 { background-color: hsl(231 55% 18% / 0.4) !important; }
-.dark .bg-amber-50 { background-color: hsl(36 55% 16%) !important; }
-.dark .bg-amber-50\/50 { background-color: hsl(36 55% 16% / 0.5) !important; }
-.dark .bg-emerald-50 { background-color: hsl(150 55% 14%) !important; }
-.dark .bg-red-50 { background-color: hsl(0 55% 18%) !important; }
-.dark .bg-blue-50 { background-color: hsl(217 55% 18%) !important; }
-.dark .bg-orange-50 { background-color: hsl(24 55% 18%) !important; }
-.dark .bg-violet-50 { background-color: hsl(262 55% 20%) !important; }
+/* Tints semânticos: saturação baixa pra fundo, mais viva pro texto. */
+.dark .bg-indigo-50 { background-color: hsl(230 28% 14%) !important; }
+.dark .bg-indigo-50\/40 { background-color: hsl(230 28% 14% / 0.5) !important; }
+.dark .bg-indigo-100 { background-color: hsl(230 30% 18%) !important; }
+.dark .bg-amber-50 { background-color: hsl(32 28% 12%) !important; }
+.dark .bg-amber-50\/50 { background-color: hsl(32 28% 12% / 0.6) !important; }
+.dark .bg-amber-100 { background-color: hsl(32 30% 16%) !important; }
+.dark .bg-emerald-50 { background-color: hsl(155 22% 11%) !important; }
+.dark .bg-red-50 { background-color: hsl(0 28% 13%) !important; }
+.dark .bg-blue-50 { background-color: hsl(215 32% 13%) !important; }
+.dark .bg-sky-50 { background-color: hsl(200 30% 13%) !important; }
+.dark .bg-purple-50 { background-color: hsl(275 24% 15%) !important; }
+.dark .bg-orange-50 { background-color: hsl(25 28% 13%) !important; }
+.dark .bg-violet-50 { background-color: hsl(260 26% 15%) !important; }
 
-/* Texto sobre bgs semânticos fica mais claro pra manter contraste */
-.dark .text-indigo-700 { color: hsl(231 80% 78%) !important; }
-.dark .text-amber-700 { color: hsl(36 80% 72%) !important; }
-.dark .text-emerald-700 { color: hsl(150 60% 68%) !important; }
-.dark .text-red-700 { color: hsl(0 75% 75%) !important; }
-.dark .text-red-600 { color: hsl(0 75% 70%) !important; }
-.dark .text-red-500 { color: hsl(0 75% 68%) !important; }
-.dark .text-blue-700 { color: hsl(217 80% 75%) !important; }
-.dark .text-blue-600 { color: hsl(217 80% 72%) !important; }
-.dark .text-orange-600 { color: hsl(24 85% 72%) !important; }
-.dark .text-orange-700 { color: hsl(24 80% 72%) !important; }
-.dark .text-violet-700 { color: hsl(262 70% 78%) !important; }
-.dark .text-indigo-400 { color: hsl(231 60% 65%) !important; }
+.dark .text-indigo-700 { color: hsl(230 85% 80%) !important; }
+.dark .text-indigo-400 { color: hsl(230 70% 70%) !important; }
+.dark .text-amber-700 { color: hsl(32 88% 72%) !important; }
+.dark .text-amber-600 { color: hsl(32 90% 68%) !important; }
+.dark .text-emerald-700 { color: hsl(155 50% 65%) !important; }
+.dark .text-emerald-600 { color: hsl(155 55% 58%) !important; }
+.dark .text-red-700 { color: hsl(0 72% 76%) !important; }
+.dark .text-red-600 { color: hsl(0 72% 70%) !important; }
+.dark .text-red-500 { color: hsl(0 72% 68%) !important; }
+.dark .text-blue-700 { color: hsl(215 85% 78%) !important; }
+.dark .text-blue-600 { color: hsl(215 85% 72%) !important; }
+.dark .text-orange-700 { color: hsl(25 85% 72%) !important; }
+.dark .text-orange-600 { color: hsl(25 90% 68%) !important; }
+.dark .text-violet-700 { color: hsl(260 70% 78%) !important; }
 
-.dark .border-indigo-200 { border-color: hsl(231 40% 32%) !important; }
-.dark .border-indigo-300 { border-color: hsl(231 45% 40%) !important; }
-.dark .border-amber-200 { border-color: hsl(36 40% 30%) !important; }
-.dark .border-emerald-200 { border-color: hsl(150 40% 28%) !important; }
-.dark .border-red-200 { border-color: hsl(0 40% 32%) !important; }
-.dark .border-blue-200 { border-color: hsl(217 40% 32%) !important; }
-.dark .border-orange-200 { border-color: hsl(24 40% 32%) !important; }
-.dark .border-violet-200 { border-color: hsl(262 40% 34%) !important; }
+/* Rings sutis — não queremos linhas gritantes ao redor de avatares */
+.dark .ring-indigo-200 { --tw-ring-color: hsl(230 25% 28%) !important; }
+.dark .ring-sky-200 { --tw-ring-color: hsl(200 25% 28%) !important; }
+.dark .ring-purple-200 { --tw-ring-color: hsl(275 25% 30%) !important; }
+.dark .ring-orange-200 { --tw-ring-color: hsl(25 25% 28%) !important; }
+.dark .ring-red-200 { --tw-ring-color: hsl(0 25% 28%) !important; }
 
-/* Hover states com fundo branco/slate precisam escurecer também */
-.dark .hover\:bg-white:hover { background-color: hsl(222 47% 14%) !important; }
-.dark .hover\:bg-slate-100:hover { background-color: hsl(217 33% 16%) !important; }
-.dark .hover\:bg-indigo-50\/40:hover { background-color: hsl(231 55% 18% / 0.4) !important; }
-.dark .hover\:bg-indigo-100:hover { background-color: hsl(231 55% 22%) !important; }
-.dark .hover\:bg-orange-100:hover { background-color: hsl(24 55% 22%) !important; }
-.dark .hover\:bg-blue-100:hover { background-color: hsl(217 55% 22%) !important; }
-.dark .hover\:border-indigo-300:hover { border-color: hsl(231 45% 40%) !important; }
+.dark .border-indigo-200 { border-color: hsl(230 22% 24%) !important; }
+.dark .border-indigo-300 { border-color: hsl(230 25% 30%) !important; }
+.dark .border-amber-200 { border-color: hsl(32 22% 22%) !important; }
+.dark .border-emerald-200 { border-color: hsl(155 18% 22%) !important; }
+.dark .border-red-200 { border-color: hsl(0 22% 24%) !important; }
+.dark .border-blue-200 { border-color: hsl(215 22% 24%) !important; }
+.dark .border-orange-200 { border-color: hsl(25 22% 24%) !important; }
+.dark .border-violet-200 { border-color: hsl(260 22% 26%) !important; }
+
+/* Hover: sobe 3-4% de luminosidade do nível anterior */
+.dark .hover\:bg-white:hover { background-color: hsl(224 10% 13%) !important; }
+.dark .hover\:bg-slate-100:hover { background-color: hsl(224 10% 15%) !important; }
+.dark .hover\:bg-indigo-50\/40:hover { background-color: hsl(230 28% 17% / 0.55) !important; }
+.dark .hover\:bg-indigo-100:hover { background-color: hsl(230 28% 20%) !important; }
+.dark .hover\:bg-orange-100:hover { background-color: hsl(25 28% 18%) !important; }
+.dark .hover\:bg-blue-100:hover { background-color: hsl(215 28% 18%) !important; }
+.dark .hover\:border-indigo-300:hover { border-color: hsl(230 28% 32%) !important; }
+
+/* Shadows no dark: reduz muito — sombras pretas em fundo preto só sujam */
+.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25) !important; }
+.dark .shadow { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2) !important; }
+.dark .shadow-md { box-shadow: 0 2px 6px -1px rgb(0 0 0 / 0.35), 0 1px 3px -1px rgb(0 0 0 / 0.25) !important; }
+.dark .shadow-lg { box-shadow: 0 6px 16px -4px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.3) !important; }
 
 /* thin scrollbars, only visible on hover */
 .chat-scroll, .soft-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -138,6 +164,31 @@
 .chat-ta::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .chat-ta:hover::-webkit-scrollbar-thumb { background: hsl(var(--border)); }
 
+/* Chat: bubble do agente com elevação clara contra o fundo do scroll */
+.dark .prose-bubble.bg-white,
+.dark .prose-bubble:not(.user) {
+  background-color: hsl(224 10% 13%) !important;
+  color: hsl(220 12% 88%) !important;
+  border: 1px solid hsl(224 10% 17%) !important;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25) !important;
+}
+
+/* Day label pill: elevação + borda sutil */
+.dark .chat-scroll .bg-white {
+  background-color: hsl(224 10% 12%) !important;
+  border: 1px solid hsl(224 10% 17%) !important;
+}
+
+/* Placeholder da textarea no chat: tom limpo, não gritante */
+.dark .placeholder\:text-slate-400::placeholder {
+  color: hsl(220 7% 44%) !important;
+}
+
+/* Ring de foco no input do chat mais discreto */
+.dark .focus-within\:ring-primary:focus-within {
+  --tw-ring-color: hsl(217 91% 62% / 0.5) !important;
+}
+
 /* markdown inside chat bubbles */
 .prose-bubble p { margin: 0 0 0.5em 0; }
 .prose-bubble p:last-child { margin-bottom: 0; }
@@ -151,6 +202,16 @@
   font-family: ui-monospace, "JetBrains Mono", monospace;
 }
 .prose-bubble.user code { background: rgba(255, 255, 255, 0.18); }
+.dark .prose-bubble:not(.user) code {
+  background: hsl(224 10% 18%);
+  color: hsl(220 14% 90%);
+}
+.dark .prose-bubble:not(.user) pre {
+  background: hsl(224 14% 5%);
+  color: hsl(220 14% 90%);
+  border: 1px solid hsl(224 10% 15%);
+}
+.dark .prose-bubble a { color: hsl(217 91% 70%); }
 .prose-bubble pre {
   background: rgba(15, 23, 42, 0.9);
   color: #f1f5f9;

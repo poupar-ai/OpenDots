@@ -82,6 +82,9 @@ export function AgentCanvas({
         <Legend color="#f97316" label="motor" />
         <Legend color="#ef4444" label="firefighter" />
       </div>
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-white/80 px-2 py-1 text-[10px] text-slate-600 shadow-sm backdrop-blur">
+        WASD / ← → ↑ ↓ · arrastar · scroll
+      </div>
     </div>
   );
 }

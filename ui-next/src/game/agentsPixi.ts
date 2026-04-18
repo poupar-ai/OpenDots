@@ -162,6 +162,27 @@ function edges(cfg: AgentCfg): string[] {
   return cfg.can_talk_to || cfg.consults || [];
 }
 
+// Mapeia tecla bruta para direção canônica. Aceita WASD, setas e hjkl (vim).
+// Retorna null se não é tecla de navegação.
+function normalizeKey(key: string): 'up' | 'down' | 'left' | 'right' | null {
+  switch (key) {
+    case 'ArrowUp': case 'w': case 'W': case 'k': return 'up';
+    case 'ArrowDown': case 's': case 'S': case 'j': return 'down';
+    case 'ArrowLeft': case 'a': case 'A': case 'h': return 'left';
+    case 'ArrowRight': case 'd': case 'D': case 'l': return 'right';
+    default: return null;
+  }
+}
+
+// Evita capturar tecla quando o foco está num campo de texto da UI.
+function isEditableTarget(t: EventTarget | null): boolean {
+  if (!(t instanceof HTMLElement)) return false;
+  const tag = t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (t.isContentEditable) return true;
+  return false;
+}
+
 export class AgentCanvas {
   private app: Application;
   private nodes = new Map<string, AgentNode>();
@@ -196,9 +217,13 @@ export class AgentCanvas {
   private humanDrag: HumanDragState | null = null;
   private pan: PanState | null = null;
   private wheelHandler: ((e: WheelEvent) => void) | null = null;
+  private keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private keyUpHandler: ((e: KeyboardEvent) => void) | null = null;
+  private keysPressed = new Set<string>();
   private rootEl: HTMLElement | null = null;
   private readonly DRAG_THRESHOLD = 4;
   private readonly PAN_THRESHOLD = 3;
+  private readonly KEY_PAN_SPEED = 7; // px por frame quando tecla segurada
 
   constructor(opts: AgentCanvasOptions = {}) {
     this.opts = opts;
@@ -259,6 +284,23 @@ export class AgentCanvas {
     // wheel: scroll horizontal + vertical pelo mundo
     this.wheelHandler = (e: WheelEvent) => this.onWheel(e);
     this.app.canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
+
+    // keyboard: WASD / setas movimentam a câmera como num game.
+    // Ignorado quando o usuário está digitando em input/textarea/contenteditable.
+    this.keyDownHandler = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      const k = normalizeKey(e.key);
+      if (!k) return;
+      if (!this.keysPressed.has(k)) this.keysPressed.add(k);
+      e.preventDefault();
+    };
+    this.keyUpHandler = (e: KeyboardEvent) => {
+      const k = normalizeKey(e.key);
+      if (!k) return;
+      this.keysPressed.delete(k);
+    };
+    window.addEventListener('keydown', this.keyDownHandler);
+    window.addEventListener('keyup', this.keyUpHandler);
 
     this.ticker = (t: Ticker) => this.tick(t);
     this.app.ticker.add(this.ticker);
@@ -427,6 +469,15 @@ export class AgentCanvas {
       try { this.app.canvas.removeEventListener('wheel', this.wheelHandler); } catch {}
     }
     this.wheelHandler = null;
+    if (this.keyDownHandler) {
+      try { window.removeEventListener('keydown', this.keyDownHandler); } catch {}
+    }
+    if (this.keyUpHandler) {
+      try { window.removeEventListener('keyup', this.keyUpHandler); } catch {}
+    }
+    this.keyDownHandler = null;
+    this.keyUpHandler = null;
+    this.keysPressed.clear();
     this.rootEl = null;
     if (!this.mounted) return;
     try { if (this.ticker) this.app.ticker.remove(this.ticker); } catch {}
@@ -802,6 +853,23 @@ export class AgentCanvas {
   private tick(t: Ticker) {
     const dt = Math.min(t.deltaTime, 2);
     this.office?.tick(t);
+
+    // Pan por teclado (WASD / setas). Aplica antes dos nós pra câmera já estar
+    // na posição nova quando rederiza o mundo.
+    if (this.keysPressed.size > 0) {
+      let dx = 0;
+      let dy = 0;
+      if (this.keysPressed.has('left')) dx -= 1;
+      if (this.keysPressed.has('right')) dx += 1;
+      if (this.keysPressed.has('up')) dy -= 1;
+      if (this.keysPressed.has('down')) dy += 1;
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy) || 1;
+        this.cameraX += (dx / len) * this.KEY_PAN_SPEED * dt;
+        this.cameraY += (dy / len) * this.KEY_PAN_SPEED * dt;
+        this.clampAndApplyCamera();
+      }
+    }
 
     const nodes = [...this.nodes.values()];
 

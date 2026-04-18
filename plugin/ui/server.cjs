@@ -293,6 +293,13 @@ function sanitizePosition(v) {
   return { x, y };
 }
 
+function sanitizeUiPrefs(v) {
+  if (!v || typeof v !== 'object') return null;
+  const out = {};
+  if (typeof v.chatCollapsed === 'boolean') out.chatCollapsed = v.chatCollapsed;
+  return Object.keys(out).length ? out : null;
+}
+
 function humanSummary(h) {
   return {
     id: h.id,
@@ -305,6 +312,7 @@ function humanSummary(h) {
     gender: h.gender || null,
     skin: h.skin || null,
     position: h.position || null,
+    ui_prefs: h.ui_prefs || null,
     created_at: h.created_at,
     last_seen_at: h.last_seen_at || null,
     online: humanIsOnline(h),
@@ -2634,7 +2642,7 @@ async function handleHumansCreate(req, res) {
   const raw = await readBody(req);
   let body;
   try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
-  const { name, description, skills, important, offline_privacy, notes, location, gender, skin, position } = body || {};
+  const { name, description, skills, important, offline_privacy, notes, location, gender, skin, position, ui_prefs } = body || {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     return sendJson(res, 400, { error: 'need name' });
   }
@@ -2660,6 +2668,7 @@ async function handleHumansCreate(req, res) {
     gender: sanitizeGender(gender),
     skin: sanitizeSkin(skin),
     position: sanitizePosition(position),
+    ui_prefs: sanitizeUiPrefs(ui_prefs),
     created_at: now,
     last_seen_at: now,
   };
@@ -2684,7 +2693,7 @@ async function handleHumanUpdate(id, req, res) {
   const data = loadHumans();
   const h = data.humans[id];
   if (!h) return sendJson(res, 404, { error: 'not found' });
-  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'gender', 'skin', 'position'];
+  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'gender', 'skin', 'position', 'ui_prefs'];
   for (const f of fields) {
     if (body[f] === undefined) continue;
     if (f === 'skills') {
@@ -2702,6 +2711,9 @@ async function handleHumanUpdate(id, req, res) {
       h.skin = sanitizeSkin(body.skin);
     } else if (f === 'position') {
       h.position = sanitizePosition(body.position);
+    } else if (f === 'ui_prefs') {
+      const next = sanitizeUiPrefs(body.ui_prefs);
+      h.ui_prefs = next ? { ...(h.ui_prefs || {}), ...next } : null;
     } else {
       h[f] = (body[f] || '').toString().slice(0, 4000);
     }

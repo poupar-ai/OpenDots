@@ -16,6 +16,10 @@ export interface HumanPosition {
   y: number;
 }
 
+export interface HumanUiPrefs {
+  chatCollapsed?: boolean;
+}
+
 export interface HumanProfile {
   id: string;
   name: string;
@@ -28,6 +32,7 @@ export interface HumanProfile {
   gender?: HumanGender | null;
   skin?: HumanSkin | null;
   position?: HumanPosition | null;
+  ui_prefs?: HumanUiPrefs | null;
   created_at: string;
   last_seen_at?: string | null;
   online?: boolean;
@@ -44,6 +49,7 @@ export interface HumanCreateInput {
   gender?: HumanGender | null;
   skin?: HumanSkin | null;
   position?: HumanPosition | null;
+  ui_prefs?: HumanUiPrefs | null;
 }
 
 export const HUMAN_LOCATIONS: { id: HumanLocation; label: string }[] = [

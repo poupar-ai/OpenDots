@@ -44,6 +44,9 @@ const THROW_CAP = 22;     // velocidade máxima ao arremessar
 const HUMAN_GRAVITY = 0.7;
 const HUMAN_FALL_SPEED_MAX = 28;
 const HUMAN_DROP_THRESHOLD = 4; // px abaixo do piso já dispara queda
+// separação entre humanos — impede sobreposição no chão
+const HUMAN_MIN_SEP = 30;
+const HUMAN_SEP_VERTICAL = 44; // considera "mesmo piso" se |dy| <= este valor
 
 interface FlowArrow {
   from: string;
@@ -88,6 +91,7 @@ interface HumanNode {
   vy?: number;
   falling?: boolean;
   pendingSave?: boolean; // salvar posição após pousar
+  sepSaveTimer?: number; // debounce save após separação
 }
 
 interface HumanDragState {
@@ -212,6 +216,7 @@ export class AgentCanvas {
   private height = 420;
   private cameraX = 0;
   private cameraY = 0;
+  private userHasPanned = false;
   private resizeObs: ResizeObserver | null = null;
   private workingName: string | null = null;
   private mounted = false;
@@ -316,9 +321,14 @@ export class AgentCanvas {
       if (!this.mounted || this.destroyed) return;
       this.width = el.clientWidth;
       this.height = el.clientHeight;
+      // Força o renderer Pixi a seguir o tamanho do container (resizeTo sozinho
+      // às vezes não pega mudanças de CSS disparadas por grid-template-columns).
+      try { this.app.renderer.resize(this.width, this.height); } catch {}
+      this.app.stage.hitArea = this.app.screen;
       this.office.resize(this.width, this.height);
       this.clampAndApplyCamera();
       this.relayout();
+      this.focusCameraOnMeIfIdle();
     });
     this.resizeObs.observe(el);
 
@@ -341,9 +351,12 @@ export class AgentCanvas {
   setMeHumanId(id: string | null) {
     if (this.meHumanId === id) return;
     this.meHumanId = id;
+    // novo usuário logado → permite reenquadrar a câmera no próximo updateHumans
+    this.userHasPanned = false;
     // força recriar sprites pra atualizar estado "isMe"
     if (this.mounted) {
       for (const n of this.humanNodes.values()) {
+        if (n.sepSaveTimer !== undefined) clearTimeout(n.sepSaveTimer);
         this.humansLayer.removeChild(n.sprite);
         n.sprite.destroy({ children: true });
       }
@@ -360,6 +373,7 @@ export class AgentCanvas {
     for (const id of [...this.humanNodes.keys()]) {
       if (!wanted.has(id)) {
         const n = this.humanNodes.get(id)!;
+        if (n.sepSaveTimer !== undefined) clearTimeout(n.sepSaveTimer);
         this.humansLayer.removeChild(n.sprite);
         n.sprite.destroy({ children: true });
         this.humanNodes.delete(id);
@@ -411,6 +425,7 @@ export class AgentCanvas {
         }
       });
     }
+    this.focusCameraOnMeIfIdle();
   }
 
   private startHumanDrag(id: string, gx: number, gy: number, pointerId: number) {
@@ -808,7 +823,10 @@ export class AgentCanvas {
     if (!this.pan) return;
     const dx = gx - this.pan.startX;
     const dy = gy - this.pan.startY;
-    if (!this.pan.moved && Math.hypot(dx, dy) >= this.PAN_THRESHOLD) this.pan.moved = true;
+    if (!this.pan.moved && Math.hypot(dx, dy) >= this.PAN_THRESHOLD) {
+      this.pan.moved = true;
+      this.userHasPanned = true;
+    }
     // arrastar ponteiro p/ direita → puxa mundo p/ direita → câmera anda p/ esquerda
     this.cameraX = this.pan.startCamX - dx;
     this.cameraY = this.pan.startCamY - dy;
@@ -854,6 +872,7 @@ export class AgentCanvas {
     const dy = e.shiftKey ? 0 : e.deltaY;
     this.cameraX += dx;
     this.cameraY += dy;
+    this.userHasPanned = true;
     this.clampAndApplyCamera();
   }
 
@@ -866,6 +885,36 @@ export class AgentCanvas {
     this.cameraY = clamp(this.cameraY, 0, maxY);
     this.worldContainer.x = -this.cameraX;
     this.worldContainer.y = -this.cameraY;
+  }
+
+  // Enquadra a câmera em um ponto-alvo (coordenadas de mundo), centrando-o
+  // no viewport — útil em telas pequenas pra garantir que o humano logado
+  // apareça sem ser preciso arrastar.
+  private centerCameraOn(x: number, y: number) {
+    this.cameraX = x - this.width / 2;
+    this.cameraY = y - this.height / 2;
+    this.clampAndApplyCamera();
+  }
+
+  private focusCameraOnMeIfIdle() {
+    if (this.userHasPanned) return;
+    if (!this.meHumanId) return;
+    const me = this.humanNodes.get(this.meHumanId);
+    if (!me) return;
+    this.centerCameraOn(me.x, me.y);
+  }
+
+  // Debounce para persistir a posição após uma separação. Evita rajada de
+  // updates quando dois humanos são empurrados frame a frame.
+  private scheduleSeparationSave(h: HumanNode) {
+    if (h.sepSaveTimer !== undefined) {
+      clearTimeout(h.sepSaveTimer);
+    }
+    h.sepSaveTimer = window.setTimeout(() => {
+      h.sepSaveTimer = undefined;
+      void updateHuman(h.id, { position: { x: h.x, y: h.y } }).catch(() => {});
+    }, 800);
+    h.pinned = true;
   }
 
   private tick(t: Ticker) {
@@ -885,6 +934,7 @@ export class AgentCanvas {
         const len = Math.hypot(dx, dy) || 1;
         this.cameraX += (dx / len) * this.KEY_PAN_SPEED * dt;
         this.cameraY += (dy / len) * this.KEY_PAN_SPEED * dt;
+        this.userHasPanned = true;
         this.clampAndApplyCamera();
       }
     }
@@ -964,6 +1014,36 @@ export class AgentCanvas {
           h.sprite.position.set(h.x, h.y);
         }
       }
+    }
+
+    // separação horizontal: humanos parados no mesmo piso não se sobrepõem.
+    // Aplicamos um push simétrico; drag/fall ignoram (drag tem prioridade, queda
+    // resolve na próxima iteração).
+    const grounded = [...this.humanNodes.values()].filter(
+      (h) => !h.dragging && !h.falling,
+    );
+    const worldW = this.office.getWorldSize().width;
+    for (let i = 0; i < grounded.length; i++) {
+      for (let j = i + 1; j < grounded.length; j++) {
+        const a = grounded[i];
+        const b = grounded[j];
+        if (Math.abs(a.y - b.y) > HUMAN_SEP_VERTICAL) continue;
+        const dx = b.x - a.x;
+        const adx = Math.abs(dx);
+        if (adx >= HUMAN_MIN_SEP) continue;
+        const overlap = HUMAN_MIN_SEP - adx;
+        const dir = dx === 0 ? (a.id < b.id ? 1 : -1) : Math.sign(dx);
+        const half = overlap / 2 + 0.01;
+        a.x = clamp(a.x - dir * half, MARGIN_X, worldW - MARGIN_X);
+        b.x = clamp(b.x + dir * half, MARGIN_X, worldW - MARGIN_X);
+        a.sprite.position.set(a.x, a.y);
+        b.sprite.position.set(b.x, b.y);
+        this.scheduleSeparationSave(a);
+        this.scheduleSeparationSave(b);
+      }
+    }
+
+    for (const h of this.humanNodes.values()) {
       h.sprite.tick(t);
     }
 

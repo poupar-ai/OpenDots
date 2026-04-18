@@ -140,8 +140,9 @@ export class Office extends Container {
 
   private readonly SKY_H = 64;
   private readonly ROOF_H = 8;
-  private readonly FLOOR_H = 196;
-  private readonly FLOOR_OFFSET = 42;
+  private readonly FLOOR_H = 214;     // altura total por andar (inclui a laje de piso abaixo)
+  private readonly SLAB_H = 24;       // espessura 3D do piso entre andares
+  private readonly FLOOR_OFFSET = 52; // calçada do mundo (maior pra acompanhar piso 3D)
   private readonly MIN_ROOM_W = 220;
 
   constructor() {
@@ -249,16 +250,26 @@ export class Office extends Container {
     return this.rooms.has(roomId);
   }
 
-  // Acha o Y do centro do sprite humano quando ele pousa num piso embaixo
-  // da coordenada (x, y) dada. Se nenhum quarto tem piso abaixo, usa o chão do mundo.
-  // O offset FEET_OFFSET compensa a diferença entre o ponto âncora do sprite
-  // (centro do corpo) e a base dos pés (~30px abaixo).
+  // Posição Y de pouso do sprite humano (centro do corpo), respeitando pisos.
+  // Regras de prédio:
+  //   1) Se o corpo está dentro da área vertical de uma sala, cai no piso dela.
+  //   2) Senão, cai no piso mais próximo abaixo dos pés atuais.
+  //   3) Sem piso abaixo → chão do mundo.
   landingYAt(x: number, y: number, feetOffset = 30): number {
     const worldFloorY = this.worldH - this.FLOOR_OFFSET;
+    const feet = y + feetOffset;
+    // 1) corpo dentro da sala → piso dessa sala (tolerância pequena nas bordas)
+    for (const r of this.rooms.values()) {
+      if (x < r.x || x > r.x + r.width) continue;
+      if (y >= r.ceilingY - 4 && feet <= r.floorY + 2) {
+        return r.floorY - feetOffset;
+      }
+    }
+    // 2) piso mais próximo abaixo dos pés
     let candidate = worldFloorY;
     for (const r of this.rooms.values()) {
       if (x < r.x || x > r.x + r.width) continue;
-      if (r.floorY < y + feetOffset) continue; // piso está acima dos pés (já estamos abaixo dele)
+      if (r.floorY < feet) continue;
       if (r.floorY < candidate) candidate = r.floorY;
     }
     return candidate - feetOffset;
@@ -445,13 +456,13 @@ export class Office extends Container {
     if (this.numFloors === 0) return;
     // Camada escura aplicada sobre o prédio à noite para que as lâmpadas
     // sejam a fonte de luz visível. Alpha cresce com a intensidade de noite.
-    const alpha = this.day.lampIntensity * 0.42;
+    const alpha = this.day.lampIntensity * 0.28;
     if (alpha <= 0) return;
     const y = this.SKY_H + this.ROOF_H;
     const h = this.numFloors * this.FLOOR_H;
     this.nightTint
       .rect(0, y, this.worldW, h)
-      .fill({ color: 0x020617, alpha });
+      .fill({ color: 0x0b1433, alpha });
   }
 
   private drawSkyline() {
@@ -503,24 +514,70 @@ export class Office extends Container {
   }
 
   private drawFloorDividers() {
+    // Lajes 2.5D já são desenhadas por sala. Divisor fica apenas como
+    // reforço de sombra por baixo, cobrindo qualquer gap entre salas.
     this.floorDividers.clear();
     if (this.numFloors <= 1) return;
     for (let i = 1; i < this.numFloors; i++) {
-      const y = this.SKY_H + this.ROOF_H + i * this.FLOOR_H - 6;
-      this.floorDividers.rect(0, y, this.worldW, 6).fill({ color: 0x1f2937 });
-      this.floorDividers.rect(0, y + 6, this.worldW, 2).fill({ color: 0x0f172a, alpha: 0.7 });
+      const y = this.SKY_H + this.ROOF_H + i * this.FLOOR_H - 1;
+      this.floorDividers.rect(0, y, this.worldW, 1).fill({ color: 0x000000, alpha: 0.5 });
     }
   }
 
   private drawGround() {
+    // Calçada 2.5D — mesma lógica do piso das salas: topo claro é o piso,
+    // uma faixa única mais escura abaixo mostra a espessura.
     const floorY = this.worldH - this.FLOOR_OFFSET;
     this.groundG.clear();
-    this.groundG.rect(0, floorY + 6, this.worldW, this.FLOOR_OFFSET).fill({ color: 0x475569 });
-    this.groundG.rect(0, floorY + 6, this.worldW, 2).fill({ color: 0x334155 });
-    for (let x = 0; x < this.worldW; x += 22) {
-      this.groundG
-        .rect(x, floorY + 10, 1, this.FLOOR_OFFSET - 6)
-        .fill({ color: 0x334155, alpha: 0.4 });
+    const slabH = this.SLAB_H;
+    const sidewalkH = this.FLOOR_OFFSET;
+    const topBandH = 12;
+    const faceH = slabH - topBandH;
+
+    const topColor = 0x94a3b8;
+    const topAlt = 0x7c8ca0;
+    const faceBase = 0x475569;
+    const deepColor = 0x334155;
+
+    // 1) Topo da calçada = piso externo (onde o personagem anda fora do prédio)
+    this.groundG.rect(0, floorY, this.worldW, topBandH).fill({ color: topColor });
+    this.groundG.rect(0, floorY, this.worldW, 1).fill({ color: 0xe2e8f0, alpha: 0.7 });
+    const tileW = 48;
+    for (let x = 0; x < this.worldW; x += tileW) {
+      const alt = ((x / tileW) | 0) % 2 === 1;
+      if (alt) {
+        this.groundG.rect(x, floorY + 1, Math.min(tileW, this.worldW - x), topBandH - 2)
+          .fill({ color: topAlt, alpha: 0.55 });
+      }
+      if (x > 0) {
+        this.groundG.rect(x, floorY + 1, 1, topBandH - 1)
+          .fill({ color: 0x0f172a, alpha: 0.38 });
+      }
+    }
+    this.groundG.rect(0, floorY + topBandH - 1, this.worldW, 1)
+      .fill({ color: 0x0f172a, alpha: 0.7 });
+
+    // 2) Face única da calçada (espessura)
+    this.groundG.rect(0, floorY + topBandH, this.worldW, faceH).fill({ color: faceBase });
+    for (let i = 0; i < faceH; i++) {
+      const t = i / Math.max(1, faceH - 1);
+      const a = 0.3 * Math.pow(t, 1.2);
+      this.groundG.rect(0, floorY + topBandH + i, this.worldW, 1)
+        .fill({ color: 0x000000, alpha: a });
+    }
+    const blockW = 60;
+    for (let bx = blockW; bx < this.worldW; bx += blockW) {
+      this.groundG.rect(bx, floorY + topBandH, 1, faceH).fill({ color: 0x0f172a, alpha: 0.55 });
+    }
+    this.groundG.rect(0, floorY + slabH - 2, this.worldW, 2)
+      .fill({ color: 0x000000, alpha: 0.6 });
+
+    // 3) Terra abaixo da calçada
+    const soilTop = floorY + slabH;
+    const soilH = sidewalkH - slabH;
+    if (soilH > 0) {
+      this.groundG.rect(0, soilTop, this.worldW, soilH).fill({ color: deepColor });
+      this.groundG.rect(0, soilTop, this.worldW, 1).fill({ color: 0x000000, alpha: 0.55 });
     }
   }
 
@@ -544,7 +601,7 @@ export class Office extends Container {
 
       const slotIdxFromTop = maxFloor - fIdx; // 0 = topo (logo abaixo do telhado)
       const ceilY = this.SKY_H + this.ROOF_H + slotIdxFromTop * this.FLOOR_H;
-      const floorY = ceilY + this.FLOOR_H - 6;
+      const floorY = ceilY + this.FLOOR_H - this.SLAB_H;
 
       const totalWeight = list.reduce((s, r) => s + Math.max(1.3, r.agents.length), 0);
       let x = 0;
@@ -588,28 +645,57 @@ export class Office extends Container {
     bg.rect(r.x, r.floorY - 14, r.width, 1).fill({ color: 0x334155, alpha: 0.45 });
     bg.rect(r.x, r.ceilingY, r.width, 4).fill({ color: ceilColor });
 
-    // Piso cerâmico: faixa base + grid de azulejos com destaque nas juntas.
-    const tileH = 10;
-    const tileW = 26;
-    bg.rect(r.x, r.floorY, r.width, tileH).fill({ color: floorColor });
-    bg.rect(r.x, r.floorY, r.width, 1).fill({ color: 0x0f172a, alpha: 0.45 });
-    const tileDark = lerpColor(floorColor, 0x0f172a, 0.3);
-    const tileLight = lerpColor(floorColor, 0xffffff, 0.15);
-    for (let tx = 0; tx < r.width; tx += tileW) {
-      // Alterna tom claro/escuro pra dar profundidade.
-      const alt = ((tx / tileW) | 0) % 2 === 0;
-      bg.rect(r.x + tx + 1, r.floorY + 2, tileW - 2, tileH - 3)
-        .fill({ color: alt ? tileLight : tileDark, alpha: 0.18 });
-      // Junta vertical
-      bg.rect(r.x + tx, r.floorY + 1, 1, tileH - 1).fill({ color: 0x0f172a, alpha: 0.35 });
-    }
-    // Junta horizontal (topo do rodapé)
-    bg.rect(r.x, r.floorY + tileH - 1, r.width, 1).fill({ color: 0x0f172a, alpha: 0.25 });
+    // Piso 2.5D — a linha de cima (onde o personagem pisa) é O piso.
+    // Abaixo dela vem UMA faixa mais escura que sugere a espessura da laje.
+    const slabH = this.SLAB_H;
+    const topBandH = 12;           // faixa do piso em si (lajota clara)
+    const faceH = slabH - topBandH; // espessura da laje (uma única faixa)
+    const tileColor = lerpColor(floorColor, 0xffffff, 0.28);
+    const tileAlt = lerpColor(floorColor, 0xffffff, 0.12);
 
-    if (isFirst) {
-      bg.rect(r.x, r.ceilingY, 2, r.floorY - r.ceilingY + 6).fill({ color: 0x334155, alpha: 0.7 });
+    // 1) Topo = piso: faixa clara com chanfro de luz + lajotas alternadas
+    bg.rect(r.x, r.floorY, r.width, topBandH).fill({ color: tileColor });
+    bg.rect(r.x, r.floorY, r.width, 1).fill({ color: 0xffffff, alpha: 0.75 });
+    const tileW = 40;
+    for (let tx = 0; tx < r.width; tx += tileW) {
+      const alt = ((tx / tileW) | 0) % 2 === 1;
+      if (alt) {
+        const w = Math.min(tileW, r.width - tx);
+        bg.rect(r.x + tx, r.floorY + 1, w, topBandH - 2)
+          .fill({ color: tileAlt, alpha: 0.6 });
+      }
+      if (tx > 0) {
+        bg.rect(r.x + tx, r.floorY + 1, 1, topBandH - 1)
+          .fill({ color: 0x0f172a, alpha: 0.32 });
+      }
     }
-    bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + 6)
+    // sombra marcando a separação entre piso e face
+    bg.rect(r.x, r.floorY + topBandH - 1, r.width, 1).fill({ color: 0x0f172a, alpha: 0.7 });
+
+    // 2) Face = espessura da laje: faixa única, gradiente escuro, blocos largos
+    const faceBase = lerpColor(floorColor, 0x0f172a, 0.55);
+    bg.rect(r.x, r.floorY + topBandH, r.width, faceH).fill({ color: faceBase });
+    for (let i = 0; i < faceH; i++) {
+      const t = i / Math.max(1, faceH - 1);
+      const a = 0.3 * Math.pow(t, 1.2);
+      bg.rect(r.x, r.floorY + topBandH + i, r.width, 1)
+        .fill({ color: 0x000000, alpha: a });
+    }
+    // divisões verticais largas — uma única linha horizontal, sem alvenaria
+    const blockW = 56;
+    for (let bx = blockW; bx < r.width; bx += blockW) {
+      const px = r.x + bx;
+      bg.rect(px, r.floorY + topBandH, 1, faceH).fill({ color: 0x0f172a, alpha: 0.55 });
+      bg.rect(px + 1, r.floorY + topBandH, 1, faceH).fill({ color: 0xffffff, alpha: 0.06 });
+    }
+    // sombra forte na base
+    bg.rect(r.x, r.floorY + slabH - 2, r.width, 2).fill({ color: 0x000000, alpha: 0.6 });
+
+    // Colunas laterais atravessam toda a laje até a próxima sala
+    if (isFirst) {
+      bg.rect(r.x, r.ceilingY, 2, r.floorY - r.ceilingY + slabH).fill({ color: 0x334155, alpha: 0.7 });
+    }
+    bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + slabH)
       .fill({ color: 0x334155, alpha: isLast ? 0.7 : 0.7 });
     r.container.addChild(bg);
 
@@ -835,9 +921,9 @@ export class Office extends Container {
       const coneTopY = bulbY + 6;
       const coneBotY = r.floorY - 6;
       const topHalf = 2;
-      const outerBottomHalf = 110;
+      const outerBottomHalf = 130;
       const coneH = coneBotY - coneTopY;
-      const bands = 12;
+      const bands = 14;
       for (let i = 0; i < bands; i++) {
         const t0 = i / bands;
         const t1 = (i + 1) / bands;
@@ -845,7 +931,7 @@ export class Office extends Container {
         const yBot = coneTopY + t1 * coneH;
         const halfTop = topHalf + (outerBottomHalf - topHalf) * t0;
         const halfBot = topHalf + (outerBottomHalf - topHalf) * t1;
-        const a = 0.15 * (1 - Math.pow(t1, 1.6));
+        const a = 0.32 * (1 - Math.pow(t1, 1.4));
         if (a <= 0.005) continue;
         halo
           .moveTo(lx - halfTop, yTop)
@@ -853,14 +939,23 @@ export class Office extends Container {
           .lineTo(lx + halfBot, yBot)
           .lineTo(lx - halfBot, yBot)
           .closePath()
-          .fill({ color: 0xfef3c7, alpha: a });
+          .fill({ color: 0xfff4c2, alpha: a });
       }
+      // Poça de luz no chão — mancha elíptica abaixo da luminária pra marcar
+      // claramente a área iluminada (essencial à noite).
+      const pool = new Graphics();
+      const poolY = r.floorY - 3;
+      pool.ellipse(lx, poolY, outerBottomHalf * 0.9, 8)
+        .fill({ color: 0xfff4c2, alpha: 0.22 });
+      pool.ellipse(lx, poolY, outerBottomHalf * 0.55, 5)
+        .fill({ color: 0xfffbe0, alpha: 0.32 });
+      halo.addChild(pool);
       halo.alpha = this.day.lampIntensity;
 
       const bulb = new Graphics();
-      bulb.circle(lx, bulbY + 6, 3).fill({ color: 0xfde68a });
-      bulb.circle(lx, bulbY + 6, 2).fill({ color: 0xfef9c3 });
-      bulb.alpha = 0.25 + this.day.lampIntensity * 0.75;
+      bulb.circle(lx, bulbY + 6, 4).fill({ color: 0xfef08a });
+      bulb.circle(lx, bulbY + 6, 2.5).fill({ color: 0xfffbe0 });
+      bulb.alpha = 0.3 + this.day.lampIntensity * 0.7;
 
       // Ordem: halo atrás (fica atrás da cúpula também), depois cúpula, depois bulbo.
       r.lampsContainer.addChild(halo);
@@ -894,7 +989,7 @@ export class Office extends Container {
     for (const r of this.rooms.values()) {
       for (const l of r.lamps) {
         l.halo.alpha = this.day.lampIntensity;
-        l.bulb.alpha = 0.25 + this.day.lampIntensity * 0.75;
+        l.bulb.alpha = 0.3 + this.day.lampIntensity * 0.7;
       }
     }
   }

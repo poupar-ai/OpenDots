@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
+import { updateHuman } from '@/lib/humans';
 import { useTheme } from '@/hooks/useTheme';
 import { ModulesPanel } from '@/panels/ModulesPanel';
 import { AgentCanvas } from '@/panels/AgentCanvas';
@@ -43,9 +44,51 @@ export default function App() {
   const [protectionsOpen, setProtectionsOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [prefCollapsed, setPrefCollapsed] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
   const { theme, toggle: toggleTheme } = useTheme();
+
+  const syncedHumanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!human) {
+      syncedHumanRef.current = null;
+      return;
+    }
+    if (syncedHumanRef.current === human.id) return;
+    syncedHumanRef.current = human.id;
+    const pref = !!human.ui_prefs?.chatCollapsed;
+    setPrefCollapsed(pref);
+    // Se há agente já selecionado quando o humano logou, mantém expandido.
+    setChatCollapsed(selected ? false : pref);
+  }, [human, selected]);
+
+  // Auto-expande o chat quando um agente é selecionado; ao fechar, volta à
+  // preferência do humano (posição inicial).
+  const prevSelectedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (!prev && selected) {
+      setChatCollapsed(false);
+    } else if (prev && !selected) {
+      setChatCollapsed(prefCollapsed);
+    }
+  }, [selected, prefCollapsed]);
+
+  const toggleChatCollapsed = () => {
+    setChatCollapsed((prev) => {
+      const next = !prev;
+      setPrefCollapsed(next);
+      if (humanId) {
+        void updateHuman(humanId, {
+          ui_prefs: { ...(human?.ui_prefs || {}), chatCollapsed: next },
+        }).catch(() => {});
+      }
+      return next;
+    });
+  };
 
   const agents = data?.agents ?? null;
   const agentCfg = useMemo(
@@ -247,7 +290,13 @@ export default function App() {
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-[300px_1fr_460px] gap-3 overflow-hidden p-3">
+      <div
+        className={`grid flex-1 gap-3 overflow-hidden p-3 ${
+          chatCollapsed
+            ? 'grid-cols-[300px_1fr_48px]'
+            : 'grid-cols-[300px_1fr_460px]'
+        }`}
+      >
         <aside className="soft-scroll overflow-y-auto pr-1">
           {selected && agentCfg ? (
             <AgentInfoPanel
@@ -297,6 +346,8 @@ export default function App() {
             humanName={human?.name || null}
             onClose={() => setSelected(null)}
             onStreamingChange={setChatStreaming}
+            collapsed={chatCollapsed}
+            onToggleCollapse={toggleChatCollapsed}
           />
         </aside>
       </div>

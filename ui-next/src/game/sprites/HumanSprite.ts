@@ -16,6 +16,8 @@ export class HumanSprite extends Container {
   private head: Container;
   private eyeL: Graphics;
   private eyeR: Graphics;
+  private armL!: Graphics;
+  private armR!: Graphics;
   private ring: Graphics | null = null;
   private offlineBadge: Graphics | null = null;
   private badge: Text;
@@ -106,21 +108,21 @@ export class HumanSprite extends Container {
       this.body.addChild(skirt);
     }
 
-    // braços
-    const armL = new Graphics();
-    armL.roundRect(-2.5, 0, 5, 12, 2)
+    // braços (rotacionam a partir do ombro quando cai)
+    this.armL = new Graphics();
+    this.armL.roundRect(-2.5, 0, 5, 12, 2)
       .fill({ color: skin.shirt })
       .stroke({ width: 1, color: OUTLINE, alpha: 0.3 });
-    armL.circle(0, 12, 2.8).fill({ color: skin.skinTone });
-    armL.position.set(-10, -5);
-    this.body.addChild(armL);
-    const armR = new Graphics();
-    armR.roundRect(-2.5, 0, 5, 12, 2)
+    this.armL.circle(0, 12, 2.8).fill({ color: skin.skinTone });
+    this.armL.position.set(-10, -5);
+    this.body.addChild(this.armL);
+    this.armR = new Graphics();
+    this.armR.roundRect(-2.5, 0, 5, 12, 2)
       .fill({ color: skin.shirt })
       .stroke({ width: 1, color: OUTLINE, alpha: 0.3 });
-    armR.circle(0, 12, 2.8).fill({ color: skin.skinTone });
-    armR.position.set(10, -5);
-    this.body.addChild(armR);
+    this.armR.circle(0, 12, 2.8).fill({ color: skin.skinTone });
+    this.armR.position.set(10, -5);
+    this.body.addChild(this.armR);
 
     // cabeça
     this.head = new Container();
@@ -228,11 +230,16 @@ export class HumanSprite extends Container {
       this.body.y = Math.sin(this.t * 0.06) * 0.8;
       this.body.scale.set(1, 1);
       this.body.rotation = 0;
+      this.armL.rotation = 0;
+      this.armR.rotation = 0;
     } else if (this.falling) {
-      // queda: corpo levemente oscilando como se estivesse solto no ar
+      // queda: braços pra cima (reação), corpo balança levemente
       this.body.y = 0;
       this.body.scale.set(1, 1);
-      this.body.rotation = Math.sin(this.t * 0.18) * 0.12;
+      this.body.rotation = Math.sin(this.t * 0.18) * 0.1;
+      const wobble = Math.sin(this.t * 0.3) * 0.12;
+      this.armL.rotation = Math.PI + 0.3 + wobble;
+      this.armR.rotation = Math.PI - 0.3 - wobble;
     } else if (this.landAnim > 0) {
       // pouso: squash & stretch (achata, depois estica, depois volta)
       this.landAnim -= dt;
@@ -256,6 +263,10 @@ export class HumanSprite extends Container {
       this.body.scale.set(sx, sy);
       this.body.y = 0;
       this.body.rotation = 0;
+      // braços descem suavemente da pose de queda pra pose parado
+      const armT = Math.min(1, p * 1.5);
+      this.armL.rotation = (Math.PI + 0.3) * (1 - armT);
+      this.armR.rotation = (Math.PI - 0.3) * (1 - armT);
     }
 
     if (this.blinkClose > 0) {

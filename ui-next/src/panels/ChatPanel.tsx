@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, X, Bot, Brain, User as UserIcon, Sparkles, Loader2 } from 'lucide-react';
+import { Send, X, Bot, Brain, User as UserIcon, Sparkles, Loader2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CopyButton } from '@/components/CopyButton';
@@ -19,6 +19,8 @@ interface Props {
   humanName?: string | null;
   onClose?: () => void;
   onStreamingChange?: (streaming: boolean) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 type MentionTarget = {
@@ -69,6 +71,8 @@ export function ChatPanel({
   humanName = null,
   onClose,
   onStreamingChange,
+  collapsed = false,
+  onToggleCollapse,
 }: Props) {
   const { messages, send, sending, err, isStreaming, streamingPhase } = useChat(agent, humanId);
   const [input, setInput] = useState('');
@@ -243,11 +247,57 @@ export function ChatPanel({
     });
   };
 
+  if (collapsed) {
+    return (
+      <div className="flex h-full flex-col items-center gap-3 bg-white py-3">
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={onToggleCollapse}
+          title="expandir chat"
+          aria-label="expandir chat"
+        >
+          <PanelRightOpen className="h-4 w-4" />
+        </Button>
+        {agent && agentCfg ? (
+          <div className="flex flex-col items-center gap-2">
+            <AgentFace
+              type={agentCfg.type}
+              profession={(agentCfg as any).profession}
+              size={30}
+              mood={isStreaming && streamingPhase === 'writing' ? 'happy' : 'neutral'}
+            />
+            {isStreaming && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+            )}
+          </div>
+        ) : (
+          <Bot className="h-5 w-5 text-muted-foreground/50" />
+        )}
+      </div>
+    );
+  }
+
   if (!agent || !agentCfg) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
-        <Bot className="h-10 w-10 opacity-40" />
-        <p className="text-sm">Selecione um agente no canvas pra conversar</p>
+      <div className="flex h-full flex-col">
+        {onToggleCollapse && (
+          <div className="flex justify-end border-b bg-white p-2">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onToggleCollapse}
+              aria-label="minimizar chat"
+              title="minimizar chat"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+          <Bot className="h-10 w-10 opacity-40" />
+          <p className="text-sm">Selecione um agente no canvas pra conversar</p>
+        </div>
       </div>
     );
   }
@@ -338,6 +388,17 @@ export function ChatPanel({
             )}
           </p>
         </div>
+        {onToggleCollapse && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onToggleCollapse}
+            aria-label="minimizar chat"
+            title="minimizar chat"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        )}
         {onClose && (
           <Button size="icon" variant="ghost" onClick={onClose} aria-label="fechar">
             <X className="h-4 w-4" />

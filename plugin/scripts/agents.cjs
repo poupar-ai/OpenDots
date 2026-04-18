@@ -572,7 +572,8 @@ function addAgent(memDir, name, config) {
     context_file: contextFile,
     tools: config.tools || ['Read', 'Grep', 'Glob'],
     mcps:  config.mcps  || [],
-    can_talk_to: config.can_talk_to || ['manager']
+    can_talk_to: config.can_talk_to || ['manager'],
+    scope: sanitizeScope(config.scope),
   };
   if (type === 'firefighter' && config.watch) {
     cfg.agents[name].watch = {
@@ -724,6 +725,57 @@ function propagateModelToSeed(seedAgentsJsonPath, name, model) {
   return seed.agents[name];
 }
 
+// ── Escopo (sandbox) ─────────────────────────────────────────────────────────
+//
+// O campo `scope` complementa `tools` com controles finos:
+//   - bash_allow: padrões permitidos pro Bash (ex: "git *", "npm run *")
+//                 Sem esta lista, Bash é efetivamente DESATIVADO no runtime —
+//                 mesmo que 'Bash' esteja em `tools`.
+//
+// Denylist de Bash (rm, sudo, etc) é GLOBAL no server — não vive aqui.
+
+const KNOWN_TOOL_NAMES = new Set([
+  'Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob',
+  'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'NotebookEdit',
+]);
+
+function sanitizeTools(input) {
+  if (!Array.isArray(input)) return undefined;
+  const out = [];
+  const seen = new Set();
+  for (const t of input) {
+    if (typeof t !== 'string') continue;
+    const k = t.trim();
+    if (!k || !KNOWN_TOOL_NAMES.has(k) || seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+  }
+  return out;
+}
+
+function sanitizeScope(input) {
+  if (!input || typeof input !== 'object') return { bash_allow: [] };
+  const bashAllow = Array.isArray(input.bash_allow)
+    ? input.bash_allow
+        .filter(p => typeof p === 'string' && p.trim().length && p.length <= 200)
+        .map(p => p.trim())
+        .slice(0, 50)
+    : [];
+  return { bash_allow: bashAllow };
+}
+
+function updateScope(memDir, name, { tools, scope } = {}) {
+  const cfg = loadManifest(memDir);
+  if (!cfg || !cfg.agents || !cfg.agents[name]) {
+    throw new Error(`agente "${name}" não existe em ${manifestPath(memDir)}`);
+  }
+  const cleanTools = sanitizeTools(tools);
+  if (cleanTools !== undefined) cfg.agents[name].tools = cleanTools;
+  if (scope !== undefined) cfg.agents[name].scope = sanitizeScope(scope);
+  saveManifest(memDir, cfg);
+  return cfg.agents[name];
+}
+
 function removeAgent(memDir, name) {
   const cfg = loadManifest(memDir);
   if (!cfg || !cfg.agents[name]) return false;
@@ -750,6 +802,10 @@ module.exports = {
   updateAutonomy,
   propagateAutonomyToSeed,
   normalizeAutonomy,
+  updateScope,
+  sanitizeScope,
+  sanitizeTools,
+  KNOWN_TOOL_NAMES,
   updateModel,
   propagateModelToSeed,
   normalizeModel,

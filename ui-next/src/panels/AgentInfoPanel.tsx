@@ -8,10 +8,11 @@ import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/t
 import {
   Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout,
   FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen, ChevronDown,
-  Zap, TrendingUp, Clock,
+  Zap, TrendingUp, Clock, Shield, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import {
   updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent,
+  updateAgentScope,
 } from '@/lib/agents';
 
 interface LogEntry {
@@ -101,6 +102,7 @@ export function AgentInfoPanel({
   const [editModel, setEditModel] = useState(false);
   const [editContext, setEditContext] = useState(false);
   const [editMcps, setEditMcps] = useState(false);
+  const [editScope, setEditScope] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
@@ -112,6 +114,7 @@ export function AgentInfoPanel({
     setEditModel(false);
     setEditContext(false);
     setEditMcps(false);
+    setEditScope(false);
     setDeleteErr(null);
   }, [name]);
 
@@ -255,6 +258,13 @@ export function AgentInfoPanel({
               )
             }
             onEdit={() => setEditMcps(true)}
+          />
+          <ConfigRow
+            icon={scopeRiskIcon(cfg)}
+            label="escopo"
+            value={<ScopeBadge cfg={cfg} />}
+            sub={scopeSummary(cfg)}
+            onEdit={() => setEditScope(true)}
           />
           <ConfigRow
             icon={<Sliders className="h-3.5 w-3.5" />}
@@ -482,8 +492,238 @@ export function AgentInfoPanel({
       {editMcps && (
         <McpsEditor name={name} current={cfg.mcps || []} onClose={() => setEditMcps(false)} />
       )}
+      {editScope && (
+        <ScopeEditor
+          name={name}
+          currentTools={cfg.tools || []}
+          currentBashAllow={cfg.scope?.bash_allow || []}
+          onClose={() => setEditScope(false)}
+        />
+      )}
     </div>
   );
+}
+
+// ── Escopo (sandbox) ──────────────────────────────────────────────────────────
+
+const AVAILABLE_TOOLS = [
+  'Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash',
+  'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'NotebookEdit',
+] as const;
+
+type RiskLevel = 'readonly' | 'write-local' | 'bash-restrito' | 'bash-livre';
+
+function classifyRisk(cfg: AgentCfg): RiskLevel {
+  const tools = cfg.tools || [];
+  const hasBash = tools.includes('Bash');
+  const hasWrite = tools.includes('Write') || tools.includes('Edit');
+  const bashAllow = cfg.scope?.bash_allow || [];
+  if (!hasBash && !hasWrite) return 'readonly';
+  if (!hasBash && hasWrite) return 'write-local';
+  if (hasBash && bashAllow.length > 0) return 'bash-restrito';
+  return 'bash-livre';
+}
+
+function riskColor(level: RiskLevel): string {
+  return {
+    'readonly':      'border-green-200 bg-green-50 text-green-700',
+    'write-local':   'border-yellow-200 bg-yellow-50 text-yellow-700',
+    'bash-restrito': 'border-orange-200 bg-orange-50 text-orange-700',
+    'bash-livre':    'border-red-300 bg-red-50 text-red-700',
+  }[level];
+}
+
+function riskLabel(level: RiskLevel): string {
+  return {
+    'readonly':      'read-only',
+    'write-local':   'write local',
+    'bash-restrito': 'bash restrito',
+    'bash-livre':    'bash desligado',
+  }[level];
+}
+
+function scopeRiskIcon(cfg: AgentCfg) {
+  const level = classifyRisk(cfg);
+  if (level === 'readonly') return <ShieldCheck className="h-3.5 w-3.5 text-green-600" />;
+  if (level === 'bash-livre') return <ShieldAlert className="h-3.5 w-3.5 text-red-600" />;
+  return <Shield className="h-3.5 w-3.5 text-orange-600" />;
+}
+
+function ScopeBadge({ cfg }: { cfg: AgentCfg }) {
+  const level = classifyRisk(cfg);
+  return (
+    <span className={cn('rounded-md border px-1.5 py-0 text-[10px] font-medium', riskColor(level))}>
+      {riskLabel(level)}
+    </span>
+  );
+}
+
+function scopeSummary(cfg: AgentCfg): string | undefined {
+  const tools = cfg.tools || [];
+  const bashAllow = cfg.scope?.bash_allow || [];
+  const parts: string[] = [];
+  if (tools.length) parts.push(`${tools.length} tool${tools.length === 1 ? '' : 's'}`);
+  if (bashAllow.length) parts.push(`${bashAllow.length} bash pattern${bashAllow.length === 1 ? '' : 's'}`);
+  return parts.length ? parts.join(' · ') : 'sem escopo definido';
+}
+
+interface ScopeEditorProps {
+  name: string;
+  currentTools: string[];
+  currentBashAllow: string[];
+  onClose: () => void;
+}
+
+function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEditorProps) {
+  const [tools, setTools] = useState<string[]>([...currentTools]);
+  const [bashText, setBashText] = useState<string>(currentBashAllow.join('\n'));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const bashAllow = bashText
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const toggleTool = (t: string) => {
+    setTools((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  };
+
+  const level = classifyRisk({ tools, scope: { bash_allow: bashAllow } } as AgentCfg);
+
+  const preview = buildAllowedToolsPreview(tools, bashAllow);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await updateAgentScope(name, {
+        tools,
+        scope: { bash_allow: bashAllow },
+      });
+      onClose();
+      window.location.reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-slate-600" />
+            <h3 className="text-sm font-semibold">Escopo · {name}</h3>
+            <span className={cn('rounded-md border px-1.5 py-0 text-[10px] font-medium', riskColor(level))}>
+              {riskLabel(level)}
+            </span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-5 p-4">
+          <section>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Ferramentas
+            </h4>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Marque só o que o agente precisa. Sem <code>Read/Grep/Glob</code> ele não lê arquivos.
+              Sem <code>Write/Edit</code> não altera nada. <code>Bash</code> sem padrões abaixo fica desativado.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {AVAILABLE_TOOLS.map((t) => (
+                <label
+                  key={t}
+                  className={cn(
+                    'flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]',
+                    tools.includes(t)
+                      ? 'border-blue-300 bg-blue-50 text-blue-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={tools.includes(t)}
+                    onChange={() => toggleTool(t)}
+                    className="h-3 w-3"
+                  />
+                  <span className="font-mono">{t}</span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Bash · comandos permitidos
+            </h4>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Um padrão por linha. Ex: <code>git *</code>, <code>npm run *</code>, <code>curl http://localhost:37778/*</code>.
+              Padrões proibidos globalmente (<code>rm</code>, <code>sudo</code>, <code>chmod</code>, etc)
+              são bloqueados mesmo se você incluir aqui.
+            </p>
+            <textarea
+              value={bashText}
+              onChange={(e) => setBashText(e.target.value)}
+              placeholder={'git *\nnpm run *'}
+              className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11px]"
+              rows={6}
+            />
+          </section>
+
+          <section>
+            <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Preview do <code>--allowed-tools</code>
+            </h4>
+            <pre className="overflow-auto rounded-md bg-slate-900 px-2 py-1.5 font-mono text-[10px] text-green-300">
+              {preview || '<vazio — agente não poderá fazer nada>'}
+            </pre>
+          </section>
+
+          {err && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+              {err}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 border-t pt-3">
+            <button
+              onClick={onClose}
+              className="rounded-md border px-3 py-1 text-[12px] hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function buildAllowedToolsPreview(tools: string[], bashAllow: string[]): string {
+  const out: string[] = [];
+  for (const t of tools) {
+    if (t === 'Bash') {
+      if (!bashAllow.length) continue;
+      for (const p of bashAllow) out.push(`Bash(${p})`);
+    } else {
+      out.push(t);
+    }
+  }
+  return out.join(',');
 }
 
 function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {

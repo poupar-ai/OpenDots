@@ -18,6 +18,7 @@ const router = require('../scripts/router.cjs');
 const bus = require('../scripts/bus.cjs');
 const { createAgentQueue } = require('../scripts/queue.cjs');
 const sigilo = require('../scripts/sigilo.cjs');
+const integrity = require('../scripts/integrity.cjs');
 
 const VALID_INTENTS = new Set(['ask', 'delegate', 'report', 'ack', 'escalate']);
 
@@ -321,12 +322,85 @@ function ensureAgentChannels(manifest) {
   }
 }
 
-// Nenhum agente pode escrever direto em agent_chats/*.jsonl — handoffs são feitos
-// via POST /api/agents/handoff que valida can_talk_to no lado do servidor e faz
-// o append atômico. Essa função só retorna tools extras específicas do agente
-// (nada por padrão; fica aqui como ponto de extensão futuro).
-function buildAllowedTools(_agent, _agentCfg) {
-  return [];
+// Ferramentas seguras por default — agente sem `tools` declarado roda read-only.
+const DEFAULT_READONLY_TOOLS = ['Read', 'Grep', 'Glob'];
+
+// Whitelist de tools que aceitamos (ignora qualquer string exótica em cfg.tools).
+const KNOWN_TOOLS = new Set([
+  'Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob',
+  'WebFetch', 'WebSearch', 'Task', 'TodoWrite', 'NotebookEdit',
+]);
+
+// Denylist GLOBAL — vale pra qualquer agente, inclusive meta agents. São as
+// operações que não têm caso de uso legítimo dentro de um turn de agente.
+// Sintaxe é de command-prefix do claude CLI: `Bash(rm *)` casa `rm foo`.
+const GLOBAL_DISALLOWED_TOOLS = [
+  // Destruição irreversível
+  'Bash(rm *)', 'Bash(rmdir *)', 'Bash(dd *)',
+  // Escalada de privilégio
+  'Bash(sudo *)', 'Bash(su *)',
+  // Mudança de permissão / posse
+  'Bash(chmod *)', 'Bash(chown *)', 'Bash(chgrp *)',
+  // Move/rename (pode destruir config ao sobrescrever)
+  'Bash(mv *)',
+  // Formatação / disk ops
+  'Bash(mkfs *)', 'Bash(fdisk *)', 'Bash(parted *)',
+  // Processo: kill indiscriminado
+  'Bash(kill *)', 'Bash(pkill *)', 'Bash(killall *)',
+  // Rede: download que pode introduzir binário
+  'Bash(wget *)',
+  // Git destrutivo
+  'Bash(git reset --hard *)', 'Bash(git push --force *)',
+  'Bash(git push -f *)', 'Bash(git clean *)',
+  // Escrita em config do plugin e do projeto-mem (proteção do sistema)
+  'Write(/home/tiago/pessoal/project-mem/**)',
+  'Edit(/home/tiago/pessoal/project-mem/**)',
+];
+
+// Monta lista final de --allowed-tools pra um agente específico.
+// Regras:
+// - cfg.tools vazio/ausente → read-only (Read/Grep/Glob)
+// - Se Bash está em cfg.tools:
+//     - Sem scope.bash_allow → Bash fica DESATIVADO (é perigoso demais pra liberar "geral")
+//     - Com scope.bash_allow=[...] → cada padrão vira Bash(pattern)
+// - MCPs declarados em cfg.mcps entram como mcp__<server>
+function buildAllowedTools(_agent, agentCfg) {
+  const cfg = agentCfg || {};
+  const rawTools = Array.isArray(cfg.tools) && cfg.tools.length
+    ? cfg.tools
+    : DEFAULT_READONLY_TOOLS;
+
+  const scope = cfg.scope || {};
+  const bashAllow = Array.isArray(scope.bash_allow)
+    ? scope.bash_allow.filter(p => typeof p === 'string' && p.trim().length)
+    : [];
+
+  const out = [];
+  for (const t of rawTools) {
+    if (!KNOWN_TOOLS.has(t)) continue;
+    if (t === 'Bash') {
+      if (!bashAllow.length) continue;          // Bash sem whitelist = desligado
+      for (const p of bashAllow) out.push(`Bash(${p.trim()})`);
+    } else {
+      out.push(t);
+    }
+  }
+
+  // MCPs explicitamente permitidos
+  const mcps = Array.isArray(cfg.mcps) ? cfg.mcps : [];
+  for (const m of mcps) {
+    if (typeof m !== 'string' || !m.trim()) continue;
+    out.push(`mcp__${m.trim()}`);
+  }
+
+  return out;
+}
+
+// Retorna lista fixa de --disallowedTools. Por enquanto é a mesma pra todos;
+// deixar como função pra permitir especialização futura (ex: meta agent com
+// acesso a mais paths).
+function buildDisallowedTools(_agent, _agentCfg) {
+  return GLOBAL_DISALLOWED_TOOLS.slice();
 }
 
 // ── Auto-processing de handoffs ─────────────────────────────────────────────
@@ -672,9 +746,13 @@ function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
     if (resolvedModel) args.push('--model', resolvedModel);
     const allowedTools = buildAllowedTools(agent, agentCfg);
     if (allowedTools.length) args.push('--allowed-tools', allowedTools.join(','));
-    args.push(prompt);
+    const disallowedTools = buildDisallowedTools(agent, agentCfg);
+    if (disallowedTools.length) args.push('--disallowed-tools', disallowedTools.join(','));
+    // `--` separa flags variadic (--allowed-tools, --disallowed-tools) do prompt posicional
+    args.push('--', prompt);
 
     const beforeSizes = snapshotChannelSizes();
+    const beforeIntegrity = integrity.snapshot(memDir);
     const started = Date.now();
     let proc;
     try {
@@ -719,6 +797,24 @@ function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
           channel: v.channel, growth: v.growth,
           message: `agente ${agent} escreveu em ${v.channel} — fora de can_talk_to`,
         });
+      }
+      // Integrity check — agente mexeu em arquivos críticos?
+      const afterIntegrity = integrity.snapshot(memDir);
+      const tamperChanges = integrity.diff(beforeIntegrity, afterIntegrity);
+      for (const ch of tamperChanges) {
+        const kind = integrity.classify(ch.path);
+        appendAgentLog(agent, {
+          ts: agentTs, type: 'violation', stage: 'integrity',
+          kind, path: ch.path, change: ch.change,
+          size_delta: ch.size_delta,
+          message: `agente ${agent} ${ch.change} arquivo crítico (${kind}): ${path.basename(ch.path)}`,
+        });
+        for (const tid of traces) {
+          bus.emit(memDir, {
+            type: 'tampered', trace_id: tid, agent, kind,
+            path: path.relative(projectRoot, ch.path), change: ch.change,
+          });
+        }
       }
       if (code !== 0 && !full) {
         appendAgentLog(agent, {
@@ -1334,6 +1430,37 @@ async function handleAgentAutonomy(agentName, req, res) {
   sendJson(res, 200, { ok: true, agent: agentName, updated, propagated });
 }
 
+async function handleAgentScope(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { tools, scope } = body || {};
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+
+  let updated;
+  try {
+    updated = agents.updateScope(memDir, agentName, { tools, scope });
+  } catch (err) {
+    return sendJson(res, 400, { error: err.message });
+  }
+
+  // Log de auditoria — quem mudou escopo fica rastreável
+  appendAgentLog(agentName, {
+    ts: new Date().toISOString(),
+    type: 'scope_updated',
+    source: 'ui',
+    tools: updated.tools,
+    bash_allow: (updated.scope && updated.scope.bash_allow) || [],
+  });
+
+  sendJson(res, 200, { ok: true, agent: agentName, updated });
+}
+
 const DOC_ALLOWLIST = new Set(['SOUL.md', 'PROJECT.md', 'DECISIONS.md', 'GOTCHAS.md', 'GLOSSARY.md', 'CODE_INDEX.md']);
 
 async function handleDocSave(docName, req, res) {
@@ -1573,9 +1700,13 @@ async function handleChatSend(req, res) {
   if (resolvedModel) args.push('--model', resolvedModel);
   const allowedTools = buildAllowedTools(agent, agentCfg);
   if (allowedTools.length) args.push('--allowed-tools', allowedTools.join(','));
-  args.push(prompt);
+  const disallowedTools = buildDisallowedTools(agent, agentCfg);
+  if (disallowedTools.length) args.push('--disallowed-tools', disallowedTools.join(','));
+  // `--` separa flags variadic (--allowed-tools, --disallowed-tools) do prompt posicional
+  args.push('--', prompt);
 
   const beforeSizes = snapshotChannelSizes();
+  const beforeIntegrity = integrity.snapshot(memDir);
   const started = Date.now();
   let proc;
   try {
@@ -1656,6 +1787,32 @@ async function handleChatSend(req, res) {
         });
       }
       sse('violation', { channels: violations.map(v => v.channel) });
+    }
+
+    // Integrity check — agente tentou editar plugin ou config do projeto?
+    const afterIntegrity = integrity.snapshot(memDir);
+    const tamperChanges = integrity.diff(beforeIntegrity, afterIntegrity);
+    if (tamperChanges.length) {
+      for (const ch of tamperChanges) {
+        const kind = integrity.classify(ch.path);
+        appendAgentLog(agent, {
+          ts: agentTs,
+          type: 'violation',
+          stage: 'integrity',
+          kind,
+          path: ch.path,
+          change: ch.change,
+          size_delta: ch.size_delta,
+          message: `agente ${agent} ${ch.change} arquivo crítico (${kind}): ${path.basename(ch.path)}`,
+        });
+      }
+      sse('tampered', {
+        files: tamperChanges.map(ch => ({
+          kind: integrity.classify(ch.path),
+          path: path.relative(projectRoot, ch.path),
+          change: ch.change,
+        })),
+      });
     }
 
     if (code !== 0 && !full) {
@@ -2310,6 +2467,12 @@ const server = http.createServer((req, res) => {
   if (modelMatch && req.method === 'PATCH') {
     const agentName = decodeURIComponent(modelMatch[1]);
     handleAgentModel(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  const scopeMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/scope$/);
+  if (scopeMatch && req.method === 'PUT') {
+    const agentName = decodeURIComponent(scopeMatch[1]);
+    handleAgentScope(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
     return;
   }
   const contextMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/context$/);

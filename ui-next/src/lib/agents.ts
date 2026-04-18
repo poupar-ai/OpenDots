@@ -91,6 +91,26 @@ export async function deleteAgent(agent: string) {
   return j as { ok: true; agent: string };
 }
 
+export interface AgentScope {
+  bash_allow: string[];
+}
+
+export interface UpdateScopePayload {
+  tools?: string[];
+  scope?: AgentScope;
+}
+
+export async function updateAgentScope(agent: string, payload: UpdateScopePayload) {
+  const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/scope`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as { ok: true; agent: string; updated: { tools?: string[]; scope?: AgentScope } };
+}
+
 export async function updateAgentMcps(agent: string, mcps: string[]) {
   const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/mcps`, {
     method: 'PUT',

@@ -17,6 +17,9 @@ export interface AgentCfg {
   context_file?: string;
   tools?: string[];
   mcps?: string[];
+  scope?: {
+    bash_allow?: string[];
+  };
   watch?: {
     source?: string;
     query?: string;

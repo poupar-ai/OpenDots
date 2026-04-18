@@ -11,6 +11,16 @@ type Stream = {
 
 type MsgLike = ChatMsg | Stream;
 
+const POLL_INTERVAL_MS = 3000;
+
+function sameHistory(a: ChatMsg[], b: ChatMsg[]): boolean {
+  if (a.length !== b.length) return false;
+  if (!a.length) return true;
+  const last_a = a[a.length - 1];
+  const last_b = b[b.length - 1];
+  return last_a.ts === last_b.ts && (last_a.content || '') === (last_b.content || '');
+}
+
 export function useChat(agent: string | null, humanId: string | null = null) {
   const [history, setHistory] = useState<ChatMsg[]>([]);
   const [stream, setStream] = useState<Stream | null>(null);
@@ -34,6 +44,32 @@ export function useChat(agent: string | null, humanId: string | null = null) {
       cancelled = true;
     };
   }, [agent]);
+
+  // Polling: quando o chat está idle (sem stream próprio rodando),
+  // checa o history a cada 3s pra captar handoffs de outros agentes
+  // ou turns automáticos escritos no canal deste agente.
+  useEffect(() => {
+    if (!agent) return;
+    if (sending || stream) return; // evita race com o próprio stream
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/chat/history?agent=${encodeURIComponent(agent)}`);
+        if (!r.ok) return;
+        const j = await r.json();
+        const next: ChatMsg[] = j.messages || [];
+        if (cancelled) return;
+        setHistory((cur) => (sameHistory(cur, next) ? cur : next));
+      } catch {
+        // silencia erro de rede; próximo tick tenta de novo
+      }
+    };
+    const id = setInterval(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [agent, sending, stream]);
 
   const send = useCallback(
     async (message: string) => {

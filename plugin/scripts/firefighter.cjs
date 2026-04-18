@@ -16,6 +16,7 @@ const fs      = require('fs');
 const path    = require('path');
 const https   = require('https');
 const { spawn } = require('child_process');
+const { scheduleNudge } = require('./nudge.cjs');
 const { findProjectRoot, getMemDir } = require('./lib.cjs');
 const agents  = require('./agents.cjs');
 
@@ -214,6 +215,15 @@ async function checkAgent({ memDir, projectRoot, name, agentCfg, state, dryRun }
     exit_code: code,
     stderr:    code !== 0 ? err.slice(0, 300) : undefined
   });
+
+  if (code === 0 && out.trim()) {
+    scheduleNudge({
+      memDir, projectRoot,
+      agent: name, agentCfg,
+      responseText: out,
+      trigger: 'firefighter_triage',
+    });
+  }
 
   return { triaged: true, events: logs.length, exit_code: code };
 }

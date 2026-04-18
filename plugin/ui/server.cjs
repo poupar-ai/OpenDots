@@ -12,6 +12,7 @@ const pipelines = require('../scripts/pipelines.cjs');
 const architect = require('../scripts/architect.cjs');
 const skills = require('../scripts/skills-install.cjs');
 const ideAdapters = require('../scripts/ide-adapters.cjs');
+const { scheduleNudge } = require('../scripts/nudge.cjs');
 
 const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
 const cwd         = process.cwd();
@@ -730,6 +731,12 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
           ts: agentTs, type: 'response', stage: 'auto',
           response_chars: full.length, duration_ms, code,
           stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
+        });
+        scheduleNudge({
+          memDir, projectRoot,
+          agent, agentCfg,
+          responseText: full,
+          trigger: fromAgent ? `auto_handoff:${fromAgent}` : 'auto',
         });
       }
       resolve();

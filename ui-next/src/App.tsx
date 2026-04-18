@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { useTheme } from '@/hooks/useTheme';
@@ -14,6 +14,7 @@ import { PipelinesPanel } from '@/panels/PipelinesPanel';
 import { BestPracticesPanel } from '@/panels/BestPracticesPanel';
 import { IdeExportPanel } from '@/panels/IdeExportPanel';
 import { ArchitectPanel } from '@/panels/ArchitectPanel';
+import { ProtectionsPanel } from '@/panels/ProtectionsPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -37,6 +38,7 @@ export default function App() {
   const [bestPracticesOpen, setBestPracticesOpen] = useState(false);
   const [ideExportOpen, setIdeExportOpen] = useState(false);
   const [architectOpen, setArchitectOpen] = useState(false);
+  const [protectionsOpen, setProtectionsOpen] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
   const { theme, toggle: toggleTheme } = useTheme();
@@ -98,6 +100,9 @@ export default function App() {
           onClose={() => setArchitectOpen(false)}
           onOpenChat={(name) => setSelected(name)}
         />
+      )}
+      {protectionsOpen && (
+        <ProtectionsPanel onClose={() => setProtectionsOpen(false)} />
       )}
       {myChatsOpen && humanId && human && (
         <MyChatsPanel
@@ -177,6 +182,14 @@ export default function App() {
           >
             <Code2 className="h-4 w-4" /> ide
           </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setProtectionsOpen(true)}
+            title="proteções — motor de intent destrutivo"
+          >
+            <ShieldAlert className="h-4 w-4 text-red-600" /> proteções
+          </Button>
           {human && (
             <Button
               variant="outline"
@@ -253,6 +266,7 @@ export default function App() {
           <ChatPanel
             agent={selected}
             agentCfg={agentCfg}
+            allAgents={agents?.manifest.agents ?? null}
             humanId={humanId}
             humanName={human?.name || null}
             onClose={() => setSelected(null)}

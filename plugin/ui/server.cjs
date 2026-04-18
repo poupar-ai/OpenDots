@@ -19,6 +19,7 @@ const bus = require('../scripts/bus.cjs');
 const { createAgentQueue } = require('../scripts/queue.cjs');
 const sigilo = require('../scripts/sigilo.cjs');
 const integrity = require('../scripts/integrity.cjs');
+const destructive = require('../scripts/destructive.cjs');
 
 const VALID_INTENTS = new Set(['ask', 'delegate', 'report', 'ack', 'escalate']);
 
@@ -433,6 +434,29 @@ function enqueueAutoTurn(toAgent, fromAgent, message, traceId) {
   autoQueue.enqueue(toAgent, fromAgent, message, traceId);
 }
 
+// Procura o group_id da thread ao responder a um trace_id anterior.
+// Resolve varrendo os canais dos agentes envolvidos (O(n) das últimas entries).
+// Fallback: se não encontrar, usa o próprio replyTo como raiz da thread.
+function resolveGroupIdForReply(replyTo, toAgent, fromAgent) {
+  const candidates = [toAgent, fromAgent].filter(Boolean);
+  for (const ag of candidates) {
+    try {
+      const filePath = chatLogPath(ag);
+      if (!fs.existsSync(filePath)) continue;
+      const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+          if (entry.trace_id === replyTo) {
+            return entry.group_id || entry.trace_id || replyTo;
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+  return replyTo;
+}
+
 // ── Detector de bloqueio: auto-escala pro internal_firefighter ──────────────
 // Qualquer handoff entre agentes cujo conteúdo tenha sinais de bloqueio
 // operacional dispara, em paralelo, um auto-turn pro internal_firefighter.
@@ -837,8 +861,17 @@ function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
             original_chars: full.length, sanitized_chars: finalContent.length,
           });
         }
+        // Thread: herda group_id da entrada que originou este auto-turn (se houver).
+        let groupId = null;
+        let traceId = null;
+        if (traces.length) {
+          traceId = traces[0];
+          groupId = resolveGroupIdForReply(traceId, agent, fromAgent);
+        }
         appendChat(agent, {
           ts: agentTs, role: 'agent', content: finalContent, duration_ms, auto: true,
+          ...(traceId ? { trace_id: traceId } : {}),
+          ...(groupId ? { group_id: groupId } : {}),
           ...(sanitized.leaked ? { sigilo_redacted: true, sigilo_reason: sanitized.reason } : {}),
         });
         appendAgentLog(agent, {
@@ -1251,11 +1284,54 @@ async function handleHandoff(req, res) {
   }
   ensureAgentChannels(manifest);
   const ts = new Date().toISOString();
+
+  // ── Motor de intent destrutivo: bloqueia handoff agente→agente ────────────
+  const destructiveDetection = destructive.detect(memDir, message);
+  if (destructiveDetection.matched) {
+    appendAgentLog(from, {
+      ts, type: 'violation', stage: 'destructive_intent_handoff',
+      target: to, hits: destructiveDetection.hits,
+      message: `handoff bloqueado pelo motor: ${destructiveDetection.hits.map(h => h.id).join(', ')}`,
+    });
+    // Escala pro firefighter em vez de entregar ao destino.
+    const firefighterExists = manifest.agents && manifest.agents.internal_firefighter;
+    if (firefighterExists && from !== 'internal_firefighter' && to !== 'internal_firefighter') {
+      const composed =
+        `[motor-de-proteção] Handoff destrutivo bloqueado: ${from} → ${to}.\n` +
+        `Sinais: ${destructiveDetection.hits.map(h => h.id).join(', ')}\n\n` +
+        `Mensagem original:\n${message}`;
+      try {
+        appendChat('internal_firefighter', {
+          ts, role: 'user', content: composed,
+          from, blocked_from: from, blocked_target: to,
+          block_reason: 'destructive_intent_handoff',
+          block_hits: destructiveDetection.hits,
+        });
+      } catch {}
+      appendAgentLog('internal_firefighter', {
+        ts, type: 'protection_escalation_in',
+        source: from, original_target: to,
+        hits: destructiveDetection.hits,
+      });
+      enqueueAutoTurn('internal_firefighter', from, composed);
+    }
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      error: 'blocked',
+      reason: 'destructive_intent',
+      hits: destructiveDetection.hits,
+      escalated_to: firefighterExists ? 'internal_firefighter' : null,
+    }));
+  }
+
+  // group_id: se é reply a um trace anterior, herda group_id da thread; senão abre nova thread.
+  const groupId = replyTo ? resolveGroupIdForReply(replyTo, to, from) : traceId;
   const chatEntry = { ts, role: 'user', content: message, from };
   if (intent)   chatEntry.intent   = intent;
   if (subject)  chatEntry.subject  = subject;
   if (traceId)  chatEntry.trace_id = traceId;
   if (replyTo)  chatEntry.reply_to = replyTo;
+  if (groupId)  chatEntry.group_id = groupId;
   if (context)  chatEntry.context  = context;
   appendChat(to, chatEntry);
   appendAgentLog(from, {
@@ -1709,6 +1785,66 @@ function handleChatStream(url, req, res) {
   req.on('error', cleanup);
 }
 
+// Melhora um prompt do usuário com Haiku: corrige ortografia PT-BR e deixa mais
+// claro sem mudar a intenção. Usuário decide se aceita ou descarta no UI — aqui
+// só devolvemos o texto melhorado, nada é persistido.
+async function handleChatImprove(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const text = String(body.text || '').trim();
+  if (!text) return sendJson(res, 400, { error: 'need {text}' });
+  if (text.length > 4000) return sendJson(res, 400, { error: 'text too long (max 4000 chars)' });
+
+  const systemPrompt = [
+    'Você corrige ortografia e gramática PT-BR e deixa o texto mais claro, SEM mudar a intenção.',
+    'Regras:',
+    '- NÃO responda a pergunta nem adicione informação nova.',
+    '- Preserve @menções (@nome) exatamente como estão.',
+    '- Preserve trechos entre crases (`código`), blocos de código e URLs.',
+    '- Mantenha o tom informal/formal original.',
+    '- Se o texto já estiver bom, devolva ele intacto.',
+    '- Responda APENAS com o texto corrigido, sem aspas, sem prefixo, sem explicação.',
+    '',
+    'Texto original:',
+    text,
+  ].join('\n');
+
+  const args = ['-p', '--output-format', 'text', '--model', 'claude-haiku-4-5-20251001', systemPrompt];
+  const started = Date.now();
+  let proc;
+  try {
+    proc = spawn('claude', args, {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+    });
+  } catch (err) {
+    return sendJson(res, 500, { error: 'spawn_failed: ' + err.message });
+  }
+  let out = '', errBuf = '';
+  proc.stdout.on('data', (c) => { out += c.toString(); });
+  proc.stderr.on('data', (c) => { errBuf += c.toString(); });
+  proc.on('error', (err) => {
+    sendJson(res, 500, { error: 'proc_error: ' + err.message });
+  });
+  proc.on('close', (code) => {
+    const duration_ms = Date.now() - started;
+    const improved = out.trim();
+    if (code !== 0 || !improved) {
+      return sendJson(res, 500, {
+        error: 'improve_failed',
+        code,
+        stderr: errBuf.slice(0, 300),
+        duration_ms,
+      });
+    }
+    sendJson(res, 200, { original: text, improved, duration_ms });
+  });
+}
+
 async function handleChatSend(req, res) {
   const raw = await readBody(req);
   let body;
@@ -1750,6 +1886,76 @@ async function handleChatSend(req, res) {
     userEntry.human_id = humanProfile.id;
     userEntry.from = humanProfile.name;
   }
+
+  // ── Motor de intent destrutivo: intercepta antes de spawnar o agente ──────
+  const destructiveDetection = destructive.detect(memDir, message);
+  if (destructiveDetection.matched) {
+    userEntry.blocked = true;
+    userEntry.block_reason = 'destructive_intent';
+    userEntry.block_hits = destructiveDetection.hits;
+    appendChat(agent, userEntry);
+    appendAgentLog(agent, {
+      ts: userTs, type: 'violation', stage: 'destructive_intent',
+      hits: destructiveDetection.hits,
+      message: `pedido bloqueado no motor: ${destructiveDetection.hits.map(h => h.id).join(', ')}`,
+    });
+
+    const firefighterExists = manifest.agents && manifest.agents.internal_firefighter;
+    const synthTs = new Date().toISOString();
+    const signalsList = destructiveDetection.hits.map(h => `${h.label} (“${h.match}”)`).join('; ');
+    const synthContent =
+      `🚨 **Pedido bloqueado pelo motor de proteção.**\n\n` +
+      `Sinais detectados: ${signalsList}.\n\n` +
+      (firefighterExists
+        ? `O \`internal_firefighter\` foi acionado e vai avaliar. O agente \`${agent}\` não executou nem recebeu este pedido.`
+        : `O agente \`${agent}\` não recebeu este pedido. Configure um \`internal_firefighter\` pra tratar escalações automáticas.`);
+    appendChat(agent, {
+      ts: synthTs, role: 'agent', content: synthContent,
+      blocked: true, block_reason: 'destructive_intent',
+      synthetic: 'protection_engine',
+    });
+
+    // Escala pro firefighter em paralelo — ele verá o pedido original + quem fez.
+    if (firefighterExists) {
+      const who = humanProfile ? `${humanProfile.name} (humano id=${humanProfile.id})` : 'usuário';
+      const composed =
+        `[motor-de-proteção] Pedido destrutivo bloqueado em canal de ${agent}.\n` +
+        `Origem: ${who}\n` +
+        `Sinais: ${destructiveDetection.hits.map(h => h.id).join(', ')}\n\n` +
+        `Mensagem original:\n${message}`;
+      try {
+        appendChat('internal_firefighter', {
+          ts: synthTs, role: 'user',
+          content: composed,
+          from: agent,
+          blocked_from: agent,
+          block_reason: 'destructive_intent',
+          block_hits: destructiveDetection.hits,
+        });
+      } catch {}
+      appendAgentLog('internal_firefighter', {
+        ts: synthTs, type: 'protection_escalation_in',
+        source: agent, origin_who: who,
+        hits: destructiveDetection.hits,
+        chars: message.length,
+      });
+      enqueueAutoTurn('internal_firefighter', agent, composed);
+    }
+
+    // Responde SSE com a mensagem sintética — sem spawnar o agente.
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    const sseBlock = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    sseBlock('start', { agent, ts: userTs, blocked: true });
+    sseBlock('text', { text: synthContent });
+    sseBlock('done', { duration_ms: 0, blocked: true });
+    return res.end();
+  }
+
   appendChat(agent, userEntry);
   appendAgentLog(agent, {
     ts: userTs,
@@ -2599,6 +2805,63 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/chat/stream' && req.method === 'GET') {
     handleChatStream(url, req, res);
+    return;
+  }
+
+  if (url.pathname === '/api/chat/improve' && req.method === 'POST') {
+    handleChatImprove(req, res);
+    return;
+  }
+
+  // Proteções — motor de intent destrutivo
+  if (url.pathname === '/api/destructive/patterns' && req.method === 'GET') {
+    try {
+      const list = destructive.listPatterns(memDir);
+      sendJson(res, 200, list);
+    } catch (e) { sendJson(res, 500, { error: e.message }); }
+    return;
+  }
+  if (url.pathname === '/api/destructive/patterns' && req.method === 'PUT') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        if (!Array.isArray(body.patterns)) return sendJson(res, 400, { error: 'patterns must be array' });
+        const saved = destructive.saveUserPatterns(memDir, body.patterns);
+        sendJson(res, 200, { ok: true, patterns: saved });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+  if (url.pathname === '/api/destructive/test' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        const r = destructive.detect(memDir, String(body.text || ''));
+        sendJson(res, 200, r);
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+  if (url.pathname === '/api/destructive/core/toggle' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        if (!body.id || typeof body.id !== 'string') {
+          return sendJson(res, 400, { error: 'need {id, disabled}' });
+        }
+        const disabledCore = destructive.setCoreDisabled(memDir, body.id, !!body.disabled);
+        // Audit: toda alteração em pattern core fica no log do internal_firefighter
+        // pra ser sempre visível — desabilitar proteção é decisão séria.
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(),
+          type: 'protection_core_toggled',
+          pattern_id: body.id,
+          disabled: !!body.disabled,
+          now_disabled_count: disabledCore.length,
+        });
+        sendJson(res, 200, { ok: true, disabled_core: disabledCore });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    });
     return;
   }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, X, Bot, Brain } from 'lucide-react';
+import { Send, X, Bot, Brain, User as UserIcon, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CopyButton } from '@/components/CopyButton';
@@ -9,14 +9,41 @@ import { AgentFace } from '@/components/AgentFace';
 import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
 import type { AgentCfg } from '@/lib/types';
 import { useChat } from '@/hooks/useChat';
+import { listHumans, type HumanProfile } from '@/lib/humans';
 
 interface Props {
   agent: string | null;
   agentCfg: AgentCfg | null;
+  allAgents?: Record<string, AgentCfg> | null;
   humanId?: string | null;
   humanName?: string | null;
   onClose?: () => void;
   onStreamingChange?: (streaming: boolean) => void;
+}
+
+type MentionTarget = {
+  id: string;        // nome a inserir no texto
+  display: string;   // nome pra mostrar na lista
+  kind: 'agent' | 'human';
+  subtitle?: string;
+  emoji?: string;
+};
+
+// Detecta trigger de @ antes do caret: retorna posição do @ e a query digitada.
+// Só considera @ precedido por início-de-string ou whitespace, e query sem espaços.
+function findMentionTrigger(text: string, caret: number): { start: number; query: string } | null {
+  for (let i = caret - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === '@') {
+      const prev = i > 0 ? text[i - 1] : '';
+      if (prev === '' || /\s/.test(prev)) {
+        return { start: i, query: text.slice(i + 1, caret) };
+      }
+      return null;
+    }
+    if (/\s/.test(ch)) return null;
+  }
+  return null;
 }
 
 function initials(name: string): string {
@@ -37,6 +64,7 @@ const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'destructive' | 'succ
 export function ChatPanel({
   agent,
   agentCfg,
+  allAgents = null,
   humanId = null,
   humanName = null,
   onClose,
@@ -46,6 +74,96 @@ export function ChatPanel({
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Humanos pro autocomplete de @ — carrega uma vez por montagem.
+  const [humans, setHumans] = useState<HumanProfile[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listHumans()
+      .then((hs) => { if (!cancelled) setHumans(hs); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Alvos pra mention: agentes (exceto o atual) + humanos (exceto eu).
+  const mentionTargets = useMemo<MentionTarget[]>(() => {
+    const list: MentionTarget[] = [];
+    if (allAgents) {
+      for (const [name, cfg] of Object.entries(allAgents)) {
+        if (name === agent) continue;
+        list.push({
+          id: name,
+          display: name,
+          kind: 'agent',
+          subtitle: cfg.role || cfg.profession || cfg.type || 'agente',
+          emoji: cfg.emoji,
+        });
+      }
+    }
+    for (const h of humans) {
+      if (h.id === humanId) continue;
+      list.push({
+        id: h.name,
+        display: h.name,
+        kind: 'human',
+        subtitle: h.description || 'humano',
+      });
+    }
+    return list;
+  }, [allAgents, agent, humans, humanId]);
+
+  const [mention, setMention] = useState<{ start: number; query: string; hover: number } | null>(null);
+
+  // ✨ Melhorar prompt — Haiku corrige ortografia/clareza sem mudar intenção.
+  // Usuário aceita (substitui textarea) ou descarta. Não persiste nada.
+  const [improve, setImprove] = useState<
+    | { phase: 'loading' }
+    | { phase: 'ready'; original: string; improved: string }
+    | { phase: 'error'; message: string }
+    | null
+  >(null);
+
+  const filteredMentions = useMemo(() => {
+    if (!mention) return [];
+    const q = mention.query.toLowerCase();
+    const matches = mentionTargets.filter((t) => t.display.toLowerCase().includes(q));
+    // agentes primeiro, depois humanos — e priorizar startsWith
+    matches.sort((a, b) => {
+      const aStart = a.display.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStart = b.display.toLowerCase().startsWith(q) ? 0 : 1;
+      if (aStart !== bStart) return aStart - bStart;
+      if (a.kind !== b.kind) return a.kind === 'agent' ? -1 : 1;
+      return a.display.localeCompare(b.display);
+    });
+    return matches.slice(0, 8);
+  }, [mention, mentionTargets]);
+
+  const syncMention = (text: string, caret: number) => {
+    const trig = findMentionTrigger(text, caret);
+    if (!trig) return setMention(null);
+    setMention((cur) => ({
+      start: trig.start,
+      query: trig.query,
+      hover: cur && cur.start === trig.start ? cur.hover : 0,
+    }));
+  };
+
+  const applyMention = (target: MentionTarget) => {
+    if (!mention || !taRef.current) return;
+    const ta = taRef.current;
+    const before = input.slice(0, mention.start);
+    const after = input.slice(ta.selectionEnd ?? mention.start + 1 + mention.query.length);
+    const inserted = `@${target.id} `;
+    const next = before + inserted + after;
+    setInput(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      if (!taRef.current) return;
+      const caret = (before + inserted).length;
+      taRef.current.focus();
+      taRef.current.setSelectionRange(caret, caret);
+    });
+  };
 
   useEffect(() => {
     onStreamingChange?.(isStreaming);
@@ -68,19 +186,62 @@ export function ChatPanel({
     autoResize(taRef.current);
   }, [input, agent]);
 
+  // Agrupa msgs por dia e marca runs consecutivos com mesmo group_id como thread.
   const grouped = useMemo(() => {
     let lastKey = '';
-    const items: Array<{ kind: 'day'; label: string } | { kind: 'msg'; msg: any }> = [];
+    type Item =
+      | { kind: 'day'; label: string }
+      | { kind: 'msg'; msg: any; threadId: string | null; threadIndex: number; threadSize: number };
+    const items: Item[] = [];
+    const runStart: number[] = []; // índices em `items` onde thread corrente começa
+    let currentGroup: string | null = null;
+    const flushRun = () => {
+      if (!runStart.length) return;
+      const size = runStart.length;
+      for (let j = 0; j < runStart.length; j++) {
+        const it = items[runStart[j]];
+        if (it.kind === 'msg') it.threadSize = size;
+      }
+      runStart.length = 0;
+    };
     for (const m of messages) {
       const k = fmtDayKey(m.ts);
       if (k !== lastKey) {
+        flushRun();
+        currentGroup = null;
         items.push({ kind: 'day', label: fmtDayLabel(k) });
         lastKey = k;
       }
-      items.push({ kind: 'msg', msg: m });
+      const gid: string | null = (m as any).group_id || null;
+      if (gid && gid === currentGroup) {
+        const idx = items.length;
+        items.push({ kind: 'msg', msg: m, threadId: gid, threadIndex: runStart.length, threadSize: 0 });
+        runStart.push(idx);
+      } else {
+        flushRun();
+        currentGroup = gid;
+        const idx = items.length;
+        if (gid) {
+          items.push({ kind: 'msg', msg: m, threadId: gid, threadIndex: 0, threadSize: 0 });
+          runStart.push(idx);
+        } else {
+          items.push({ kind: 'msg', msg: m, threadId: null, threadIndex: 0, threadSize: 1 });
+        }
+      }
     }
+    flushRun();
     return items;
   }, [messages]);
+
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
+  const toggleThread = (gid: string) => {
+    setCollapsedThreads((cur) => {
+      const next = new Set(cur);
+      if (next.has(gid)) next.delete(gid);
+      else next.add(gid);
+      return next;
+    });
+  };
 
   if (!agent || !agentCfg) {
     return (
@@ -97,6 +258,39 @@ export function ChatPanel({
     if (!msg || sending) return;
     send(msg);
     setInput('');
+    setImprove(null);
+  };
+
+  const runImprove = async () => {
+    const text = input.trim();
+    if (!text || improve?.phase === 'loading' || sending) return;
+    setImprove({ phase: 'loading' });
+    try {
+      const r = await fetch('/api/chat/improve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        setImprove({ phase: 'error', message: j.error || `HTTP ${r.status}` });
+        return;
+      }
+      if (!j.improved || j.improved === j.original) {
+        setImprove({ phase: 'error', message: 'texto já está bom — nada a melhorar' });
+        return;
+      }
+      setImprove({ phase: 'ready', original: j.original, improved: j.improved });
+    } catch (e: any) {
+      setImprove({ phase: 'error', message: e?.message || 'falha ao melhorar prompt' });
+    }
+  };
+
+  const acceptImprove = () => {
+    if (improve?.phase !== 'ready') return;
+    setInput(improve.improved);
+    setImprove(null);
+    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const meInitials = humanName ? initials(humanName) : null;
@@ -161,23 +355,46 @@ export function ChatPanel({
             <p>Nenhuma mensagem ainda. Pergunte algo ao {agent}.</p>
           </div>
         )}
-        {grouped.map((item, i) =>
-          item.kind === 'day' ? (
-            <div key={`d${i}`} className="flex justify-center py-2">
-              <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
-                {item.label}
-              </span>
-            </div>
-          ) : (
-            <Bubble
+        {grouped.map((item, i) => {
+          if (item.kind === 'day') {
+            return (
+              <div key={`d${i}`} className="flex justify-center py-2">
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+                  {item.label}
+                </span>
+              </div>
+            );
+          }
+          const inThread = item.threadId && item.threadSize > 1;
+          const collapsed = inThread && collapsedThreads.has(item.threadId!);
+          const isThreadHead = inThread && item.threadIndex === 0;
+          if (collapsed && !isThreadHead) return null;
+          return (
+            <div
               key={i}
-              msg={item.msg}
-              humanName={humanName}
-              agentType={agentCfg.type}
-              agentProfession={(agentCfg as any).profession}
-            />
-          ),
-        )}
+              className={cn(
+                inThread && item.threadIndex > 0 && 'ml-6 border-l-2 border-slate-200 pl-3',
+              )}
+            >
+              {isThreadHead && (
+                <button
+                  type="button"
+                  onClick={() => toggleThread(item.threadId!)}
+                  className="mb-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-200"
+                  title={collapsed ? 'expandir thread' : 'recolher thread'}
+                >
+                  {collapsed ? '▸' : '▾'} thread · {item.threadSize} msgs
+                </button>
+              )}
+              <Bubble
+                msg={item.msg}
+                humanName={humanName}
+                agentType={agentCfg.type}
+                agentProfession={(agentCfg as any).profession}
+              />
+            </div>
+          );
+        })}
         {err && (
           <div className="mx-auto my-2 max-w-[90%] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             {err}
@@ -192,13 +409,115 @@ export function ChatPanel({
           submit();
         }}
       >
-        <div className="flex items-end gap-2 rounded-2xl border bg-slate-50 px-3 py-2 focus-within:border-primary focus-within:bg-white focus-within:ring-1 focus-within:ring-primary">
+        {improve && improve.phase === 'ready' && (
+          <div className="mb-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+              <Sparkles className="h-3 w-3" /> sugestão de texto
+            </div>
+            <div className="mb-1 text-[11px] text-slate-500">
+              <span className="font-medium text-slate-600">original:</span> {improve.original}
+            </div>
+            <div className="text-slate-900">{improve.improved}</div>
+            <div className="mt-2 flex gap-2">
+              <Button type="button" size="sm" className="h-7 px-2.5 text-xs" onClick={acceptImprove}>
+                usar sugestão
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setImprove(null)}
+              >
+                descartar
+              </Button>
+            </div>
+          </div>
+        )}
+        {improve && improve.phase === 'error' && (
+          <div className="mb-2 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+            <span>{improve.message}</span>
+            <button
+              type="button"
+              className="rounded p-0.5 text-amber-700 hover:bg-amber-100"
+              onClick={() => setImprove(null)}
+              aria-label="fechar"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+        <div className="relative flex items-end gap-2 rounded-2xl border bg-slate-50 px-3 py-2 focus-within:border-primary focus-within:bg-white focus-within:ring-1 focus-within:ring-primary">
+          {mention && filteredMentions.length > 0 && (
+            <div className="absolute bottom-full left-2 right-2 z-20 mb-2 max-h-64 overflow-auto rounded-xl border bg-white py-1 shadow-lg">
+              <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                mencionar
+              </div>
+              {filteredMentions.map((t, i) => (
+                <button
+                  key={`${t.kind}:${t.id}`}
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm',
+                    i === mention.hover ? 'bg-primary/10' : 'hover:bg-slate-50',
+                  )}
+                  onMouseEnter={() => setMention((cur) => (cur ? { ...cur, hover: i } : cur))}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyMention(t);
+                  }}
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs">
+                    {t.kind === 'agent' ? (t.emoji || <Bot className="h-3 w-3 text-slate-500" />) : <UserIcon className="h-3 w-3 text-slate-500" />}
+                  </span>
+                  <span className="font-medium">{t.display}</span>
+                  {t.subtitle && (
+                    <span className="ml-auto truncate text-[11px] text-slate-400">{t.subtitle}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             ref={taRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              syncMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
             onInput={(e) => autoResize(e.currentTarget)}
+            onKeyUp={(e) => {
+              const ta = e.currentTarget;
+              syncMention(ta.value, ta.selectionStart ?? ta.value.length);
+            }}
+            onClick={(e) => {
+              const ta = e.currentTarget;
+              syncMention(ta.value, ta.selectionStart ?? ta.value.length);
+            }}
+            onBlur={() => setMention(null)}
             onKeyDown={(e) => {
+              if (mention && filteredMentions.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setMention((cur) => cur ? { ...cur, hover: (cur.hover + 1) % filteredMentions.length } : cur);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setMention((cur) => cur ? { ...cur, hover: (cur.hover - 1 + filteredMentions.length) % filteredMentions.length } : cur);
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  applyMention(filteredMentions[mention.hover] || filteredMentions[0]);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setMention(null);
+                  return;
+                }
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 submit();
@@ -210,6 +529,22 @@ export function ChatPanel({
             style={{ minHeight: 72 }}
           />
           <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            disabled={!input.trim() || sending || improve?.phase === 'loading'}
+            onClick={runImprove}
+            className="h-9 w-9 shrink-0 rounded-full text-violet-600 hover:bg-violet-100 hover:text-violet-700"
+            aria-label="melhorar prompt"
+            title="melhorar ortografia e clareza (sem mudar intenção)"
+          >
+            {improve?.phase === 'loading' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
             type="submit"
             size="icon"
             disabled={!input.trim() || sending}
@@ -220,7 +555,7 @@ export function ChatPanel({
           </Button>
         </div>
         <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">
-          Enter envia · Shift+Enter quebra linha
+          Enter envia · Shift+Enter quebra linha · @ menciona agentes/humanos · ✨ melhora o texto
         </p>
       </form>
     </div>

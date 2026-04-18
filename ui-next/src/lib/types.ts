@@ -85,4 +85,11 @@ export interface ChatMsg {
   role: 'user' | 'agent';
   content: string;
   duration_ms?: number;
+  from?: string;
+  trace_id?: string;
+  reply_to?: string;
+  group_id?: string;
+  auto?: boolean;
+  intent?: string;
+  subject?: string;
 }

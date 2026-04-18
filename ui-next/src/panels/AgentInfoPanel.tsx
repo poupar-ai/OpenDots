@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/CopyButton';
+import { AgentFace } from '@/components/AgentFace';
+import { cn } from '@/lib/utils';
 import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/types';
-import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen } from 'lucide-react';
-import { updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent } from '@/lib/agents';
+import {
+  Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout,
+  FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen, ChevronDown,
+  Zap, TrendingUp, Clock,
+} from 'lucide-react';
+import {
+  updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent,
+} from '@/lib/agents';
 
 interface LogEntry {
   ts: string;
@@ -35,53 +42,6 @@ interface WorkEntry {
   prompt?: string;
 }
 
-function WorkRow({ e }: { e: WorkEntry }) {
-  if (e.type === 'file_edit') {
-    const ins = e.diff?.ins;
-    const del = e.diff?.del;
-    return (
-      <div className="flex items-start gap-1.5 text-[10px] leading-tight">
-        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
-        <FilePen className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
-        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.file}>
-          {e.file}
-        </span>
-        {(typeof ins === 'number' || typeof del === 'number') && (
-          <span className="shrink-0 text-[10px]">
-            {typeof ins === 'number' && <span className="text-emerald-700">+{ins}</span>}
-            {typeof del === 'number' && <span className="ml-0.5 text-red-600">-{del}</span>}
-          </span>
-        )}
-      </div>
-    );
-  }
-  if (e.type === 'bash') {
-    return (
-      <div className="flex items-start gap-1.5 text-[10px] leading-tight">
-        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
-        <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
-        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.cmd}>
-          {e.cmd}
-        </span>
-        {e.output_summary && (
-          <span className="shrink-0 text-[10px] text-slate-500" title={e.output_summary}>
-            {e.output_summary.slice(0, 24)}
-          </span>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-start gap-1.5 text-[10px] leading-tight">
-      <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
-      <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-indigo-600" />
-      <span className="min-w-0 flex-1 truncate text-slate-700" title={e.prompt}>
-        → {e.agent}: {e.description}
-      </span>
-    </div>
-  );
-}
-
 interface Props {
   name: string;
   cfg: AgentCfg;
@@ -98,26 +58,19 @@ function edges(c: AgentCfg): string[] {
   return c.can_talk_to || c.consults || [];
 }
 
-function LogRow({ e }: { e: LogEntry }) {
-  const color =
-    e.type === 'error'
-      ? 'bg-red-100 text-red-700'
-      : e.type === 'response'
-        ? 'bg-emerald-100 text-emerald-700'
-        : 'bg-blue-100 text-blue-700';
-  const detail =
-    e.type === 'error'
-      ? e.message || e.stderr || `exit ${e.code ?? '?'}`
-      : e.type === 'response'
-        ? `${e.response_chars ?? 0} chars · ${e.duration_ms ?? 0}ms`
-        : `prompt ${e.prompt_chars ?? 0} chars`;
-  return (
-    <div className="flex items-start gap-1.5 text-[10px] leading-tight">
-      <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
-      <span className={`shrink-0 rounded px-1 font-semibold uppercase ${color}`}>{e.type}</span>
-      <span className="min-w-0 flex-1 truncate text-slate-700">{detail}</span>
-    </div>
-  );
+function fmtRelativeDate(ts: string): string {
+  try {
+    const d = new Date(ts);
+    const now = Date.now();
+    const diff = Math.floor((now - d.getTime()) / 1000);
+    if (diff < 60) return 'agora';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m atrás`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d atrás`;
+    return ts.slice(0, 10);
+  } catch {
+    return ts.slice(0, 10);
+  }
 }
 
 export function AgentInfoPanel({
@@ -138,10 +91,10 @@ export function AgentInfoPanel({
         .filter(([n, a]) => n !== name && edges(a).includes(name))
         .map(([n]) => n)
     : [];
-  const [logOpen, setLogOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityTab, setActivityTab] = useState<'log' | 'work'>('log');
   const [logEntries, setLogEntries] = useState<LogEntry[] | null>(null);
   const [logLoading, setLogLoading] = useState(false);
-  const [workOpen, setWorkOpen] = useState(false);
   const [workEntries, setWorkEntries] = useState<WorkEntry[] | null>(null);
   const [workLoading, setWorkLoading] = useState(false);
   const [editAuto, setEditAuto] = useState(false);
@@ -152,9 +105,8 @@ export function AgentInfoPanel({
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   useEffect(() => {
-    setLogOpen(false);
+    setActivityOpen(false);
     setLogEntries(null);
-    setWorkOpen(false);
     setWorkEntries(null);
     setEditAuto(false);
     setEditModel(false);
@@ -163,7 +115,8 @@ export function AgentInfoPanel({
     setDeleteErr(null);
   }, [name]);
 
-  const isProtected = !!manifest && (name === (manifest as any).manager || name === (manifest as any).oracle);
+  const isProtected =
+    !!manifest && (name === (manifest as any).manager || name === (manifest as any).oracle);
 
   const handleDelete = async () => {
     if (isProtected) return;
@@ -208,303 +161,508 @@ export function AgentInfoPanel({
     }
   };
 
+  const origin = manifest?._meta?.agent_origin?.[name];
+  const errorCount = logSummary?.errors ?? 0;
+  const lastMs = logSummary?.lastDurationMs;
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="flex min-w-0 items-center gap-1.5">
-            <span>{cfg.emoji || '🤖'}</span>
-            <span className="truncate">{name}</span>
-            <CopyButton value={name} label="copiar nome do agente" />
-          </CardTitle>
-          <div className="flex shrink-0 items-center gap-1">
-            <Badge variant="outline">{type}</Badge>
-            {cfg.autonomy && <AutonomyBadge level={cfg.autonomy.level} />}
-          </div>
-        </div>
-        {cfg.role && <p className="text-xs text-muted-foreground">{cfg.role}</p>}
-        {manifest?._meta?.agent_origin?.[name] && (
-          <p className="flex items-center gap-1 text-[10px] text-slate-400">
-            <Sprout className="h-3 w-3" />
-            seed: <code className="font-mono">{manifest._meta.agent_origin[name].category}/{manifest._meta.agent_origin[name].slug}</code>
-          </p>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1 text-muted-foreground">
-            <Cpu className="h-3 w-3" /> modelo
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[11px]">{cfg.model || '(default)'}</span>
-            <button
-              onClick={() => setEditModel(true)}
-              className="text-[10px] text-indigo-700 underline-offset-2 hover:underline"
-            >
-              editar
-            </button>
-          </div>
-        </div>
-        {editModel && (
-          <ModelEditor
-            name={name}
-            current={cfg.model || ''}
-            origin={manifest?._meta?.agent_origin?.[name] || null}
-            onClose={() => setEditModel(false)}
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="flex items-start gap-3 p-4">
+          <AgentFace
+            type={type}
+            profession={cfg.profession}
+            size={56}
           />
-        )}
-        <div className="flex items-start justify-between gap-2">
-          <span className="flex items-center gap-1 text-muted-foreground">
-            <Plug className="h-3 w-3" /> mcps
-          </span>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-            {(cfg.mcps && cfg.mcps.length > 0) ? (
-              cfg.mcps.map((m) => (
-                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700">
-                  {m}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-semibold leading-tight">{name}</h3>
+              <CopyButton value={name} label="copiar nome do agente" />
+            </div>
+            {cfg.role && (
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                {cfg.role}
+              </p>
+            )}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              <Badge variant="outline" className="text-[10px]">{type}</Badge>
+              {cfg.autonomy && <AutonomyBadge level={cfg.autonomy.level} />}
+              {cfg.watch && (
+                <span className="inline-flex items-center gap-0.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide text-red-700">
+                  <Eye className="h-2.5 w-2.5" /> watch
                 </span>
-              ))
-            ) : (
-              <span className="text-[10px] text-slate-400">nenhum</span>
-            )}
-            <button
-              onClick={() => setEditMcps(true)}
-              className="text-[10px] text-indigo-700 underline-offset-2 hover:underline"
-            >
-              editar
-            </button>
-          </div>
-        </div>
-        {editMcps && (
-          <McpsEditor
-            name={name}
-            current={cfg.mcps || []}
-            onClose={() => setEditMcps(false)}
-          />
-        )}
-        {cfg.watch && (
-          <div className="flex items-start gap-1 rounded-md bg-red-50 px-2 py-1.5 text-red-700">
-            <Eye className="mt-0.5 h-3 w-3 shrink-0" />
-            <div className="min-w-0">
-              <div className="font-mono text-[10px] truncate">{cfg.watch.query}</div>
-              <div className="text-[10px] text-red-500">
-                threshold {cfg.watch.threshold}/{cfg.watch.window_minutes}min
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="rounded-md border bg-indigo-50/40 p-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="flex items-center gap-1 text-indigo-700">
-              <Sliders className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">autonomia</span>
-            </div>
-            <button
-              onClick={() => setEditAuto(true)}
-              className="text-[10px] text-indigo-700 underline-offset-2 hover:underline"
-            >
-              editar
-            </button>
-          </div>
-          {cfg.autonomy ? (
-            <>
-              <div className="mb-1 flex items-center gap-1.5 text-[10px]">
-                <Badge variant="outline" className="uppercase">
-                  {cfg.autonomy.level}
-                </Badge>
-                {cfg.autonomy.call_human_when?.length > 0 && (
-                  <span className="text-slate-500">
-                    · chama humano em {cfg.autonomy.call_human_when.length} {cfg.autonomy.call_human_when.length === 1 ? 'caso' : 'casos'}
-                  </span>
-                )}
-              </div>
-              {cfg.autonomy.call_human_when?.length > 0 && (
-                <ul className="space-y-0.5 text-[10px] text-slate-700">
-                  {cfg.autonomy.call_human_when.map((c, i) => (
-                    <li key={i} className="flex gap-1">
-                      <span className="shrink-0 text-indigo-400">·</span>
-                      <span>{c}</span>
-                    </li>
-                  ))}
-                </ul>
               )}
-            </>
-          ) : (
-            <p className="text-[10px] text-slate-500">não configurada — usa comportamento default.</p>
-          )}
-        </div>
-        {editAuto && (
-          <AutonomyEditor
-            name={name}
-            cfg={cfg}
-            origin={manifest?._meta?.agent_origin?.[name] || null}
-            onClose={() => setEditAuto(false)}
-          />
-        )}
-        {outgoing.length > 0 && (
-          <div>
-            <div className="mb-1 flex items-center gap-1 text-orange-600">
-              <ArrowRight className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">fala com</span>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {outgoing.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => onSelect?.(c)}
-                  className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {incoming.length > 0 && (
-          <div>
-            <div className="mb-1 flex items-center gap-1 text-blue-600">
-              <ArrowLeft className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">recebe de</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {incoming.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => onSelect?.(c)}
-                  className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-100"
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {(count !== undefined || lastInvoked) && (
-          <div className="flex items-center justify-between border-t pt-2 text-muted-foreground">
-            <span>invocações: {count ?? 0}</span>
-            {lastInvoked && <span className="text-[10px]">{lastInvoked.slice(0, 10)}</span>}
-          </div>
-        )}
-        {logSummary && (
-          <div className="rounded-md border bg-slate-50/70 p-2">
-            <div className="mb-1 flex items-center justify-between">
-              <div className="flex items-center gap-1 text-slate-700">
-                <Activity className="h-3 w-3" />
-                <span className="text-[10px] font-semibold uppercase tracking-wide">log</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span className="text-slate-600">{logSummary.requests} req</span>
-                <span className={logSummary.errors > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}>
-                  {logSummary.errors} err
-                </span>
-                {typeof logSummary.lastDurationMs === 'number' && (
-                  <span className="text-slate-500">{logSummary.lastDurationMs}ms</span>
-                )}
-              </div>
-            </div>
-            {logSummary.lastErrorMsg && (
-              <div className="flex items-start gap-1 rounded bg-red-50 px-1.5 py-1 text-red-700">
-                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[10px] text-red-500">
-                    último erro {logSummary.lastErrorAt ? logSummary.lastErrorAt.slice(11, 19) : ''}
-                  </div>
-                  <div className="truncate font-mono text-[10px]">{logSummary.lastErrorMsg}</div>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => {
-                setLogOpen((v) => !v);
-                if (!logOpen) loadLog();
-              }}
-              className="mt-1 w-full rounded border bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-100"
-            >
-              {logOpen ? 'ocultar' : 'ver'} eventos
-            </button>
-            {logOpen && (
-              <div className="soft-scroll mt-1 max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                {logLoading && <div className="text-[10px] text-slate-500">carregando…</div>}
-                {!logLoading && logEntries && logEntries.length === 0 && (
-                  <div className="text-[10px] text-slate-500">sem eventos ainda.</div>
-                )}
-                {!logLoading &&
-                  logEntries &&
-                  [...logEntries].reverse().map((e, i) => <LogRow key={i} e={e} />)}
-              </div>
-            )}
-          </div>
-        )}
-        <div className="rounded-md border bg-amber-50/50 p-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="flex items-center gap-1 text-amber-700">
-              <Hammer className="h-3 w-3" />
-              <span className="text-[10px] font-semibold uppercase tracking-wide">trabalho</span>
-            </div>
-            <button
-              onClick={() => {
-                setWorkOpen((v) => !v);
-                if (!workOpen) loadWork();
-              }}
-              className="text-[10px] text-amber-700 underline-offset-2 hover:underline"
-            >
-              {workOpen ? 'ocultar' : 'ver'}
-            </button>
-          </div>
-          {workOpen && (
-            <div className="soft-scroll max-h-64 space-y-0.5 overflow-y-auto pr-1">
-              {workLoading && <div className="text-[10px] text-slate-500">carregando…</div>}
-              {!workLoading && workEntries && workEntries.length === 0 && (
-                <div className="text-[10px] text-slate-500">
-                  nenhuma edição/comando atribuído a este agente ainda.
-                </div>
-              )}
-              {!workLoading && workEntries && workEntries.map((e, i) => <WorkRow key={i} e={e} />)}
-            </div>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditContext(true)}
-          className="group flex w-full items-center justify-between rounded-md border bg-muted/30 px-2 py-1.5 text-left hover:border-indigo-300 hover:bg-indigo-50/40"
-          title="abrir mini-contexto pra editar"
-        >
-          <span className="flex items-center gap-1.5 text-[11px] font-medium">
-            <FileText className="h-3 w-3" /> mini-contexto
-          </span>
-          <span className="flex items-center gap-1 text-[10px] text-slate-500 group-hover:text-indigo-700">
-            {context ? `${context.length} chars` : 'vazio'}
-            <Pencil className="h-3 w-3" />
-          </span>
-        </button>
-        {editContext && (
-          <ContextEditor
-            name={name}
-            current={context}
-            onClose={() => setEditContext(false)}
-          />
-        )}
-        {!isProtected && (
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50/60 px-2 py-1.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-              title="remover agente"
-            >
-              <Trash2 className="h-3 w-3" />
-              {deleting ? 'removendo…' : 'remover agente'}
-            </button>
-            {deleteErr && (
-              <p className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700">
-                {deleteErr}
+            {origin && (
+              <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
+                <Sprout className="h-3 w-3" />
+                <code className="truncate font-mono">{origin.category}/{origin.slug}</code>
               </p>
             )}
           </div>
+        </div>
+
+        <div className="grid grid-cols-3 divide-x border-t bg-slate-50/50">
+          <MetricCell
+            icon={<Zap className="h-3 w-3" />}
+            label="invocações"
+            value={count ?? 0}
+          />
+          <MetricCell
+            icon={<AlertCircle className="h-3 w-3" />}
+            label="erros"
+            value={errorCount}
+            tone={errorCount > 0 ? 'danger' : 'default'}
+          />
+          <MetricCell
+            icon={<Clock className="h-3 w-3" />}
+            label={lastMs != null ? 'últ. ms' : 'último'}
+            value={lastMs != null ? `${lastMs}` : lastInvoked ? fmtRelativeDate(lastInvoked) : '—'}
+            small={lastMs == null}
+          />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <SectionHeader icon={<Sliders className="h-4 w-4" />} label="Configuração" />
+        <div className="divide-y">
+          <ConfigRow
+            icon={<Cpu className="h-3.5 w-3.5" />}
+            label="modelo"
+            value={cfg.model || <em className="text-slate-400">default</em>}
+            onEdit={() => setEditModel(true)}
+          />
+          <ConfigRow
+            icon={<Plug className="h-3.5 w-3.5" />}
+            label="mcps"
+            value={
+              cfg.mcps && cfg.mcps.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-end gap-1">
+                  {cfg.mcps.slice(0, 3).map((m) => (
+                    <span
+                      key={m}
+                      className="rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                  {cfg.mcps.length > 3 && (
+                    <span className="text-[10px] text-slate-400">+{cfg.mcps.length - 3}</span>
+                  )}
+                </div>
+              ) : (
+                <em className="text-slate-400">nenhum</em>
+              )
+            }
+            onEdit={() => setEditMcps(true)}
+          />
+          <ConfigRow
+            icon={<Sliders className="h-3.5 w-3.5" />}
+            label="autonomia"
+            value={
+              cfg.autonomy ? (
+                <span className="font-medium uppercase text-slate-700">{cfg.autonomy.level}</span>
+              ) : (
+                <em className="text-slate-400">default</em>
+              )
+            }
+            onEdit={() => setEditAuto(true)}
+            sub={
+              cfg.autonomy?.call_human_when && cfg.autonomy.call_human_when.length > 0
+                ? `${cfg.autonomy.call_human_when.length} gatilho${
+                    cfg.autonomy.call_human_when.length === 1 ? '' : 's'
+                  } pra humano`
+                : undefined
+            }
+          />
+          <ConfigRow
+            icon={<FileText className="h-3.5 w-3.5" />}
+            label="mini-contexto"
+            value={
+              context ? (
+                <span className="font-mono text-[11px] text-slate-700">
+                  {context.length >= 1000 ? `${(context.length / 1000).toFixed(1)}k` : context.length} chars
+                </span>
+              ) : (
+                <em className="text-slate-400">vazio</em>
+              )
+            }
+            onEdit={() => setEditContext(true)}
+          />
+        </div>
+      </div>
+
+      {(outgoing.length > 0 || incoming.length > 0) && (
+        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <SectionHeader icon={<ArrowRight className="h-4 w-4" />} label="Conexões" />
+          <div className="space-y-3 p-3">
+            {outgoing.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-orange-600">
+                  <ArrowRight className="h-3 w-3" /> fala com
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {outgoing.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => onSelect?.(c)}
+                      className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700 transition-colors hover:bg-orange-100"
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {incoming.length > 0 && (
+              <div>
+                <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                  <ArrowLeft className="h-3 w-3" /> recebe de
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {incoming.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => onSelect?.(c)}
+                      className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfg.watch && (
+        <div className="overflow-hidden rounded-xl border border-red-200 bg-red-50/60 shadow-sm">
+          <div className="p-3">
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+              <Eye className="h-3.5 w-3.5" /> watch ativo
+            </div>
+            <div className="truncate rounded-md border border-red-200 bg-white px-2 py-1.5 font-mono text-[10px] text-red-700">
+              {cfg.watch.query}
+            </div>
+            <p className="mt-1 text-[10px] text-red-500">
+              threshold {cfg.watch.threshold}/{cfg.watch.window_minutes}min
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <button
+          onClick={() => {
+            const next = !activityOpen;
+            setActivityOpen(next);
+            if (next) {
+              if (activityTab === 'log') loadLog();
+              else loadWork();
+            }
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-slate-50/70"
+        >
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <h4 className="flex-1 text-xs font-semibold uppercase tracking-wide">Atividade</h4>
+          {logSummary && (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {logSummary.requests} req
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-transform',
+              !activityOpen && '-rotate-90',
+            )}
+          />
+        </button>
+
+        {logSummary?.lastErrorMsg && (
+          <div className="mx-3 mb-2 flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] text-red-500">
+                último erro{' '}
+                {logSummary.lastErrorAt ? fmtRelativeDate(logSummary.lastErrorAt) : ''}
+              </div>
+              <div className="truncate font-mono text-[10px]">{logSummary.lastErrorMsg}</div>
+            </div>
+          </div>
         )}
-      </CardContent>
-    </Card>
+
+        {activityOpen && (
+          <div className="border-t">
+            <div className="flex gap-1 border-b bg-slate-50/60 p-1">
+              <TabButton
+                active={activityTab === 'log'}
+                onClick={() => {
+                  setActivityTab('log');
+                  loadLog();
+                }}
+                icon={<Activity className="h-3 w-3" />}
+                label="log"
+                count={logSummary?.total}
+              />
+              <TabButton
+                active={activityTab === 'work'}
+                onClick={() => {
+                  setActivityTab('work');
+                  loadWork();
+                }}
+                icon={<Hammer className="h-3 w-3" />}
+                label="trabalho"
+              />
+            </div>
+            <div className="soft-scroll max-h-64 overflow-y-auto p-2">
+              {activityTab === 'log' ? (
+                <>
+                  {logLoading && <EmptyState text="carregando…" />}
+                  {!logLoading && logEntries && logEntries.length === 0 && (
+                    <EmptyState text="sem eventos ainda" />
+                  )}
+                  {!logLoading &&
+                    logEntries &&
+                    [...logEntries].reverse().map((e, i) => <LogRow key={i} e={e} />)}
+                </>
+              ) : (
+                <>
+                  {workLoading && <EmptyState text="carregando…" />}
+                  {!workLoading && workEntries && workEntries.length === 0 && (
+                    <EmptyState text="nenhuma edição/comando atribuído ainda" />
+                  )}
+                  {!workLoading && workEntries && workEntries.map((e, i) => <WorkRow key={i} e={e} />)}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!isProtected && (
+        <div>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-[12px] font-medium text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+            title="remover agente"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleting ? 'removendo…' : 'remover agente'}
+          </button>
+          {deleteErr && (
+            <p className="mt-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+              {deleteErr}
+            </p>
+          )}
+        </div>
+      )}
+
+      {editAuto && (
+        <AutonomyEditor
+          name={name}
+          cfg={cfg}
+          origin={manifest?._meta?.agent_origin?.[name] || null}
+          onClose={() => setEditAuto(false)}
+        />
+      )}
+      {editModel && (
+        <ModelEditor
+          name={name}
+          current={cfg.model || ''}
+          origin={manifest?._meta?.agent_origin?.[name] || null}
+          onClose={() => setEditModel(false)}
+        />
+      )}
+      {editContext && (
+        <ContextEditor name={name} current={context} onClose={() => setEditContext(false)} />
+      )}
+      {editMcps && (
+        <McpsEditor name={name} current={cfg.mcps || []} onClose={() => setEditMcps(false)} />
+      )}
+    </div>
+  );
+}
+
+function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 border-b bg-slate-50/60 px-3 py-2">
+      <span className="text-muted-foreground">{icon}</span>
+      <h4 className="text-xs font-semibold uppercase tracking-wide">{label}</h4>
+    </div>
+  );
+}
+
+function MetricCell({
+  icon,
+  label,
+  value,
+  tone = 'default',
+  small = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  tone?: 'default' | 'danger';
+  small?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-0.5 px-2 py-2.5">
+      <span
+        className={cn(
+          'tabular-nums leading-none',
+          small ? 'text-[11px] font-medium' : 'text-base font-semibold',
+          tone === 'danger' && value !== 0 && 'text-red-600',
+        )}
+      >
+        {value}
+      </span>
+      <span className="flex items-center gap-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+        {icon} {label}
+      </span>
+    </div>
+  );
+}
+
+function ConfigRow({
+  icon,
+  label,
+  value,
+  sub,
+  onEdit,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-slate-50/70">
+      <span className="text-muted-foreground">{icon}</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        {sub && <span className="text-[10px] text-slate-500">{sub}</span>}
+      </div>
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 text-[11px]">
+        <div className="max-w-[150px] truncate text-right">{value}</div>
+        <button
+          onClick={onEdit}
+          className="rounded-md border border-transparent bg-slate-100 p-1 text-slate-500 opacity-0 transition-opacity hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 group-hover:opacity-100"
+          title={`editar ${label}`}
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+        active
+          ? 'bg-white text-slate-800 shadow-sm'
+          : 'text-muted-foreground hover:bg-white/60 hover:text-slate-700',
+      )}
+    >
+      {icon} {label}
+      {count != null && count > 0 && (
+        <span className="rounded-full bg-slate-200 px-1 font-mono text-[9px] text-slate-600">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="py-4 text-center text-[11px] text-slate-400">{text}</div>;
+}
+
+function LogRow({ e }: { e: LogEntry }) {
+  const color =
+    e.type === 'error'
+      ? 'bg-red-100 text-red-700'
+      : e.type === 'response'
+        ? 'bg-emerald-100 text-emerald-700'
+        : 'bg-blue-100 text-blue-700';
+  const detail =
+    e.type === 'error'
+      ? e.message || e.stderr || `exit ${e.code ?? '?'}`
+      : e.type === 'response'
+        ? `${e.response_chars ?? 0} chars · ${e.duration_ms ?? 0}ms`
+        : `prompt ${e.prompt_chars ?? 0} chars`;
+  return (
+    <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+      <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+      <span className={`shrink-0 rounded px-1 font-semibold uppercase ${color}`}>{e.type}</span>
+      <span className="min-w-0 flex-1 truncate text-slate-700">{detail}</span>
+    </div>
+  );
+}
+
+function WorkRow({ e }: { e: WorkEntry }) {
+  if (e.type === 'file_edit') {
+    const ins = e.diff?.ins;
+    const del = e.diff?.del;
+    return (
+      <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+        <FilePen className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.file}>
+          {e.file}
+        </span>
+        {(typeof ins === 'number' || typeof del === 'number') && (
+          <span className="shrink-0 text-[10px]">
+            {typeof ins === 'number' && <span className="text-emerald-700">+{ins}</span>}
+            {typeof del === 'number' && <span className="ml-0.5 text-red-600">-{del}</span>}
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (e.type === 'bash') {
+    return (
+      <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+        <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
+        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.cmd}>
+          {e.cmd}
+        </span>
+        {e.output_summary && (
+          <span className="shrink-0 text-[10px] text-slate-500" title={e.output_summary}>
+            {e.output_summary.slice(0, 24)}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+      <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+      <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-indigo-600" />
+      <span className="min-w-0 flex-1 truncate text-slate-700" title={e.prompt}>
+        → {e.agent}: {e.description}
+      </span>
+    </div>
   );
 }
 

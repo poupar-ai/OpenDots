@@ -68,10 +68,21 @@
 
 .dark .bg-slate-50 { background-color: hsl(224 12% 8%) !important; }
 .dark .bg-slate-50\/70 { background-color: hsl(224 12% 8% / 0.72) !important; }
+.dark .bg-slate-50\/60 { background-color: hsl(224 12% 8% / 0.62) !important; }
+.dark .bg-slate-50\/50 { background-color: hsl(224 12% 8% / 0.52) !important; }
 .dark .bg-slate-50\/40 { background-color: hsl(224 12% 8% / 0.42) !important; }
 .dark .bg-slate-100 { background-color: hsl(224 10% 13%) !important; }
 .dark .bg-slate-200 { background-color: hsl(224 10% 18%) !important; }
 .dark .bg-muted\/30 { background-color: hsl(224 10% 13% / 0.3) !important; }
+
+/* Badge tints 100 (LogRow pills) */
+.dark .bg-red-100 { background-color: hsl(0 30% 18%) !important; }
+.dark .bg-emerald-100 { background-color: hsl(155 24% 16%) !important; }
+.dark .bg-blue-100 { background-color: hsl(215 30% 18%) !important; }
+.dark .bg-violet-100 { background-color: hsl(260 26% 20%) !important; }
+
+/* Alpha red tint (watch card) */
+.dark .bg-red-50\/60 { background-color: hsl(0 28% 13% / 0.55) !important; }
 
 .dark .text-slate-900 { color: hsl(220 14% 94%) !important; }
 .dark .text-slate-800 { color: hsl(220 12% 88%) !important; }
@@ -132,12 +143,22 @@
 
 /* Hover: sobe 3-4% de luminosidade do nível anterior */
 .dark .hover\:bg-white:hover { background-color: hsl(224 10% 13%) !important; }
+.dark .hover\:bg-white\/60:hover { background-color: hsl(224 10% 13% / 0.6) !important; }
+.dark .hover\:bg-slate-50:hover { background-color: hsl(224 10% 12%) !important; }
+.dark .hover\:bg-slate-50\/60:hover { background-color: hsl(224 10% 12% / 0.6) !important; }
+.dark .hover\:bg-slate-50\/70:hover { background-color: hsl(224 10% 12% / 0.7) !important; }
 .dark .hover\:bg-slate-100:hover { background-color: hsl(224 10% 15%) !important; }
+.dark .hover\:bg-indigo-50:hover { background-color: hsl(230 28% 16%) !important; }
 .dark .hover\:bg-indigo-50\/40:hover { background-color: hsl(230 28% 17% / 0.55) !important; }
 .dark .hover\:bg-indigo-100:hover { background-color: hsl(230 28% 20%) !important; }
 .dark .hover\:bg-orange-100:hover { background-color: hsl(25 28% 18%) !important; }
 .dark .hover\:bg-blue-100:hover { background-color: hsl(215 28% 18%) !important; }
+.dark .hover\:bg-red-50:hover { background-color: hsl(0 28% 15%) !important; }
+.dark .hover\:border-indigo-200:hover { border-color: hsl(230 28% 28%) !important; }
 .dark .hover\:border-indigo-300:hover { border-color: hsl(230 28% 32%) !important; }
+.dark .hover\:border-red-300:hover { border-color: hsl(0 28% 30%) !important; }
+.dark .hover\:text-indigo-700:hover { color: hsl(230 85% 80%) !important; }
+.dark .hover\:text-slate-700:hover { color: hsl(220 10% 80%) !important; }
 
 /* Shadows no dark: reduz muito — sombras pretas em fundo preto só sujam */
 .dark .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25) !important; }

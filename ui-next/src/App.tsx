@@ -111,14 +111,14 @@ export default function App() {
           }}
         />
       )}
-      <header className="flex items-center justify-between border-b bg-white/70 px-6 py-3 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
-            <Brain className="h-4 w-4 text-primary" />
+      <header className="flex items-center justify-between border-b bg-white/70 px-6 py-3.5 backdrop-blur">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold leading-tight">project-mem</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">
+            <h1 className="text-base font-semibold leading-tight">project-mem</h1>
+            <p className="text-xs text-muted-foreground leading-tight">
               {data?.project.name || '…'}
             </p>
           </div>
@@ -130,84 +130,78 @@ export default function App() {
           <Button
             size="icon"
             variant="outline"
-            className="ml-2 h-8 w-8"
+            className="ml-2"
             onClick={toggleTheme}
             title={theme === 'dark' ? 'mudar para tema claro' : 'mudar para tema escuro'}
             aria-label="alternar tema"
           >
-            {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-2"
             onClick={() => setArchitectOpen(true)}
             title="arquiteto: desenha um time customizado"
           >
-            <Sparkles className="h-3.5 w-3.5" /> arquiteto
+            <Sparkles className="h-4 w-4" /> arquiteto
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-2"
             onClick={() => setSeedsOpen(true)}
             title="instalar time de agentes a partir de templates"
           >
-            <Package className="h-3.5 w-3.5" /> time
+            <Package className="h-4 w-4" /> time
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-2"
             onClick={() => setPipelinesOpen(true)}
             title="rodar fluxos reproduzíveis com checkpoints"
           >
-            <Workflow className="h-3.5 w-3.5" /> pipelines
+            <Workflow className="h-4 w-4" /> pipelines
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-2"
             onClick={() => setBestPracticesOpen(true)}
             title="biblioteca de best-practices"
           >
-            <BookOpen className="h-3.5 w-3.5" /> práticas
+            <BookOpen className="h-4 w-4" /> práticas
           </Button>
           <Button
-            size="sm"
             variant="outline"
-            className="gap-1.5"
+            className="gap-2"
             onClick={() => setIdeExportOpen(true)}
             title="exportar agentes pro formato de cada IDE"
           >
-            <Code2 className="h-3.5 w-3.5" /> ide
+            <Code2 className="h-4 w-4" /> ide
           </Button>
           {human && (
             <Button
-              size="sm"
               variant="outline"
-              className="gap-1.5"
+              className="gap-2"
               onClick={() => setHumansOpen(true)}
               title="falar com outros humanos"
             >
-              <Users className="h-3.5 w-3.5" /> humanos
+              <Users className="h-4 w-4" /> humanos
             </Button>
           )}
           {human && (
-            <div className="ml-1 flex items-center gap-1.5 rounded-full border bg-white px-1 py-1 pr-2.5 text-xs">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+            <div className="ml-1 flex items-center gap-2 rounded-full border bg-white py-1 pl-1 pr-3 text-sm">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                 {humanInitials(human.name)}
               </span>
               <span className="font-medium">{human.name}</span>
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-5 w-5"
+                className="h-6 w-6"
                 onClick={() => setCurrent(null)}
                 aria-label="sair"
                 title="trocar humano"
               >
-                <LogOut className="h-3 w-3" />
+                <LogOut className="h-3.5 w-3.5" />
               </Button>
             </div>
           )}
@@ -216,21 +210,20 @@ export default function App() {
 
       <div className="grid flex-1 grid-cols-[300px_1fr_460px] gap-3 overflow-hidden p-3">
         <aside className="soft-scroll overflow-y-auto pr-1">
-          <ModulesPanel data={data} />
-          {selected && agentCfg && (
-            <div className="mt-3">
-              <AgentInfoPanel
-                name={selected}
-                cfg={agentCfg}
-                context={agentContext}
-                count={agents?.counts[selected]}
-                lastInvoked={agents?.recent[selected]}
-                manifest={agents?.manifest}
-                logSummary={agents?.logs?.[selected]}
-                onSelect={setSelected}
-                onDeleted={() => setSelected(null)}
-              />
-            </div>
+          {selected && agentCfg ? (
+            <AgentInfoPanel
+              name={selected}
+              cfg={agentCfg}
+              context={agentContext}
+              count={agents?.counts[selected]}
+              lastInvoked={agents?.recent[selected]}
+              manifest={agents?.manifest}
+              logSummary={agents?.logs?.[selected]}
+              onSelect={setSelected}
+              onDeleted={() => setSelected(null)}
+            />
+          ) : (
+            <ModulesPanel data={data} />
           )}
         </aside>
 

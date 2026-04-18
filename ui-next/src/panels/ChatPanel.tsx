@@ -5,6 +5,7 @@ import { Send, X, Bot, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CopyButton } from '@/components/CopyButton';
+import { AgentFace } from '@/components/AgentFace';
 import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
 import type { AgentCfg } from '@/lib/types';
 import { useChat } from '@/hooks/useChat';
@@ -114,17 +115,13 @@ export function ChatPanel({
             <span className="select-none text-lg text-slate-300">↔</span>
           </>
         )}
-        <div
-          className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ring-2',
-            type === 'core' && 'bg-indigo-50 ring-indigo-200',
-            type === 'specialist' && 'bg-sky-50 ring-sky-200',
-            type === 'integrator' && 'bg-purple-50 ring-purple-200',
-            type === 'motor' && 'bg-orange-50 ring-orange-200',
-            type === 'firefighter' && 'bg-red-50 ring-red-200',
-          )}
-        >
-          {agentCfg.emoji || '🤖'}
+        <div className="shrink-0">
+          <AgentFace
+            type={agentCfg.type}
+            profession={(agentCfg as any).profession}
+            size={40}
+            mood={isStreaming && streamingPhase === 'writing' ? 'happy' : 'neutral'}
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -172,7 +169,13 @@ export function ChatPanel({
               </span>
             </div>
           ) : (
-            <Bubble key={i} msg={item.msg} humanName={humanName} agentEmoji={agentCfg.emoji} />
+            <Bubble
+              key={i}
+              msg={item.msg}
+              humanName={humanName}
+              agentType={agentCfg.type}
+              agentProfession={(agentCfg as any).profession}
+            />
           ),
         )}
         {err && (
@@ -227,7 +230,8 @@ export function ChatPanel({
 function Bubble({
   msg,
   humanName,
-  agentEmoji,
+  agentType,
+  agentProfession,
 }: {
   msg: {
     role: 'user' | 'agent';
@@ -238,7 +242,8 @@ function Bubble({
     from?: string;
   };
   humanName?: string | null;
-  agentEmoji?: string;
+  agentType?: string;
+  agentProfession?: string;
 }) {
   const isUser = msg.role === 'user';
   const thinking = msg.streaming && msg.phase === 'thinking';
@@ -248,20 +253,22 @@ function Bubble({
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'justify-end' : 'justify-start')}>
       {!isUser && (
-        <div
-          className={cn(
-            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm',
-            thinking ? 'bg-amber-100' : 'bg-slate-200',
-          )}
-        >
-          {thinking ? (
+        thinking ? (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
             <Brain className="h-3.5 w-3.5 text-amber-600" />
-          ) : agentEmoji ? (
-            <span className="leading-none">{agentEmoji}</span>
-          ) : (
+          </div>
+        ) : agentType ? (
+          <AgentFace
+            type={agentType}
+            profession={agentProfession}
+            size={28}
+            mood={writing ? 'happy' : 'neutral'}
+          />
+        ) : (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-200">
             <Bot className="h-3.5 w-3.5 text-slate-600" />
-          )}
-        </div>
+          </div>
+        )
       )}
       <div
         className={cn(

@@ -13,6 +13,16 @@ const architect = require('../scripts/architect.cjs');
 const skills = require('../scripts/skills-install.cjs');
 const ideAdapters = require('../scripts/ide-adapters.cjs');
 const { scheduleNudge } = require('../scripts/nudge.cjs');
+const graph = require('../scripts/graph.cjs');
+const router = require('../scripts/router.cjs');
+const bus = require('../scripts/bus.cjs');
+const { createAgentQueue } = require('../scripts/queue.cjs');
+
+const VALID_INTENTS = new Set(['ask', 'delegate', 'report', 'ack', 'escalate']);
+
+function newTraceId() {
+  return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
 
 const PORT        = parseInt(process.env.PROJECT_MEM_PORT || '37778', 10);
 const cwd         = process.cwd();
@@ -274,6 +284,7 @@ function appendHumanLog(id, entry) {
 
 function appendHumanChat(a, b, entry) {
   try { fs.appendFileSync(humanChatPath(a, b), JSON.stringify(entry) + '\n'); } catch {}
+  graph.onHumanChatRow(memDir, entry);
 }
 
 function readHumanChat(a, b) {
@@ -295,6 +306,7 @@ function agentLogPath(agent) { return path.join(logDir, `${agent}.jsonl`); }
 function appendChat(agent, entry) {
   if (!fs.existsSync(chatDir)) fs.mkdirSync(chatDir, { recursive: true });
   fs.appendFileSync(chatLogPath(agent), JSON.stringify(entry) + '\n');
+  graph.onAgentChatRow(memDir, agent, entry);
 }
 
 // Garante que todo agente do manifest tenha seu arquivo de canal — permite
@@ -317,57 +329,33 @@ function buildAllowedTools(_agent, _agentCfg) {
 }
 
 // ── Auto-processing de handoffs ─────────────────────────────────────────────
-// Quando um agente chega mensagem via handoff, o destinatário é spawn-ado
-// automaticamente em headless mode. Fila por agente evita concorrência no mesmo
-// canal (chat humano + auto-turn simultâneos). Rate-limit global é circuit-breaker
-// contra loops A→B→A→B sem fim.
-const autoRunning = new Set();              // agentes com claude -p rodando (humano ou auto)
-const autoPending = new Map();              // agent -> Array<{ fromAgent, message }>
+// O motor de fila (scripts/queue.cjs) cuida de running/pending/rate-limit/batch.
+// Aqui só fazemos o wire-in: runner = runHeadlessTurn, hooks emitem log/bus.
 const AUTO_RATE_WINDOW_MS = 60000;
 const AUTO_RATE_MAX = 40;
-const autoRateStamps = [];
 
-function autoRateOk() {
-  const now = Date.now();
-  while (autoRateStamps.length && now - autoRateStamps[0] > AUTO_RATE_WINDOW_MS) autoRateStamps.shift();
-  if (autoRateStamps.length >= AUTO_RATE_MAX) return false;
-  autoRateStamps.push(now);
-  return true;
-}
-
-function enqueueAutoTurn(toAgent, fromAgent, message) {
-  if (!autoRateOk()) {
+const autoQueue = createAgentQueue({
+  rateMax: AUTO_RATE_MAX,
+  rateWindowMs: AUTO_RATE_WINDOW_MS,
+  // Runner indireto: runHeadlessTurn é declarada mais abaixo no arquivo —
+  // invocamos via closure pra resolver no call-time.
+  runner: (toAgent, fromLabel, combined, traceIds) =>
+    runHeadlessTurn(toAgent, fromLabel, combined, traceIds),
+  onThrottle: ({ toAgent, fromAgent, traceId }) => {
     appendAgentLog(toAgent, {
       ts: new Date().toISOString(),
       type: 'auto_turn_throttled',
       from_agent: fromAgent,
       reason: `rate limit global ${AUTO_RATE_MAX}/${AUTO_RATE_WINDOW_MS/1000}s`,
     });
-    return;
-  }
-  if (!autoPending.has(toAgent)) autoPending.set(toAgent, []);
-  autoPending.get(toAgent).push({ fromAgent, message });
-  setImmediate(() => drainAutoQueue(toAgent));
-}
-
-async function drainAutoQueue(toAgent) {
-  if (autoRunning.has(toAgent)) return;
-  const q = autoPending.get(toAgent);
-  if (!q || !q.length) return;
-  autoRunning.add(toAgent);
-  try {
-    while (q.length) {
-      const batch = q.splice(0);
-      const fromLabel = batch.length === 1 ? batch[0].fromAgent : 'múltiplos agentes';
-      const combined = batch.length === 1
-        ? batch[0].message
-        : batch.map(b => `[${b.fromAgent}]: ${b.message}`).join('\n\n');
-      await runHeadlessTurn(toAgent, fromLabel, combined);
+    if (traceId) {
+      bus.emit(memDir, { type: 'failed', trace_id: traceId, reason: 'rate_limited' });
     }
-  } finally {
-    autoRunning.delete(toAgent);
-    if ((autoPending.get(toAgent) || []).length) setImmediate(() => drainAutoQueue(toAgent));
-  }
+  },
+});
+
+function enqueueAutoTurn(toAgent, fromAgent, message, traceId) {
+  autoQueue.enqueue(toAgent, fromAgent, message, traceId);
 }
 
 // ── Detector de bloqueio: auto-escala pro internal_firefighter ──────────────
@@ -650,12 +638,14 @@ function runShadowTurn(meId, fromHumanId, incomingMessage) {
   });
 }
 
-function runHeadlessTurn(agent, fromAgent, userMessage) {
+function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
   return new Promise((resolve) => {
     const manifest = agents.loadManifest(memDir);
     const agentCfg = manifest && manifest.agents && manifest.agents[agent];
     if (!agentCfg) { resolve(); return; }
     ensureAgentChannels(manifest);
+
+    const traces = Array.isArray(traceIds) ? traceIds.filter(Boolean) : [];
 
     const miniContext = agents.loadMiniContext(memDir, agentCfg.context_file) || '';
     const history = readChat(agent);
@@ -672,6 +662,9 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
       history_turns: history.length,
       model: agentCfg.model || null,
     });
+    for (const tid of traces) {
+      bus.emit(memDir, { type: 'delivered', trace_id: tid, to: agent, from: fromAgent });
+    }
 
     const args = ['-p', '--output-format', 'text'];
     const resolvedModel = agents.resolveCliModel(agentCfg.model);
@@ -694,6 +687,9 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
         ts: new Date().toISOString(),
         type: 'error', stage: 'auto_spawn', message: err.message, duration_ms: 0,
       });
+      for (const tid of traces) {
+        bus.emit(memDir, { type: 'failed', trace_id: tid, reason: 'spawn_failed', error: err.message });
+      }
       resolve(); return;
     }
 
@@ -706,6 +702,9 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
         type: 'error', stage: 'auto_proc', message: err.message,
         duration_ms: Date.now() - started,
       });
+      for (const tid of traces) {
+        bus.emit(memDir, { type: 'failed', trace_id: tid, reason: 'proc_error', error: err.message });
+      }
       resolve();
     });
     proc.on('close', code => {
@@ -725,6 +724,12 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
           ts: agentTs, type: 'error', stage: 'auto_exit',
           code, stderr: errBuf.slice(0, 500), duration_ms,
         });
+        for (const tid of traces) {
+          bus.emit(memDir, {
+            type: 'failed', trace_id: tid,
+            reason: 'headless_exit_nonzero', code, duration_ms,
+          });
+        }
       } else {
         appendChat(agent, { ts: agentTs, role: 'agent', content: full, duration_ms, auto: true });
         appendAgentLog(agent, {
@@ -732,6 +737,12 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
           response_chars: full.length, duration_ms, code,
           stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
         });
+        for (const tid of traces) {
+          bus.emit(memDir, {
+            type: 'responded', trace_id: tid,
+            response_chars: full.length, duration_ms,
+          });
+        }
         scheduleNudge({
           memDir, projectRoot,
           agent, agentCfg,
@@ -775,6 +786,7 @@ function detectChannelViolations(agent, agentCfg, before, after) {
 function appendAgentLog(agent, entry) {
   if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
   fs.appendFileSync(agentLogPath(agent), JSON.stringify(entry) + '\n');
+  graph.onAgentLogEvent(memDir, agent, entry);
 }
 
 function readChat(agent) {
@@ -968,13 +980,34 @@ Quando você decidir acionar um agente que **está** na sua \`can_talk_to\`, use
 \`\`\`bash
 curl -s -X POST http://localhost:${PORT}/api/agents/handoff \\
   -H 'Content-Type: application/json' \\
-  -d '{"from":"${agent}","to":"<target>","message":"<mensagem curta e direta>"}'
+  -d '{
+    "from":"${agent}",
+    "to":"<target>",
+    "intent":"delegate",
+    "subject":"<1 linha — do que se trata>",
+    "message":"<mensagem curta e direta>",
+    "context": {"files": ["<arquivo-relevante>"]}
+  }'
 \`\`\`
 
 - \`from\` é sempre você (\`${agent}\`).
-- \`to\` precisa estar na sua \`can_talk_to\`. Se não estiver, o servidor responde 403 e registra violação.
-- Se der 200, reporte em UMA linha: *"Acionei <target>: <resumo-curto>"*. Sem simular resposta do outro lado.
-- Se der 403 ou 5xx, reporte a falha factualmente e **não tente outro path**.
+- \`to\` precisa estar na sua \`can_talk_to\`. Se não estiver, o servidor responde 403 + \`suggested_targets\` (ranked por sinal do grafo dentro da sua can_talk_to) — **use a sugestão**, não chute outro nome.
+- \`intent\` é obrigatório de fato: \`ask\` (pergunta), \`delegate\` (quero que faça), \`report\` (estou te dando resultado), \`ack\` (recebido), \`escalate\` (precisa de firefighter/manager).
+- \`subject\` é o título — até 120 chars. Obriga você a ser claro sobre o assunto.
+- \`trace_id\` é opcional: se você está **respondendo** a um handoff, coloque \`"reply_to": "<trace_id da mensagem de entrada>"\` pra linkar a thread.
+- Se der 200, reporte em UMA linha: *"Acionei <target> (<intent>): <subject>"*. Sem simular resposta do outro lado.
+- Se der 403/404, o payload traz \`suggested_targets\`. Escolha um dali ou declare bloqueio.
+
+## Como descobrir o destino certo (quando em dúvida)
+Se tem um arquivo envolvido mas não sabe quem é o melhor alvo, pergunte ao roteador:
+
+\`\`\`bash
+curl -s -X POST http://localhost:${PORT}/api/agents/route \\
+  -H 'Content-Type: application/json' \\
+  -d '{"from":"${agent}","file":"<caminho>","intent":"delegate"}'
+\`\`\`
+
+Retorna \`candidates\` ranked (apenas dentro da sua can_talk_to) com motivo ("editou X 5x", "ativo recentemente"). **Primeiro candidate ≠ palpite**: é quem tem mais sinal histórico. Use o top.
 
 Não existe "sem ferramenta pra acionar". Se o alvo está em \`can_talk_to\` e você tem \`Bash\` habilitado, você tem o caminho.
 
@@ -1049,6 +1082,23 @@ async function handleHandoff(req, res) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'need {from, to, message}' }));
   }
+
+  // ── Campos tipados (opcionais, backward-compat) ─────────────────────────
+  const intent   = body.intent && VALID_INTENTS.has(body.intent) ? body.intent : 'ask';
+  const subject  = typeof body.subject === 'string' ? body.subject.slice(0, 120) : null;
+  const traceId  = typeof body.trace_id === 'string' && body.trace_id ? body.trace_id : newTraceId();
+  const replyTo  = typeof body.reply_to === 'string' ? body.reply_to : null;
+  const context  = (body.context && typeof body.context === 'object') ? body.context : null;
+
+  if (body.intent && !VALID_INTENTS.has(body.intent)) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      error: 'invalid intent',
+      allowed: Array.from(VALID_INTENTS),
+      got: body.intent,
+    }));
+  }
+
   const manifest = agents.loadManifest(memDir);
   const fromCfg = manifest && manifest.agents && manifest.agents[from];
   const toCfg   = manifest && manifest.agents && manifest.agents[to];
@@ -1057,8 +1107,15 @@ async function handleHandoff(req, res) {
     return res.end(JSON.stringify({ error: `from agent "${from}" not found` }));
   }
   if (!toCfg) {
+    // Destino inexistente — sugere alternativas via router (tipicamente LLM
+    // chutou nome errado). Já é um 404, mas o payload ajuda a corrigir.
+    const suggestion = router.suggestTargets({ memDir, from, message });
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ error: `to agent "${to}" not found` }));
+    return res.end(JSON.stringify({
+      error: `to agent "${to}" not found`,
+      suggested_targets: suggestion.candidates,
+      file_detected: suggestion.file_detected,
+    }));
   }
   const canTalk = Array.isArray(fromCfg.can_talk_to) ? fromCfg.can_talk_to : [];
   if (!canTalk.includes(to)) {
@@ -1070,31 +1127,78 @@ async function handleHandoff(req, res) {
       target: to,
       message: `${from} tentou handoff pra ${to} — fora de can_talk_to`,
     });
+    const suggestion = router.suggestTargets({ memDir, from, message });
     res.writeHead(403, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({
       error: 'forbidden',
       reason: `"${to}" não está em can_talk_to de "${from}"`,
       allowed: canTalk,
+      suggested_targets: suggestion.candidates,
+      file_detected: suggestion.file_detected,
     }));
   }
   ensureAgentChannels(manifest);
   const ts = new Date().toISOString();
-  appendChat(to, { ts, role: 'user', content: message, from });
+  const chatEntry = { ts, role: 'user', content: message, from };
+  if (intent)   chatEntry.intent   = intent;
+  if (subject)  chatEntry.subject  = subject;
+  if (traceId)  chatEntry.trace_id = traceId;
+  if (replyTo)  chatEntry.reply_to = replyTo;
+  if (context)  chatEntry.context  = context;
+  appendChat(to, chatEntry);
   appendAgentLog(from, {
     ts,
     type: 'handoff_out',
     target: to,
     chars: message.length,
+    intent, subject, trace_id: traceId, reply_to: replyTo,
   });
   appendAgentLog(to, {
     ts,
     type: 'handoff_in',
     source: from,
     chars: message.length,
+    intent, subject, trace_id: traceId, reply_to: replyTo,
   });
+
+  // ── Bus: created do trace novo ────────────────────────────────────────────
+  bus.emit(memDir, {
+    type: 'created', trace_id: traceId,
+    from, to, intent, subject, reply_to: replyTo,
+    message_chars: message.length,
+  });
+
+  // ── Bus: acked / reported fecham o trace que o remetente iniciou ──────────
+  // Se a mensagem é resposta (reply_to), marca o trace original como ack/report.
+  // Para 'report', também re-enfileira automaticamente o remetente original —
+  // fecha o loop "A delegou → B reportou → A retoma".
+  let resumed = null;
+  if (replyTo && (intent === 'ack' || intent === 'report')) {
+    bus.emit(memDir, {
+      type: intent === 'ack' ? 'acked' : 'reported',
+      trace_id: replyTo,
+      by: from,
+      via_trace: traceId,
+    });
+    if (intent === 'report') {
+      try {
+        const orig = bus.getMessage(memDir, replyTo);
+        const originator = orig && orig.created && orig.created.from;
+        // Só re-enfileira se o delegador original NÃO for o destinatário deste
+        // report — caso contrário o handoff normal já vai entregar a mensagem
+        // pra ele e resumi-lo automaticamente.
+        if (originator && originator !== from && originator !== to) {
+          const resumeMessage = `[report de ${from} sobre handoff anterior pra ${to}]\n\n${message}`;
+          enqueueAutoTurn(originator, from, resumeMessage, traceId);
+          resumed = { to: originator, from, original_trace: replyTo };
+        }
+      } catch {}
+    }
+  }
+
   // Dispara auto-turn: o destinatário processa a mensagem sem precisar de
   // intervenção humana. A fila garante ordem; o rate-limit quebra loops.
-  enqueueAutoTurn(to, from, message);
+  enqueueAutoTurn(to, from, message, traceId);
   // Guard-rail: se a mensagem tem cara de bloqueio operacional, aciona o
   // internal_firefighter em paralelo — independente de o destinatário lembrar
   // da regra do prompt.
@@ -1103,9 +1207,31 @@ async function handleHandoff(req, res) {
   });
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
-    ok: true, ts, to, auto_queued: true,
+    ok: true, ts, to, intent, trace_id: traceId, auto_queued: true,
+    auto_resumed: resumed,
     auto_escalated: escalation ? { to: 'internal_firefighter', signals: escalation.signals } : null,
   }));
+}
+
+async function handleRoute(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { from, file, topic, intent } = body || {};
+  if (!from) return sendJson(res, 400, { error: 'need {from}' });
+  if (intent && !VALID_INTENTS.has(intent)) {
+    return sendJson(res, 400, { error: 'invalid intent', allowed: Array.from(VALID_INTENTS) });
+  }
+  const result = router.route({ memDir, from, file, topic, intent });
+  if (result.error) return sendJson(res, 404, { error: result.error });
+  sendJson(res, 200, {
+    from,
+    can_talk_to: result.can_talk_to,
+    candidates: result.candidates,
+    note: result.note || null,
+  });
 }
 
 async function handleAgentModel(agentName, req, res) {
@@ -1414,7 +1540,7 @@ async function handleChatSend(req, res) {
     history_turns: history.length,
     model: agentCfg.model || null,
   });
-  autoRunning.add(agent);
+  autoQueue.acquire(agent);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -1452,8 +1578,7 @@ async function handleChatSend(req, res) {
       message: err.message,
       duration_ms: 0,
     });
-    autoRunning.delete(agent);
-    setImmediate(() => drainAutoQueue(agent));
+    autoQueue.release(agent);
     return res.end();
   }
 
@@ -1478,8 +1603,7 @@ async function handleChatSend(req, res) {
       message: err.message,
       duration_ms,
     });
-    autoRunning.delete(agent);
-    setImmediate(() => drainAutoQueue(agent));
+    autoQueue.release(agent);
     res.end();
   });
 
@@ -1526,8 +1650,7 @@ async function handleChatSend(req, res) {
       });
     }
     sse('done', { duration_ms, code, violations: violations.length });
-    autoRunning.delete(agent);
-    setImmediate(() => drainAutoQueue(agent));
+    autoQueue.release(agent);
     res.end();
   });
 
@@ -2042,6 +2165,66 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (url.pathname === '/api/agents/route' && req.method === 'POST') {
+    handleRoute(req, res).catch(err => {
+      try {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      } catch {}
+    });
+    return;
+  }
+  if (url.pathname === '/api/bus/state' && req.method === 'GET') {
+    try {
+      const recent = parseInt(url.searchParams.get('recent') || '50', 10);
+      const state = bus.getState(memDir, { recent });
+      sendJson(res, 200, { ...state, queue: autoQueue.stats() });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message });
+    }
+    return;
+  }
+  if (url.pathname === '/api/bus/trace' && req.method === 'GET') {
+    const tid = url.searchParams.get('trace_id');
+    if (!tid) return sendJson(res, 400, { error: 'missing trace_id' });
+    const summary = bus.getMessage(memDir, tid);
+    if (!summary) return sendJson(res, 404, { error: 'trace not found' });
+    return sendJson(res, 200, summary);
+  }
+  if (url.pathname === '/api/bus/config' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      ...bus.getConfig(memDir),
+      min_retention: bus.MIN_RETENTION,
+      max_retention: bus.MAX_RETENTION,
+      default_retention: bus.DEFAULT_RETENTION,
+      day_files: bus.listDayFiles(memDir),
+    });
+  }
+  if (url.pathname === '/api/bus/config' && req.method === 'PUT') {
+    readBody(req).then(raw => {
+      let body;
+      try { body = JSON.parse(raw); } catch {
+        return sendJson(res, 400, { error: 'invalid json' });
+      }
+      try {
+        const updated = bus.setConfig(memDir, body || {});
+        // Compacta imediatamente com a nova retenção pra aplicar o efeito.
+        const compact = bus.compactOldFiles(memDir, { retentionDays: updated.retention_days });
+        return sendJson(res, 200, { ...updated, compact });
+      } catch (err) {
+        return sendJson(res, 400, { error: err.message });
+      }
+    }).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  if (url.pathname === '/api/bus/compact' && req.method === 'POST') {
+    try {
+      const result = bus.compactOldFiles(memDir);
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 500, { error: err.message });
+    }
+  }
   if (url.pathname === '/api/agents' && req.method === 'POST') {
     handleAgentCreate(req, res).catch(err => sendJson(res, 500, { error: err.message }));
     return;
@@ -2290,6 +2473,92 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`UI: ${HAS_DIST ? 'ui-next/dist (React)' : 'plugin/ui/index.html (legacy)'}`);
   console.log('\nCtrl+C para parar\n');
 });
+
+// ── Bus sweep: retry delivery + escalate timeouts ──────────────────────────
+// Roda a cada 30s. A sweep é defensiva: se um trace ficou preso em `created`
+// (destinatário não foi spawnado a tempo) reenfileira; se ficou preso em
+// `delivered` (spawnado mas sem responder), escala pro firefighter.
+const BUS_SWEEP_INTERVAL_MS = 30 * 1000;
+
+function findMessageForTrace(toAgent, traceId) {
+  try {
+    const file = chatLogPath(toAgent);
+    if (!fs.existsSync(file)) return null;
+    const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+    for (const ln of lines) {
+      try {
+        const o = JSON.parse(ln);
+        if (o.trace_id === traceId && o.role === 'user') return o.content;
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+function busOnRetry(createdEv) {
+  if (!createdEv || !createdEv.to || !createdEv.from) return;
+  const msg = findMessageForTrace(createdEv.to, createdEv.trace_id);
+  if (!msg) return;
+  enqueueAutoTurn(createdEv.to, createdEv.from, msg, createdEv.trace_id);
+}
+
+function busOnTimeout(createdEv) {
+  if (!createdEv) return;
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents.internal_firefighter) return;
+  if (createdEv.to === 'internal_firefighter' || createdEv.from === 'internal_firefighter') return;
+  const ts = new Date().toISOString();
+  const composed =
+    `[timeout bus] handoff ${createdEv.from} → ${createdEv.to} (trace ${createdEv.trace_id}) foi entregue mas não respondeu no prazo.\n` +
+    `Intent: ${createdEv.intent || 'ask'}. Subject: ${createdEv.subject || '—'}.\n` +
+    `Investigue por que ${createdEv.to} travou e desbloqueie.`;
+  try {
+    appendChat('internal_firefighter', {
+      ts, role: 'user', content: composed, from: createdEv.from,
+      auto_escalation: true, original_to: createdEv.to,
+      reason: 'bus_response_timeout', trace_id: createdEv.trace_id,
+    });
+  } catch {}
+  appendAgentLog('internal_firefighter', {
+    ts, type: 'auto_escalation_in', source: createdEv.from,
+    original_to: createdEv.to, reason: 'bus_response_timeout',
+    trace_id: createdEv.trace_id,
+  });
+  enqueueAutoTurn('internal_firefighter', createdEv.from, composed);
+}
+
+setInterval(() => {
+  try {
+    bus.sweepPending(memDir, { onRetry: busOnRetry, onTimeout: busOnTimeout });
+  } catch (err) {
+    console.error('bus.sweepPending failed:', err.message);
+  }
+}, BUS_SWEEP_INTERVAL_MS).unref();
+
+// ── Migração do messages.jsonl legado + compactação diária ─────────────────
+try {
+  const mig = bus.migrateLegacy(memDir);
+  if (mig.migrated > 0) {
+    console.log(`bus: migrado ${mig.migrated} eventos legacy em ${mig.days} dias`);
+  }
+} catch (err) {
+  console.error('bus.migrateLegacy falhou:', err.message);
+}
+
+function runCompaction() {
+  try {
+    const r = bus.compactOldFiles(memDir);
+    if (r.deleted.length) {
+      console.log(`bus: compactação removeu ${r.deleted.length} chunks (retention=${r.retention_days}d)`);
+    }
+  } catch (err) {
+    console.error('bus.compactOldFiles falhou:', err.message);
+  }
+}
+// Roda uma vez no boot + a cada 6h (não precisa ser frequente — chunks são
+// diários).
+runCompaction();
+setInterval(runCompaction, 6 * 60 * 60 * 1000).unref();
 
 server.on('error', err => {
   if (err.code === 'EADDRINUSE') {

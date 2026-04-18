@@ -14,6 +14,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const graph = require('./graph.cjs');
 
 const NUDGE_STATE_FILE = 'nudge_state.json';
 const MIN_GAP_MS       = 60 * 60 * 1000;  // 1h mínimo entre nudges/agente
@@ -172,6 +173,7 @@ function persistDecision(memDir, agent, parsed, trigger) {
   try {
     fs.appendFileSync(file, JSON.stringify(entry) + '\n');
     renderDecisionsMd(memDir);
+    graph.onDecision(memDir, entry, []);
   } catch (e) { return { err: e.message }; }
   return { entry };
 }
@@ -192,6 +194,7 @@ function persistGotcha(memDir, agent, parsed, trigger) {
   try {
     fs.appendFileSync(file, JSON.stringify(entry) + '\n');
     renderGotchasMd(memDir);
+    graph.onGotcha(memDir, entry);
   } catch (e) { return { err: e.message }; }
   return { entry };
 }

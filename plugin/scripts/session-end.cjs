@@ -143,14 +143,16 @@ function detectGotchas(obs) {
     if ((c.exit ?? 1) !== 0) continue;
 
     const description = `\`${(a.cmd || '').slice(0, 80)}\` falhou até editar \`${b.file}\``;
-    appendJsonl(gotchasFile, {
+    const gotcha = {
       session_id: sessionId,
       file: b.file,
       command: (a.cmd || '').slice(0, 120),
       failure_hint: a.output_summary || null,
       description,
       ts: new Date().toISOString()
-    });
+    };
+    appendJsonl(gotchasFile, gotcha);
+    try { require('./graph.cjs').onGotcha(memDir, gotcha); } catch {}
   }
 }
 

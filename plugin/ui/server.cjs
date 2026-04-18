@@ -17,6 +17,7 @@ const graph = require('../scripts/graph.cjs');
 const router = require('../scripts/router.cjs');
 const bus = require('../scripts/bus.cjs');
 const { createAgentQueue } = require('../scripts/queue.cjs');
+const sigilo = require('../scripts/sigilo.cjs');
 
 const VALID_INTENTS = new Set(['ask', 'delegate', 'report', 'ack', 'escalate']);
 
@@ -731,22 +732,35 @@ function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
           });
         }
       } else {
-        appendChat(agent, { ts: agentTs, role: 'agent', content: full, duration_ms, auto: true });
+        const sanitized = sigilo.sanitize({ agent, text: full });
+        const finalContent = sanitized.text;
+        if (sanitized.leaked) {
+          appendAgentLog(agent, {
+            ts: agentTs, type: 'violation', stage: 'sigilo',
+            reason: sanitized.reason, hits: sanitized.hits,
+            original_chars: full.length, sanitized_chars: finalContent.length,
+          });
+        }
+        appendChat(agent, {
+          ts: agentTs, role: 'agent', content: finalContent, duration_ms, auto: true,
+          ...(sanitized.leaked ? { sigilo_redacted: true, sigilo_reason: sanitized.reason } : {}),
+        });
         appendAgentLog(agent, {
           ts: agentTs, type: 'response', stage: 'auto',
-          response_chars: full.length, duration_ms, code,
+          response_chars: finalContent.length, duration_ms, code,
           stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
+          sigilo_redacted: sanitized.leaked || false,
         });
         for (const tid of traces) {
           bus.emit(memDir, {
             type: 'responded', trace_id: tid,
-            response_chars: full.length, duration_ms,
+            response_chars: finalContent.length, duration_ms,
           });
         }
         scheduleNudge({
           memDir, projectRoot,
           agent, agentCfg,
-          responseText: full,
+          responseText: finalContent,
           trigger: fromAgent ? `auto_handoff:${fromAgent}` : 'auto',
         });
       }
@@ -931,7 +945,9 @@ Humano conectado a este chat:
 
 Trate este humano como **${human.name}** em todas as referências. Se houver histórico de outros humanos (nomes diferentes nas mensagens), **não misture** — contextos são por humano, mas você pode cruzar se a informação coincidir (flag como: "o \`${human.name}\` e \`<outro>\` já discutiram X").`;
   }
-  return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo. A mensagem abaixo chega pela UI do project-mem.
+  return `Você é o agente **${agent}** neste projeto, com o papel definido abaixo.
+
+${sigilo.sigiloBlock(agent)}
 
 ## Seu mini-contexto
 ${miniContext || '_(nenhum mini-contexto definido)_'}
@@ -1584,10 +1600,24 @@ async function handleChatSend(req, res) {
 
   let full = '';
   let errBuf = '';
+  let sigiloKilled = false;
 
   proc.stdout.on('data', chunk => {
     const text = chunk.toString();
     full += text;
+    // Mid-stream leak detection: se o buffer acumulado já tem sinal denso de
+    // vazamento, mata o processo cedo pra parar o sangramento. O cliente já
+    // recebeu parte em tela, mas o evento `sigilo` avisa e a chat persistida
+    // fica sanitizada.
+    if (!sigiloKilled) {
+      const hits = sigilo.scanLeaks(full);
+      if (hits.length >= 3 || (hits.length >= 1 && sigilo.looksLikeArchExplanation(full))) {
+        sigiloKilled = true;
+        sse('sigilo', { stage: 'mid_stream_kill', hits });
+        try { proc.kill('SIGTERM'); } catch {}
+        return;
+      }
+    }
     sse('text', { text });
   });
   proc.stderr.on('data', chunk => { errBuf += chunk.toString(); });
@@ -1639,17 +1669,38 @@ async function handleChatSend(req, res) {
         duration_ms,
       });
     } else {
-      appendChat(agent, { ts: agentTs, role: 'agent', content: full, duration_ms });
+      // Sigilo: sanitiza antes de persistir. Se foi morto mid-stream ou
+      // detecta vazamento no close, substitui o content pela versão redigida.
+      const sanitized = sigilo.sanitize({ agent, text: full });
+      const persistContent = sanitized.leaked ? sanitized.text : full;
+      const chatEntry = { ts: agentTs, role: 'agent', content: persistContent, duration_ms };
+      if (sanitized.leaked) {
+        chatEntry.sigilo_redacted = true;
+        chatEntry.sigilo_reason = sanitized.reason;
+        if (sigiloKilled) chatEntry.sigilo_mid_stream_killed = true;
+        appendAgentLog(agent, {
+          ts: agentTs,
+          type: 'violation',
+          stage: 'sigilo',
+          reason: sanitized.reason,
+          hits: sanitized.hits,
+          mid_stream_killed: sigiloKilled,
+          message: `agente ${agent} tentou vazar arquitetura — resposta redigida`,
+        });
+        sse('sigilo', { stage: 'post_hoc', reason: sanitized.reason, hits: sanitized.hits });
+      }
+      appendChat(agent, chatEntry);
       appendAgentLog(agent, {
         ts: agentTs,
         type: 'response',
-        response_chars: full.length,
+        response_chars: persistContent.length,
         duration_ms,
         code,
         stderr_preview: errBuf ? errBuf.slice(0, 200) : null,
+        sigilo_redacted: sanitized.leaked || undefined,
       });
     }
-    sse('done', { duration_ms, code, violations: violations.length });
+    sse('done', { duration_ms, code, violations: violations.length, sigilo_killed: sigiloKilled });
     autoQueue.release(agent);
     res.end();
   });

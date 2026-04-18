@@ -140,6 +140,7 @@ const memDir      = path.join(projectRoot, '.claude-project-memory');
 ensureMemDir(memDir);
 
 const ts  = new Date().toISOString();
+const agentId = process.env.CLAUDE_PROJECT_MEM_AGENT || null;
 let obs   = null;
 
 if (tool_name === 'Write' || tool_name === 'Edit' || tool_name === 'MultiEdit') {
@@ -149,6 +150,7 @@ if (tool_name === 'Write' || tool_name === 'Edit' || tool_name === 'MultiEdit') 
     ? filePath.slice(projectRoot.length + 1)
     : filePath;
   obs = { type: 'file_edit', session_id, file: relFile, ts };
+  if (agentId) obs.agent_id = agentId;
   const diff = captureDiff(projectRoot, relFile);
   if (diff) obs.diff = diff;
 
@@ -157,6 +159,7 @@ if (tool_name === 'Write' || tool_name === 'Edit' || tool_name === 'MultiEdit') 
   if (!cmd || SKIP_CMDS.test(cmd)) process.exit(0);
   const exit = tool_response?.exit_code ?? tool_response?.exitCode ?? tool_response?.returnCode;
   obs = { type: 'bash', session_id, cmd: cmd.slice(0, 200), exit, ts };
+  if (agentId) obs.agent_id = agentId;
   const summary = summarizeOutput(cmd, tool_response);
   if (summary) obs.output_summary = summary;
 
@@ -165,6 +168,7 @@ if (tool_name === 'Write' || tool_name === 'Edit' || tool_name === 'MultiEdit') 
   const desc  = (tool_input?.description || '').slice(0, 120);
   const prompt = (tool_input?.prompt || '').slice(0, 200);
   obs = { type: 'agent_call', session_id, agent, description: desc, prompt, ts };
+  if (agentId) obs.agent_id = agentId;
 }
 
 if (obs) {

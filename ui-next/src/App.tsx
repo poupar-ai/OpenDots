@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
+import { useTheme } from '@/hooks/useTheme';
 import { ModulesPanel } from '@/panels/ModulesPanel';
 import { AgentCanvas } from '@/panels/AgentCanvas';
 import { ChatPanel } from '@/panels/ChatPanel';
@@ -38,6 +39,7 @@ export default function App() {
   const [architectOpen, setArchitectOpen] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const agents = data?.agents ?? null;
   const agentCfg = useMemo(
@@ -52,7 +54,7 @@ export default function App() {
   const showOnboarding = !humanId;
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-slate-50 text-slate-900">
+    <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       {showOnboarding && (
         <HumanOnboarding
           onDone={(id) => {
@@ -126,9 +128,19 @@ export default function App() {
           {chatStreaming && <Badge variant="success">chat ao vivo</Badge>}
           {data && <Badge variant="outline">{data.stats?.sessions || 0} sessões</Badge>}
           <Button
+            size="icon"
+            variant="outline"
+            className="ml-2 h-8 w-8"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'mudar para tema claro' : 'mudar para tema escuro'}
+            aria-label="alternar tema"
+          >
+            {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
             size="sm"
             variant="outline"
-            className="ml-2 gap-1.5"
+            className="gap-1.5"
             onClick={() => setArchitectOpen(true)}
             title="arquiteto: desenha um time customizado"
           >

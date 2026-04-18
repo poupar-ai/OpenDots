@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/CopyButton';
 import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/types';
-import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil, Plug, Trash2 } from 'lucide-react';
+import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen } from 'lucide-react';
 import { updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent } from '@/lib/agents';
 
 interface LogEntry {
@@ -18,6 +18,68 @@ interface LogEntry {
   response_chars?: number;
   prompt_chars?: number;
   user_chars?: number;
+}
+
+interface WorkEntry {
+  ts: string;
+  type: 'file_edit' | 'bash' | 'agent_call';
+  agent_id?: string;
+  session_id?: string;
+  file?: string;
+  cmd?: string;
+  exit?: number;
+  output_summary?: string;
+  diff?: { ins?: number; del?: number; preview?: string; tracked?: boolean; binary?: boolean };
+  agent?: string;
+  description?: string;
+  prompt?: string;
+}
+
+function WorkRow({ e }: { e: WorkEntry }) {
+  if (e.type === 'file_edit') {
+    const ins = e.diff?.ins;
+    const del = e.diff?.del;
+    return (
+      <div className="flex items-start gap-1.5 text-[10px] leading-tight">
+        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+        <FilePen className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
+        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.file}>
+          {e.file}
+        </span>
+        {(typeof ins === 'number' || typeof del === 'number') && (
+          <span className="shrink-0 text-[10px]">
+            {typeof ins === 'number' && <span className="text-emerald-700">+{ins}</span>}
+            {typeof del === 'number' && <span className="ml-0.5 text-red-600">-{del}</span>}
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (e.type === 'bash') {
+    return (
+      <div className="flex items-start gap-1.5 text-[10px] leading-tight">
+        <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+        <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
+        <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.cmd}>
+          {e.cmd}
+        </span>
+        {e.output_summary && (
+          <span className="shrink-0 text-[10px] text-slate-500" title={e.output_summary}>
+            {e.output_summary.slice(0, 24)}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-1.5 text-[10px] leading-tight">
+      <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
+      <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-indigo-600" />
+      <span className="min-w-0 flex-1 truncate text-slate-700" title={e.prompt}>
+        → {e.agent}: {e.description}
+      </span>
+    </div>
+  );
 }
 
 interface Props {
@@ -79,6 +141,9 @@ export function AgentInfoPanel({
   const [logOpen, setLogOpen] = useState(false);
   const [logEntries, setLogEntries] = useState<LogEntry[] | null>(null);
   const [logLoading, setLogLoading] = useState(false);
+  const [workOpen, setWorkOpen] = useState(false);
+  const [workEntries, setWorkEntries] = useState<WorkEntry[] | null>(null);
+  const [workLoading, setWorkLoading] = useState(false);
   const [editAuto, setEditAuto] = useState(false);
   const [editModel, setEditModel] = useState(false);
   const [editContext, setEditContext] = useState(false);
@@ -89,6 +154,8 @@ export function AgentInfoPanel({
   useEffect(() => {
     setLogOpen(false);
     setLogEntries(null);
+    setWorkOpen(false);
+    setWorkEntries(null);
     setEditAuto(false);
     setEditModel(false);
     setEditContext(false);
@@ -124,6 +191,20 @@ export function AgentInfoPanel({
       setLogEntries([]);
     } finally {
       setLogLoading(false);
+    }
+  };
+
+  const loadWork = async () => {
+    if (workEntries) return;
+    setWorkLoading(true);
+    try {
+      const r = await fetch(`/api/agents/work?agent=${encodeURIComponent(name)}&limit=100`);
+      const data = await r.json();
+      setWorkEntries(Array.isArray(data.entries) ? data.entries : []);
+    } catch {
+      setWorkEntries([]);
+    } finally {
+      setWorkLoading(false);
     }
   };
 
@@ -354,6 +435,34 @@ export function AgentInfoPanel({
             )}
           </div>
         )}
+        <div className="rounded-md border bg-amber-50/50 p-2">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-1 text-amber-700">
+              <Hammer className="h-3 w-3" />
+              <span className="text-[10px] font-semibold uppercase tracking-wide">trabalho</span>
+            </div>
+            <button
+              onClick={() => {
+                setWorkOpen((v) => !v);
+                if (!workOpen) loadWork();
+              }}
+              className="text-[10px] text-amber-700 underline-offset-2 hover:underline"
+            >
+              {workOpen ? 'ocultar' : 'ver'}
+            </button>
+          </div>
+          {workOpen && (
+            <div className="soft-scroll max-h-64 space-y-0.5 overflow-y-auto pr-1">
+              {workLoading && <div className="text-[10px] text-slate-500">carregando…</div>}
+              {!workLoading && workEntries && workEntries.length === 0 && (
+                <div className="text-[10px] text-slate-500">
+                  nenhuma edição/comando atribuído a este agente ainda.
+                </div>
+              )}
+              {!workLoading && workEntries && workEntries.map((e, i) => <WorkRow key={i} e={e} />)}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setEditContext(true)}

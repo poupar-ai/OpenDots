@@ -23,6 +23,25 @@
     --ring: 221 83% 53%;
     --radius: 0.6rem;
   }
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 96%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 7%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 74% 50%;
+    --destructive-foreground: 210 40% 96%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 224 76% 60%;
+  }
   * { @apply border-border; }
   body {
     @apply bg-background text-foreground antialiased;
@@ -31,6 +50,74 @@
       "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   }
 }
+
+/* ── Dark-mode overrides para classes hardcoded ──────────────────────────── */
+/* A base de código usa muitas cores fixas (slate-*, white, indigo-50, etc.).  */
+/* Em vez de tocar em 15+ arquivos, re-mapeamos aqui quando .dark está ativo.   */
+
+.dark .bg-white { background-color: hsl(222 47% 10%) !important; }
+.dark .bg-white\/70 { background-color: hsl(222 47% 10% / 0.7) !important; }
+.dark .bg-white\/60 { background-color: hsl(222 47% 10% / 0.6) !important; }
+.dark .bg-white\/80 { background-color: hsl(222 47% 10% / 0.8) !important; }
+
+.dark .bg-slate-50 { background-color: hsl(222 47% 9%) !important; }
+.dark .bg-slate-100 { background-color: hsl(217 33% 14%) !important; }
+.dark .bg-slate-50\/70 { background-color: hsl(222 47% 9% / 0.7) !important; }
+.dark .bg-slate-50\/40 { background-color: hsl(222 47% 9% / 0.4) !important; }
+.dark .bg-muted\/30 { background-color: hsl(217 33% 17% / 0.3) !important; }
+
+.dark .text-slate-900 { color: hsl(210 40% 96%) !important; }
+.dark .text-slate-800 { color: hsl(210 40% 92%) !important; }
+.dark .text-slate-700 { color: hsl(214 32% 82%) !important; }
+.dark .text-slate-600 { color: hsl(215 20% 70%) !important; }
+.dark .text-slate-500 { color: hsl(215 20% 60%) !important; }
+.dark .text-slate-400 { color: hsl(215 16% 55%) !important; }
+
+.dark .border-slate-200 { border-color: hsl(217 33% 22%) !important; }
+.dark .border-slate-300 { border-color: hsl(217 33% 28%) !important; }
+
+/* Soft semantic backgrounds (badges/seções): escurece mas preserva matiz */
+.dark .bg-indigo-50 { background-color: hsl(231 55% 18%) !important; }
+.dark .bg-indigo-50\/40 { background-color: hsl(231 55% 18% / 0.4) !important; }
+.dark .bg-amber-50 { background-color: hsl(36 55% 16%) !important; }
+.dark .bg-amber-50\/50 { background-color: hsl(36 55% 16% / 0.5) !important; }
+.dark .bg-emerald-50 { background-color: hsl(150 55% 14%) !important; }
+.dark .bg-red-50 { background-color: hsl(0 55% 18%) !important; }
+.dark .bg-blue-50 { background-color: hsl(217 55% 18%) !important; }
+.dark .bg-orange-50 { background-color: hsl(24 55% 18%) !important; }
+.dark .bg-violet-50 { background-color: hsl(262 55% 20%) !important; }
+
+/* Texto sobre bgs semânticos fica mais claro pra manter contraste */
+.dark .text-indigo-700 { color: hsl(231 80% 78%) !important; }
+.dark .text-amber-700 { color: hsl(36 80% 72%) !important; }
+.dark .text-emerald-700 { color: hsl(150 60% 68%) !important; }
+.dark .text-red-700 { color: hsl(0 75% 75%) !important; }
+.dark .text-red-600 { color: hsl(0 75% 70%) !important; }
+.dark .text-red-500 { color: hsl(0 75% 68%) !important; }
+.dark .text-blue-700 { color: hsl(217 80% 75%) !important; }
+.dark .text-blue-600 { color: hsl(217 80% 72%) !important; }
+.dark .text-orange-600 { color: hsl(24 85% 72%) !important; }
+.dark .text-orange-700 { color: hsl(24 80% 72%) !important; }
+.dark .text-violet-700 { color: hsl(262 70% 78%) !important; }
+.dark .text-indigo-400 { color: hsl(231 60% 65%) !important; }
+
+.dark .border-indigo-200 { border-color: hsl(231 40% 32%) !important; }
+.dark .border-indigo-300 { border-color: hsl(231 45% 40%) !important; }
+.dark .border-amber-200 { border-color: hsl(36 40% 30%) !important; }
+.dark .border-emerald-200 { border-color: hsl(150 40% 28%) !important; }
+.dark .border-red-200 { border-color: hsl(0 40% 32%) !important; }
+.dark .border-blue-200 { border-color: hsl(217 40% 32%) !important; }
+.dark .border-orange-200 { border-color: hsl(24 40% 32%) !important; }
+.dark .border-violet-200 { border-color: hsl(262 40% 34%) !important; }
+
+/* Hover states com fundo branco/slate precisam escurecer também */
+.dark .hover\:bg-white:hover { background-color: hsl(222 47% 14%) !important; }
+.dark .hover\:bg-slate-100:hover { background-color: hsl(217 33% 16%) !important; }
+.dark .hover\:bg-indigo-50\/40:hover { background-color: hsl(231 55% 18% / 0.4) !important; }
+.dark .hover\:bg-indigo-100:hover { background-color: hsl(231 55% 22%) !important; }
+.dark .hover\:bg-orange-100:hover { background-color: hsl(24 55% 22%) !important; }
+.dark .hover\:bg-blue-100:hover { background-color: hsl(217 55% 22%) !important; }
+.dark .hover\:border-indigo-300:hover { border-color: hsl(231 45% 40%) !important; }
 
 /* thin scrollbars, only visible on hover */
 .chat-scroll, .soft-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }

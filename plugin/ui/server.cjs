@@ -686,7 +686,7 @@ function runHeadlessTurn(agent, fromAgent, userMessage) {
       proc = spawn('claude', args, {
         cwd: projectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+        env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1', CLAUDE_PROJECT_MEM_AGENT: agent },
       });
     } catch (err) {
       appendAgentLog(agent, {
@@ -1433,7 +1433,7 @@ async function handleChatSend(req, res) {
     proc = spawn('claude', args, {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1' },
+      env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1', CLAUDE_PROJECT_MEM_AGENT: agent },
     });
   } catch (err) {
     sse('error', { message: `falha ao iniciar claude CLI: ${err.message}` });
@@ -2209,6 +2209,32 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ agent, entries: readAgentLog(agent, limit) }));
+    return;
+  }
+
+  // Trabalho realizado por agente: filtra observations.jsonl por agent_id.
+  // Retorna edits de arquivo, comandos bash e subcalls (Task/Agent) atribuidos ao agente.
+  if (url.pathname === '/api/agents/work' && req.method === 'GET') {
+    const agent = url.searchParams.get('agent');
+    const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+    const obsFile = path.join(memDir, 'observations.jsonl');
+    let entries = [];
+    try {
+      if (fs.existsSync(obsFile)) {
+        const lines = fs.readFileSync(obsFile, 'utf8').split('\n').filter(Boolean);
+        for (const ln of lines) {
+          try {
+            const o = JSON.parse(ln);
+            if (!o.agent_id) continue;
+            if (agent && o.agent_id !== agent) continue;
+            entries.push(o);
+          } catch {}
+        }
+      }
+    } catch {}
+    entries = entries.slice(-limit).reverse();
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ agent: agent || null, count: entries.length, entries }));
     return;
   }
 

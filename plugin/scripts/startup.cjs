@@ -51,7 +51,15 @@ function ensureUiRunning() {
   try { fs.writeFileSync(lockPath, String(child.pid)); } catch {}
 }
 
-try { ensureUiRunning(); } catch {}
+// Autostart da UI só quando:
+// 1. não foi explicitamente desligado via PROJECT_MEM_UI_AUTOSTART=0 (opt-out por projeto/sessão)
+// 2. o cwd está dentro de um repo git (projectRoot != cwd fallback)
+const autostartFlag = process.env.PROJECT_MEM_UI_AUTOSTART;
+const autostartDisabled = autostartFlag === '0' || autostartFlag === 'false';
+const inRepo = projectRoot !== cwd;
+if (!autostartDisabled && inRepo) {
+  try { ensureUiRunning(); } catch {}
+}
 
 let line = `🧠 project-mem | ${projectName}`;
 

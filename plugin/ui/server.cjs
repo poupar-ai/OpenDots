@@ -1633,6 +1633,82 @@ function handleChatHistory(url, res) {
   res.end(JSON.stringify({ agent, messages }));
 }
 
+// SSE: empurra mensagens novas do canal `agent_chats/<agent>.jsonl` conforme
+// são appendadas (por handoff, auto-turn, resposta humana). Usa stat-polling
+// interno de 500ms — barato, determinístico, funciona em qualquer FS.
+function handleChatStream(url, req, res) {
+  const agent = url.searchParams.get('agent');
+  if (!agent) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'missing agent' }));
+  }
+  const sinceIdx = parseInt(url.searchParams.get('since_idx') || '0', 10) || 0;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  const sse = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
+  };
+
+  const filePath = chatLogPath(agent);
+  let sentLines = 0;      // quantas linhas já enviei do arquivo inteiro
+  let lastSize = 0;
+
+  // Envia snapshot inicial a partir de since_idx
+  if (fs.existsSync(filePath)) {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n').filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      if (i < sinceIdx) continue;
+      try {
+        const msg = JSON.parse(lines[i]);
+        sse('msg', { idx: i, msg });
+      } catch {}
+    }
+    sentLines = lines.length;
+    try { lastSize = fs.statSync(filePath).size; } catch { lastSize = content.length; }
+  }
+  sse('ready', { agent, idx: sentLines });
+
+  // Polling: a cada 500ms, checa se arquivo cresceu. Se sim, envia só o delta.
+  const poll = () => {
+    try {
+      if (!fs.existsSync(filePath)) return;
+      const st = fs.statSync(filePath);
+      if (st.size <= lastSize) return;
+      const content = fs.readFileSync(filePath, 'utf8');
+      const lines = content.split('\n').filter(Boolean);
+      for (let i = sentLines; i < lines.length; i++) {
+        try {
+          const msg = JSON.parse(lines[i]);
+          sse('msg', { idx: i, msg });
+        } catch {}
+      }
+      sentLines = lines.length;
+      lastSize = st.size;
+    } catch {}
+  };
+  const pollTimer = setInterval(poll, 500);
+
+  // Heartbeat pra manter proxies/load-balancers felizes
+  const pingTimer = setInterval(() => {
+    try { res.write(`event: ping\ndata: {}\n\n`); } catch {}
+  }, 25000);
+
+  const cleanup = () => {
+    clearInterval(pollTimer);
+    clearInterval(pingTimer);
+    try { res.end(); } catch {}
+  };
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+}
+
 async function handleChatSend(req, res) {
   const raw = await readBody(req);
   let body;
@@ -2518,6 +2594,11 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/api/chat/history' && req.method === 'GET') {
     handleChatHistory(url, res);
+    return;
+  }
+
+  if (url.pathname === '/api/chat/stream' && req.method === 'GET') {
+    handleChatStream(url, req, res);
     return;
   }
 

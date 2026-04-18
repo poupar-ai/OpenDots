@@ -11,63 +11,56 @@ type Stream = {
 
 type MsgLike = ChatMsg | Stream;
 
-const POLL_INTERVAL_MS = 3000;
-
-function sameHistory(a: ChatMsg[], b: ChatMsg[]): boolean {
-  if (a.length !== b.length) return false;
-  if (!a.length) return true;
-  const last_a = a[a.length - 1];
-  const last_b = b[b.length - 1];
-  return last_a.ts === last_b.ts && (last_a.content || '') === (last_b.content || '');
-}
-
 export function useChat(agent: string | null, humanId: string | null = null) {
   const [history, setHistory] = useState<ChatMsg[]>([]);
   const [stream, setStream] = useState<Stream | null>(null);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const historyLenRef = useRef(0);
+
+  useEffect(() => {
+    historyLenRef.current = history.length;
+  }, [history]);
 
   useEffect(() => {
     setStream(null);
     setHistory([]);
     setErr(null);
+    historyLenRef.current = 0;
     if (!agent) return;
-    let cancelled = false;
-    fetch(`/api/chat/history?agent=${encodeURIComponent(agent)}`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (!cancelled) setHistory(j.messages || []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, [agent]);
 
-  // Polling: quando o chat está idle (sem stream próprio rodando),
-  // checa o history a cada 3s pra captar handoffs de outros agentes
-  // ou turns automáticos escritos no canal deste agente.
+  // Semi-streaming: abre SSE em /api/chat/stream enquanto o chat estiver idle.
+  // Servidor empurra msgs novas (handoffs, auto-turns) em até ~500ms. Fecha o
+  // stream enquanto o usuário está enviando (evita duplicar mensagens com o
+  // próprio POST /api/chat, que já adiciona ao history localmente).
   useEffect(() => {
     if (!agent) return;
-    if (sending || stream) return; // evita race com o próprio stream
-    let cancelled = false;
-    const tick = async () => {
+    if (sending || stream) return;
+
+    const es = new EventSource(
+      `/api/chat/stream?agent=${encodeURIComponent(agent)}&since_idx=${historyLenRef.current}`,
+    );
+
+    es.addEventListener('msg', (ev: MessageEvent) => {
       try {
-        const r = await fetch(`/api/chat/history?agent=${encodeURIComponent(agent)}`);
-        if (!r.ok) return;
-        const j = await r.json();
-        const next: ChatMsg[] = j.messages || [];
-        if (cancelled) return;
-        setHistory((cur) => (sameHistory(cur, next) ? cur : next));
-      } catch {
-        // silencia erro de rede; próximo tick tenta de novo
-      }
+        const payload = JSON.parse(ev.data);
+        const idx: number = payload.idx;
+        const msg: ChatMsg = payload.msg;
+        setHistory((cur) => {
+          if (idx < cur.length) return cur; // já temos
+          return [...cur, msg];
+        });
+      } catch {}
+    });
+
+    es.onerror = () => {
+      // EventSource re-conecta sozinho; nada a fazer aqui.
     };
-    const id = setInterval(tick, POLL_INTERVAL_MS);
+
     return () => {
-      cancelled = true;
-      clearInterval(id);
+      es.close();
     };
   }, [agent, sending, stream]);
 

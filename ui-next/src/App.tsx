@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { useTheme } from '@/hooks/useTheme';
@@ -15,6 +15,7 @@ import { BestPracticesPanel } from '@/panels/BestPracticesPanel';
 import { IdeExportPanel } from '@/panels/IdeExportPanel';
 import { ArchitectPanel } from '@/panels/ArchitectPanel';
 import { ProtectionsPanel } from '@/panels/ProtectionsPanel';
+import { VaultPanel } from '@/panels/VaultPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -39,6 +40,7 @@ export default function App() {
   const [ideExportOpen, setIdeExportOpen] = useState(false);
   const [architectOpen, setArchitectOpen] = useState(false);
   const [protectionsOpen, setProtectionsOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
   const { theme, toggle: toggleTheme } = useTheme();
@@ -103,6 +105,9 @@ export default function App() {
       )}
       {protectionsOpen && (
         <ProtectionsPanel onClose={() => setProtectionsOpen(false)} />
+      )}
+      {vaultOpen && (
+        <VaultPanel onClose={() => setVaultOpen(false)} />
       )}
       {myChatsOpen && humanId && human && (
         <MyChatsPanel
@@ -189,6 +194,14 @@ export default function App() {
             title="proteções — motor de intent destrutivo"
           >
             <ShieldAlert className="h-4 w-4 text-red-600" /> proteções
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setVaultOpen(true)}
+            title="cofre — secrets/envs encriptados"
+          >
+            <KeyRound className="h-4 w-4 text-amber-600" /> cofre
           </Button>
           {human && (
             <Button

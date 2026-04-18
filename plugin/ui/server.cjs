@@ -3,6 +3,7 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { findProjectRoot, getMemDir, readJsonl } = require('../scripts/lib.cjs');
 const agents = require('../scripts/agents.cjs');
@@ -20,6 +21,7 @@ const { createAgentQueue } = require('../scripts/queue.cjs');
 const sigilo = require('../scripts/sigilo.cjs');
 const integrity = require('../scripts/integrity.cjs');
 const destructive = require('../scripts/destructive.cjs');
+const vault = require('../scripts/vault.cjs');
 
 const VALID_INTENTS = new Set(['ask', 'delegate', 'report', 'ack', 'escalate']);
 
@@ -404,6 +406,110 @@ function buildDisallowedTools(_agent, _agentCfg) {
   return GLOBAL_DISALLOWED_TOOLS.slice();
 }
 
+// Rate-limit anti brute-force do unlock: 5 falhas em 60s → lockout 60s.
+// Persistido em <memDir>/.vault-unlock-state.json pra sobreviver restart do server
+// (atacante não burla reiniciando o processo).
+const UNLOCK_WINDOW_MS = 60_000;
+const UNLOCK_MAX_FAILURES = 5;
+const UNLOCK_LOCKOUT_MS = 60_000;
+const UNLOCK_STATE_FILE = path.join(memDir, '.vault-unlock-state.json');
+let _unlockFailures = [];
+let _unlockLockedUntil = 0;
+
+(function loadUnlockState() {
+  try {
+    if (!fs.existsSync(UNLOCK_STATE_FILE)) return;
+    const raw = JSON.parse(fs.readFileSync(UNLOCK_STATE_FILE, 'utf8') || '{}');
+    _unlockFailures = Array.isArray(raw.failures) ? raw.failures.filter((t) => typeof t === 'number') : [];
+    _unlockLockedUntil = typeof raw.locked_until === 'number' ? raw.locked_until : 0;
+  } catch {
+    _unlockFailures = [];
+    _unlockLockedUntil = 0;
+  }
+})();
+
+function persistUnlockState() {
+  // Escrita atômica com O_NOFOLLOW: previne symlink-attack (atacante que ganhou
+  // write no memDir não consegue usar esse arquivo pra sobrescrever ~/.ssh/*,
+  // .bashrc, etc.). Sempre escreve em tmp + rename (substitui entry, não segue link).
+  try {
+    const tmp = `${UNLOCK_STATE_FILE}.tmp-${crypto.randomBytes(6).toString('hex')}`;
+    const flags =
+      fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW || 0);
+    const fd = fs.openSync(tmp, flags, 0o600);
+    try {
+      fs.writeSync(
+        fd,
+        JSON.stringify({ failures: _unlockFailures, locked_until: _unlockLockedUntil }),
+      );
+    } finally {
+      try { fs.closeSync(fd); } catch {}
+    }
+    try { fs.renameSync(tmp, UNLOCK_STATE_FILE); }
+    catch (e) { try { fs.unlinkSync(tmp); } catch {}; throw e; }
+  } catch {}
+}
+
+function checkUnlockRateLimit() {
+  const now = Date.now();
+  if (now < _unlockLockedUntil) {
+    return { blocked: true, retryAfter: Math.ceil((_unlockLockedUntil - now) / 1000) };
+  }
+  const cutoff = now - UNLOCK_WINDOW_MS;
+  const before = _unlockFailures.length;
+  _unlockFailures = _unlockFailures.filter((t) => t > cutoff);
+  if (_unlockFailures.length !== before) persistUnlockState();
+  return { blocked: false };
+}
+
+function recordUnlockFailure() {
+  const now = Date.now();
+  _unlockFailures.push(now);
+  if (_unlockFailures.length >= UNLOCK_MAX_FAILURES) {
+    _unlockLockedUntil = now + UNLOCK_LOCKOUT_MS;
+    _unlockFailures = [];
+  }
+  persistUnlockState();
+}
+
+function resetUnlockFailures() {
+  _unlockFailures = [];
+  _unlockLockedUntil = 0;
+  persistUnlockState();
+}
+
+// Injeta secrets do vault como env vars pro subprocess do agente.
+// Só injeta as chaves declaradas em `agentCfg.secrets: [...]` — escopo explícito.
+// Com device-key, acesso do agente independe de UI unlock: se arquivo existe e
+// chave está no disco, agente recebe. Cofre legado (sem device-key) ainda não
+// foi migrado pelo humano — retornamos {} e logamos pra ele desbloquear.
+function buildAgentEnv(agent, agentCfg) {
+  const names = Array.isArray(agentCfg?.secrets) ? agentCfg.secrets.filter(Boolean) : [];
+  if (!names.length) return {};
+  try {
+    const injected = vault.getSecrets(memDir, names);
+    const missing = names.filter((n) => !(n in injected));
+    if (missing.length) {
+      const st = vault.status(memDir);
+      appendAgentLog(agent, {
+        ts: new Date().toISOString(),
+        type: 'vault_partial',
+        requested: names,
+        injected: Object.keys(injected),
+        missing,
+        needs_migration: !!st.needs_migration,
+        initialized: !!st.initialized,
+      });
+    }
+    return injected;
+  } catch {
+    return {};
+  }
+}
+
 // ── Auto-processing de handoffs ─────────────────────────────────────────────
 // O motor de fila (scripts/queue.cjs) cuida de running/pending/rate-limit/batch.
 // Aqui só fazemos o wire-in: runner = runHeadlessTurn, hooks emitem log/bus.
@@ -783,7 +889,12 @@ function runHeadlessTurn(agent, fromAgent, userMessage, traceIds) {
       proc = spawn('claude', args, {
         cwd: projectRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1', CLAUDE_PROJECT_MEM_AGENT: agent },
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_MEM_SUBAGENT: '1',
+          CLAUDE_PROJECT_MEM_AGENT: agent,
+          ...buildAgentEnv(agent, agentCfg),
+        },
       });
     } catch (err) {
       appendAgentLog(agent, {
@@ -1995,7 +2106,12 @@ async function handleChatSend(req, res) {
     proc = spawn('claude', args, {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, CLAUDE_PROJECT_MEM_SUBAGENT: '1', CLAUDE_PROJECT_MEM_AGENT: agent },
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_MEM_SUBAGENT: '1',
+        CLAUDE_PROJECT_MEM_AGENT: agent,
+        ...buildAgentEnv(agent, agentCfg),
+      },
     });
   } catch (err) {
     sse('error', { message: `falha ao iniciar claude CLI: ${err.message}` });
@@ -2860,6 +2976,272 @@ const server = http.createServer((req, res) => {
           now_disabled_count: disabledCore.length,
         });
         sendJson(res, 200, { ok: true, disabled_core: disabledCore });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+
+  // Vault — storage de secrets encriptado.
+  // Auditoria de acessos sensíveis (unlock/destroy) vai pro internal_firefighter.
+  //
+  // GUARDS DE BROWSER:
+  //   • Origin: rejeita cross-site (evita CORS-drain quando cofre unlocked).
+  //   • Host: rejeita hostnames arbitrários que resolvem pra 127.0.0.1 (DNS rebinding).
+  //   • Aplica só pras rotas /api/vault/* — as outras não mexem em secrets.
+  const VAULT_ALLOWED_ORIGINS = new Set([
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
+  ]);
+  const VAULT_ALLOWED_HOSTS = new Set([
+    `localhost:${PORT}`,
+    `127.0.0.1:${PORT}`,
+  ]);
+  const guardVaultRequest = (_req, _res) => {
+    const host = (_req.headers.host || '').toLowerCase();
+    if (!VAULT_ALLOWED_HOSTS.has(host)) {
+      appendAgentLog('internal_firefighter', {
+        ts: new Date().toISOString(), type: 'vault_host_blocked', host,
+      });
+      sendJson(_res, 403, { error: 'host não permitido (dns rebinding?)' });
+      return true;
+    }
+    const origin = _req.headers.origin;
+    if (origin && !VAULT_ALLOWED_ORIGINS.has(origin.toLowerCase())) {
+      appendAgentLog('internal_firefighter', {
+        ts: new Date().toISOString(), type: 'vault_origin_blocked', origin,
+      });
+      sendJson(_res, 403, { error: 'cross-origin bloqueado' });
+      return true;
+    }
+    const secFetchSite = (_req.headers['sec-fetch-site'] || '').toLowerCase();
+    if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'none') {
+      appendAgentLog('internal_firefighter', {
+        ts: new Date().toISOString(), type: 'vault_fetch_site_blocked', sec_fetch_site: secFetchSite,
+      });
+      sendJson(_res, 403, { error: 'sec-fetch-site bloqueado' });
+      return true;
+    }
+    return false;
+  };
+  if (url.pathname.startsWith('/api/vault/') && guardVaultRequest(req, res)) return;
+  //
+  // Helper: converte exception do vault pra HTTP status correto.
+  // "UI locked" e "not initialized" → 423; resto → 400.
+  const sendVaultError = (_res, err) => {
+    const msg = err?.message || String(err);
+    const locked = /UI locked|not initialized/i.test(msg);
+    sendJson(_res, locked ? 423 : 400, { error: msg });
+  };
+  if (url.pathname === '/api/vault/status' && req.method === 'GET') {
+    try { sendJson(res, 200, vault.status(memDir)); }
+    catch (e) { sendJson(res, 500, { error: e.message }); }
+    return;
+  }
+  if (url.pathname === '/api/vault/paths' && req.method === 'GET') {
+    sendJson(res, 200, {
+      mem_dir: memDir,
+      vault_file: path.join(memDir, 'vault.enc'),
+      device_key_file: path.join(memDir, '.vault-devicekey'),
+    });
+    return;
+  }
+  if (url.pathname === '/api/vault/init' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        const r = vault.init(memDir, String(body.password || ''));
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_initialized',
+        });
+        sendJson(res, 200, r);
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+    });
+    return;
+  }
+  if (url.pathname === '/api/vault/unlock' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      const rate = checkUnlockRateLimit();
+      if (rate.blocked) {
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_unlock_rate_limited',
+          retry_after_s: rate.retryAfter,
+        });
+        res.setHeader('Retry-After', String(rate.retryAfter));
+        return sendJson(res, 429, {
+          error: `muitas tentativas — aguarde ${rate.retryAfter}s`,
+          retry_after: rate.retryAfter,
+        });
+      }
+      try {
+        const body = JSON.parse(raw);
+        const ttlMin = Math.max(1, Math.min(240, parseInt(body.ttl_min, 10) || 30));
+        const r = vault.unlock(memDir, String(body.password || ''), ttlMin * 60 * 1000);
+        resetUnlockFailures();
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_unlocked', ttl_min: ttlMin,
+        });
+        sendJson(res, 200, r);
+      } catch (e) {
+        recordUnlockFailure();
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_unlock_failed',
+          failures_in_window: _unlockFailures.length,
+        });
+        sendJson(res, 401, { error: e.message });
+      }
+    });
+    return;
+  }
+  if (url.pathname === '/api/vault/lock' && req.method === 'POST') {
+    try { vault.lock(); sendJson(res, 200, { ok: true }); }
+    catch (e) { sendJson(res, 500, { error: e.message }); }
+    return;
+  }
+  if (url.pathname === '/api/vault/change-password' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        vault.changePassword(memDir, String(body.old_password || ''), String(body.new_password || ''));
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_password_changed',
+        });
+        sendJson(res, 200, { ok: true });
+      } catch (e) { sendVaultError(res, e); }
+    });
+    return;
+  }
+  if (url.pathname === '/api/vault/keys' && req.method === 'GET') {
+    try { sendJson(res, 200, { keys: vault.listKeys(memDir) }); }
+    catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/secret/') && req.method === 'GET') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/secret/'.length));
+    try {
+      const value = vault.getSecret(memDir, name);
+      if (value === null) return sendJson(res, 404, { error: 'secret not found' });
+      sendJson(res, 200, { name, value });
+    } catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/secret/') && req.method === 'PUT') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/secret/'.length));
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        vault.setSecret(memDir, name, String(body.value || ''));
+        sendJson(res, 200, { ok: true, name });
+      } catch (e) { sendVaultError(res, e); }
+    });
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/secret/') && req.method === 'DELETE') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/secret/'.length));
+    try {
+      const ok = vault.deleteSecret(memDir, name);
+      sendJson(res, 200, { ok, name });
+    } catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+  if (url.pathname === '/api/vault/envfiles' && req.method === 'GET') {
+    try { sendJson(res, 200, { envfiles: vault.listEnvFiles(memDir) }); }
+    catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/envfile/') && req.method === 'GET') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/envfile/'.length));
+    try {
+      const content = vault.getEnvFile(memDir, name);
+      if (content === null) return sendJson(res, 404, { error: 'envfile not found' });
+      sendJson(res, 200, { name, content });
+    } catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/envfile/') && req.method === 'PUT') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/envfile/'.length));
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        vault.setEnvFile(memDir, name, String(body.content || ''));
+        sendJson(res, 200, { ok: true, name });
+      } catch (e) { sendVaultError(res, e); }
+    });
+    return;
+  }
+  if (url.pathname.startsWith('/api/vault/envfile/') && req.method === 'DELETE') {
+    const name = decodeURIComponent(url.pathname.slice('/api/vault/envfile/'.length));
+    try {
+      const ok = vault.deleteEnvFile(memDir, name);
+      sendJson(res, 200, { ok, name });
+    } catch (e) { sendJson(res, 423, { error: e.message }); }
+    return;
+  }
+
+  if (url.pathname === '/api/vault/export' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        if (!vault.isUnlocked()) return sendJson(res, 423, { error: 'vault: UI locked' });
+        const master = String(body.master_password ?? body.password ?? '');
+        const bundlePw = body.bundle_password ? String(body.bundle_password) : undefined;
+        const bundle = vault.exportBundle(memDir, master, bundlePw);
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_exported', size: bundle.length,
+        });
+        const fname = `vault-${new Date().toISOString().slice(0,10)}.pmvexp`;
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${fname}"`,
+          'Content-Length': bundle.length,
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(bundle);
+      } catch (e) { sendVaultError(res, e); }
+    });
+    return;
+  }
+  if (url.pathname === '/api/vault/import' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        const bundleB64 = String(body.bundle_b64 || '');
+        const bundlePassword = String(body.bundle_password ?? body.password ?? '');
+        const newMasterPassword = String(body.new_master_password || '');
+        const replace = !!body.replace;
+        if (!bundleB64) return sendJson(res, 400, { error: 'bundle_b64 obrigatório' });
+        if (!newMasterPassword) return sendJson(res, 400, { error: 'new_master_password obrigatório' });
+        const bundle = Buffer.from(bundleB64, 'base64');
+        const r = vault.importBundle(memDir, bundle, bundlePassword, replace, newMasterPassword);
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_imported', replace, ...r,
+        });
+        resetUnlockFailures();
+        sendJson(res, 200, { ok: true, ...r });
+      } catch (e) { sendVaultError(res, e); }
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/vault/destroy' && req.method === 'POST') {
+    readBody(req).then((raw) => {
+      try {
+        const body = JSON.parse(raw);
+        if (body.confirm !== 'DESTROY') {
+          return sendJson(res, 400, { error: 'need {confirm: "DESTROY"}' });
+        }
+        // Exige UI desbloqueada pra prevenir wipe sem auth (CSRF local / processo malicioso).
+        // Se humano esqueceu senha, pode deletar vault.enc e .vault-devicekey na mão.
+        if (!vault.isUnlocked()) {
+          appendAgentLog('internal_firefighter', {
+            ts: new Date().toISOString(), type: 'vault_destroy_blocked_locked',
+          });
+          return sendJson(res, 423, { error: 'destrua só com UI desbloqueada' });
+        }
+        vault.destroy(memDir);
+        appendAgentLog('internal_firefighter', {
+          ts: new Date().toISOString(), type: 'vault_destroyed',
+        });
+        sendJson(res, 200, { ok: true });
       } catch (e) { sendJson(res, 400, { error: e.message }); }
     });
     return;

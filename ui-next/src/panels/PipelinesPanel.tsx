@@ -142,7 +142,7 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Workflow className="h-4 w-4" /> Pipelines
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               fluxos reproduzíveis com checkpoints humanos
             </p>
           </div>
@@ -169,7 +169,7 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
                       {state.status}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     run: <span className="font-mono">{state.run_id}</span>
                     {state.started_by && ` · por ${state.started_by}`}
                   </p>
@@ -210,22 +210,22 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold">{s.label}</span>
                         {s.type === 'checkpoint' && (
-                          <Badge variant="outline" className="text-[9px] uppercase">checkpoint</Badge>
+                          <Badge variant="outline" className="text-xs uppercase">checkpoint</Badge>
                         )}
-                        {s.agent && <Badge variant="outline" className="text-[9px]">@{s.agent}</Badge>}
+                        {s.agent && <Badge variant="outline" className="text-xs">@{s.agent}</Badge>}
                       </div>
                       {s.description && (
-                        <p className="mt-0.5 text-[11px] text-slate-600">{s.description}</p>
+                        <p className="mt-0.5 text-xs text-slate-600">{s.description}</p>
                       )}
                       {s.best_practices && s.best_practices.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {s.best_practices.map((bp) => (
-                            <Badge key={bp} variant="outline" className="text-[9px]">📚 {bp}</Badge>
+                            <Badge key={bp} variant="outline" className="text-xs">📚 {bp}</Badge>
                           ))}
                         </div>
                       )}
                       {s.note && (
-                        <p className="mt-1 text-[11px] italic text-slate-500">
+                        <p className="mt-1 text-xs italic text-slate-500">
                           &ldquo;{s.note}&rdquo; — {s.decided_by || 'sem autor'}
                         </p>
                       )}
@@ -291,7 +291,7 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
             <section className="mb-5">
               <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <History className="h-3 w-3" /> Execuções anteriores
-                <span className="text-[10px] font-normal text-slate-400">({runs.length})</span>
+                <span className="text-xs font-normal text-slate-400">({runs.length})</span>
               </h3>
               <ul className="space-y-1.5">
                 {runs.map((r) => (
@@ -335,20 +335,20 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-semibold">{p.label}</span>
-                          <Badge variant="outline" className="text-[9px]">{p.stepCount} steps</Badge>
+                          <Badge variant="outline" className="text-xs">{p.stepCount} steps</Badge>
                           {p.source === 'installed' && (
-                            <Badge variant="outline" className="text-[9px]">instalado</Badge>
+                            <Badge variant="outline" className="text-xs">instalado</Badge>
                           )}
                         </div>
                         {p.description && (
-                          <p className="mt-0.5 whitespace-pre-line text-[11px] text-slate-600">
+                          <p className="mt-0.5 whitespace-pre-line text-xs text-slate-600">
                             {p.description.trim().slice(0, 220)}
                           </p>
                         )}
                         {p.tags && p.tags.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {p.tags.map((t) => (
-                              <Badge key={t} variant="outline" className="text-[9px]">{t}</Badge>
+                              <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
                             ))}
                           </div>
                         )}
@@ -362,7 +362,7 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
                         <Play className="h-3.5 w-3.5" /> rodar
                       </Button>
                     </div>
-                    <details className="border-t px-3 py-2 text-[11px] text-slate-600">
+                    <details className="border-t px-3 py-2 text-xs text-slate-600">
                       <summary className="cursor-pointer select-none">
                         <ChevronRight className="inline h-3 w-3" /> ver steps
                       </summary>
@@ -373,7 +373,7 @@ export function PipelinesPanel({ onClose, meHumanId, meHumanName, onOpenChat }: 
                             <span>
                               <span className="font-semibold">{s.label || s.id}</span>
                               {s.type === 'checkpoint' && (
-                                <Badge variant="outline" className="ml-1.5 text-[9px] uppercase">checkpoint</Badge>
+                                <Badge variant="outline" className="ml-1.5 text-xs uppercase">checkpoint</Badge>
                               )}
                               {s.agent && <span className="ml-1 font-mono text-slate-500">@{s.agent}</span>}
                             </span>
@@ -439,13 +439,13 @@ function RunRow({ run }: { run: PipelineRunSummary }) {
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`rounded border px-1.5 py-0 text-[9px] font-semibold uppercase ${style}`}>
+            <span className={`rounded border px-1.5 py-0 text-xs font-semibold uppercase ${style}`}>
               {run.status}
             </span>
             <span className="truncate font-semibold">{run.title || run.pipeline_id}</span>
-            <span className="shrink-0 font-mono text-[10px] text-slate-400">{run.pipeline_id}</span>
+            <span className="shrink-0 font-mono text-xs text-slate-400">{run.pipeline_id}</span>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
             <span>{whenLabel}</span>
             <span>·</span>
             <span>{run.steps_done}/{run.total_steps} steps</span>
@@ -465,7 +465,7 @@ function RunRow({ run }: { run: PipelineRunSummary }) {
             )}
           </div>
           {run.cancel_reason && (
-            <p className="mt-0.5 text-[10px] italic text-slate-500">motivo: {run.cancel_reason}</p>
+            <p className="mt-0.5 text-xs italic text-slate-500">motivo: {run.cancel_reason}</p>
           )}
         </div>
       </div>
@@ -581,7 +581,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Workflow className="h-4 w-4" /> Nova pipeline
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               descreva os passos; humanos aprovam em checkpoints
             </p>
           </div>
@@ -593,7 +593,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
         <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
           <div className="mb-3 grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase text-slate-600">Label</span>
+              <span className="text-xs font-semibold uppercase text-slate-600">Label</span>
               <input
                 value={label}
                 onChange={(e) => onLabelChange(e.target.value)}
@@ -602,7 +602,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase text-slate-600">
+              <span className="text-xs font-semibold uppercase text-slate-600">
                 ID <span className="text-slate-400">(slug)</span>
               </span>
               <input
@@ -615,7 +615,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
           </div>
 
           <label className="mb-3 flex flex-col gap-1">
-            <span className="text-[10px] font-semibold uppercase text-slate-600">Descrição</span>
+            <span className="text-xs font-semibold uppercase text-slate-600">Descrição</span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -627,7 +627,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
 
           <div className="mb-3 grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase text-slate-600">
+              <span className="text-xs font-semibold uppercase text-slate-600">
                 Tags <span className="text-slate-400">(vírgula)</span>
               </span>
               <input
@@ -638,7 +638,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase text-slate-600">Escopo</span>
+              <span className="text-xs font-semibold uppercase text-slate-600">Escopo</span>
               <select
                 value={scope}
                 onChange={(e) => setScope(e.target.value as 'project' | 'template')}
@@ -651,8 +651,8 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
           </div>
 
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase text-slate-600">Passos</span>
-            <Button size="sm" variant="outline" className="h-7 gap-1 text-[10px]" onClick={addStep}>
+            <span className="text-xs font-semibold uppercase text-slate-600">Passos</span>
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={addStep}>
               <Plus className="h-3 w-3" /> passo
             </Button>
           </div>
@@ -661,17 +661,17 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
             {steps.map((s, i) => (
               <li key={i} className="rounded-md border border-slate-200 bg-slate-50/50 p-2">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-slate-500">#{i + 1}</span>
+                  <span className="text-xs font-semibold text-slate-500">#{i + 1}</span>
                   <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => moveStep(i, -1)}
                       disabled={i === 0}
-                      className="rounded px-1 py-0.5 text-[10px] text-slate-500 hover:bg-slate-200 disabled:opacity-30"
+                      className="rounded px-1 py-0.5 text-xs text-slate-500 hover:bg-slate-200 disabled:opacity-30"
                     >↑</button>
                     <button
                       onClick={() => moveStep(i, 1)}
                       disabled={i === steps.length - 1}
-                      className="rounded px-1 py-0.5 text-[10px] text-slate-500 hover:bg-slate-200 disabled:opacity-30"
+                      className="rounded px-1 py-0.5 text-xs text-slate-500 hover:bg-slate-200 disabled:opacity-30"
                     >↓</button>
                     <button
                       onClick={() => removeStep(i)}
@@ -685,27 +685,27 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase text-slate-500">ID</span>
+                    <span className="text-xs uppercase text-slate-500">ID</span>
                     <input
                       value={s.id}
                       onChange={(e) => updateStep(i, { id: e.target.value })}
                       placeholder="research"
-                      className="rounded border border-slate-200 px-1.5 py-1 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+                      className="rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:border-indigo-400 focus:outline-none"
                     />
                   </label>
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase text-slate-500">Tipo</span>
+                    <span className="text-xs uppercase text-slate-500">Tipo</span>
                     <select
                       value={s.type}
                       onChange={(e) => updateStep(i, { type: e.target.value as PipelineStepType })}
-                      className="rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] focus:border-indigo-400 focus:outline-none"
+                      className="rounded border border-slate-200 bg-white px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
                     >
                       <option value="agent">agent</option>
                       <option value="checkpoint">checkpoint</option>
                     </select>
                   </label>
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase text-slate-500">
+                    <span className="text-xs uppercase text-slate-500">
                       {s.type === 'checkpoint' ? 'Owner' : 'Agent'}
                     </span>
                     {s.type === 'agent' ? (
@@ -715,7 +715,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
                           value={s.agent}
                           onChange={(e) => updateStep(i, { agent: e.target.value })}
                           placeholder="manager"
-                          className="rounded border border-slate-200 px-1.5 py-1 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+                          className="rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:border-indigo-400 focus:outline-none"
                         />
                         <datalist id={`agents-${i}`}>
                           {agentNames.map((n) => <option key={n} value={n} />)}
@@ -726,40 +726,40 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
                         value={s.owner}
                         onChange={(e) => updateStep(i, { owner: e.target.value })}
                         placeholder="any_human"
-                        className="rounded border border-slate-200 px-1.5 py-1 text-[11px] focus:border-indigo-400 focus:outline-none"
+                        className="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
                       />
                     )}
                   </label>
                 </div>
                 <label className="mt-1.5 flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase text-slate-500">Label</span>
+                  <span className="text-xs uppercase text-slate-500">Label</span>
                   <input
                     value={s.label}
                     onChange={(e) => updateStep(i, { label: e.target.value })}
                     placeholder="Pesquisar tema"
-                    className="rounded border border-slate-200 px-1.5 py-1 text-[11px] focus:border-indigo-400 focus:outline-none"
+                    className="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
                   />
                 </label>
                 <label className="mt-1 flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase text-slate-500">Descrição</span>
+                  <span className="text-xs uppercase text-slate-500">Descrição</span>
                   <textarea
                     value={s.description}
                     onChange={(e) => updateStep(i, { description: e.target.value })}
                     rows={1}
                     placeholder="o que acontece neste passo…"
-                    className="rounded border border-slate-200 px-1.5 py-1 text-[11px] focus:border-indigo-400 focus:outline-none"
+                    className="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
                   />
                 </label>
                 {s.type === 'agent' && (
                   <label className="mt-1 flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase text-slate-500">
+                    <span className="text-xs uppercase text-slate-500">
                       Best practices <span className="text-slate-400">(vírgula)</span>
                     </span>
                     <input
                       value={s.best_practices}
                       onChange={(e) => updateStep(i, { best_practices: e.target.value })}
                       placeholder="copywriting, accessibility"
-                      className="rounded border border-slate-200 px-1.5 py-1 text-[11px] focus:border-indigo-400 focus:outline-none"
+                      className="rounded border border-slate-200 px-1.5 py-1 text-xs focus:border-indigo-400 focus:outline-none"
                     />
                   </label>
                 )}
@@ -768,7 +768,7 @@ function NewPipelineForm({ agentNames, existingIds, onClose, onCreated }: NewPip
           </ol>
 
           {err && (
-            <div className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}

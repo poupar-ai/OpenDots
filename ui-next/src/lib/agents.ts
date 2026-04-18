@@ -1,4 +1,4 @@
-import type { Autonomy, AutonomyLevel, AgentType } from '@/lib/types';
+import type { Autonomy, AutonomyLevel, AgentType, Gender } from '@/lib/types';
 
 export interface UpdateAutonomyPayload {
   level: AutonomyLevel;
@@ -65,6 +65,7 @@ export interface CreateAgentPayload {
   name: string;
   type: AgentType;
   emoji?: string;
+  gender?: Gender;
   model?: string;
   role?: string;
   tools?: string[];
@@ -109,6 +110,17 @@ export async function updateAgentScope(agent: string, payload: UpdateScopePayloa
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
   return j as { ok: true; agent: string; updated: { tools?: string[]; scope?: AgentScope } };
+}
+
+export async function updateAgentVault(agent: string, secrets: string[]) {
+  const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/vault`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secrets }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as { ok: true; agent: string; secrets: string[] };
 }
 
 export async function updateAgentMcps(agent: string, mcps: string[]) {

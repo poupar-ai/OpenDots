@@ -75,14 +75,14 @@ export function AgentCanvas({
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg border bg-slate-50">
       <div ref={elRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute left-3 top-3 flex gap-1.5 text-[10px] font-medium uppercase tracking-wide">
+      <div className="pointer-events-none absolute left-3 top-3 flex gap-1.5 text-xs font-medium uppercase tracking-wide">
         <Legend color="#6366f1" label="core" />
         <Legend color="#0ea5e9" label="specialist" />
         <Legend color="#a855f7" label="integrator" />
         <Legend color="#f97316" label="motor" />
         <Legend color="#ef4444" label="firefighter" />
       </div>
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-white/80 px-2 py-1 text-[10px] text-slate-600 shadow-sm backdrop-blur">
+      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-white/80 px-2 py-1 text-xs text-slate-600 shadow-sm backdrop-blur">
         WASD / ← → ↑ ↓ · arrastar · scroll
       </div>
     </div>

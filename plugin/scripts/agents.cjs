@@ -564,9 +564,11 @@ function addAgent(memDir, name, config) {
 
   const contextFile = config.context_file || `agents/${name}.md`;
   const defaultEmoji = { integrator: '🔌', motor: '⚙️', firefighter: '🚒' }[type] || '•';
+  const genderClean = ['male', 'female', 'other'].includes(config.gender) ? config.gender : undefined;
   cfg.agents[name] = {
     type,
     emoji: config.emoji || defaultEmoji,
+    ...(genderClean ? { gender: genderClean } : {}),
     model: config.model || 'sonnet-4.6',
     role:  config.role || '',
     context_file: contextFile,
@@ -776,6 +778,40 @@ function updateScope(memDir, name, { tools, scope } = {}) {
   return cfg.agents[name];
 }
 
+// Sanitização dos nomes de secret que o agente pode ler. Mesmo regex do vault.setSecret
+// (UPPER_SNAKE) pra garantir consistência — UI envia a lista que o humano marcou,
+// mas quem decide o que é nome válido é aqui.
+const SECRET_NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
+
+function sanitizeSecretNames(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const n of input) {
+    if (typeof n !== 'string') continue;
+    const k = n.trim();
+    if (!k || !SECRET_NAME_RE.test(k) || seen.has(k)) continue;
+    seen.add(k);
+    out.push(k);
+    if (out.length >= 50) break;
+  }
+  return out.sort();
+}
+
+// Define a lista de secrets que o agente recebe como env vars no spawn.
+// Só os nomes listados aqui saem do cofre via `vault.getSecrets` — é o ACL.
+function updateVaultAccess(memDir, name, { secrets } = {}) {
+  const cfg = loadManifest(memDir);
+  if (!cfg || !cfg.agents || !cfg.agents[name]) {
+    throw new Error(`agente "${name}" não existe em ${manifestPath(memDir)}`);
+  }
+  const cleanSecrets = sanitizeSecretNames(secrets);
+  if (cleanSecrets.length) cfg.agents[name].secrets = cleanSecrets;
+  else delete cfg.agents[name].secrets;
+  saveManifest(memDir, cfg);
+  return cfg.agents[name];
+}
+
 function removeAgent(memDir, name) {
   const cfg = loadManifest(memDir);
   if (!cfg || !cfg.agents[name]) return false;
@@ -805,6 +841,8 @@ module.exports = {
   updateScope,
   sanitizeScope,
   sanitizeTools,
+  updateVaultAccess,
+  sanitizeSecretNames,
   KNOWN_TOOL_NAMES,
   updateModel,
   propagateModelToSeed,

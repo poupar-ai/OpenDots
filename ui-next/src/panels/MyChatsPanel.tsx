@@ -37,7 +37,7 @@ export function MyChatsPanel({ meId, meName, onClose, onOpenAgent, onOpenHuman }
             <div className="flex items-center gap-2 text-sm font-semibold">
               <MessageSquare className="h-4 w-4" /> Minhas conversas
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               histórico de {meName}
             </p>
           </div>
@@ -126,7 +126,7 @@ function Section({
 }) {
   return (
     <div className="border-b last:border-b-0">
-      <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b bg-slate-50/90 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 backdrop-blur">
+      <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b bg-slate-50/90 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 backdrop-blur">
         {icon}
         {title}
         <span className="text-slate-400">· {count}</span>
@@ -165,15 +165,15 @@ function ConversationRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-semibold">{title}</span>
-          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tagColor}`}>{tag}</span>
-          <span className="ml-auto text-[10px] text-slate-400">
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${tagColor}`}>{tag}</span>
+          <span className="ml-auto text-xs text-slate-400">
             {ts ? fmtTime(ts) : ''}
           </span>
         </div>
-        <p className="mt-0.5 line-clamp-2 text-[12px] text-slate-500">
+        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
           {subtitle || <span className="italic text-slate-400">sem preview</span>}
         </p>
-        <p className="mt-1 text-[10px] text-slate-400">{count} mensagens</p>
+        <p className="mt-1 text-xs text-slate-400">{count} mensagens</p>
       </div>
     </button>
   );

@@ -193,10 +193,10 @@ export function ProtectionsPanel({ onClose }: Props) {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
                             <div className={`font-medium ${p.enabled ? '' : 'line-through text-slate-500'}`}>{p.label}</div>
-                            <code className="mt-0.5 block truncate font-mono text-[11px] text-slate-500">{p.text}</code>
+                            <code className="mt-0.5 block truncate font-mono text-xs text-slate-500">{p.text}</code>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sevColor(p.severity)}`}>
+                            <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${sevColor(p.severity)}`}>
                               {sevLabel(p.severity)}
                             </span>
                             <Button
@@ -236,15 +236,15 @@ export function ProtectionsPanel({ onClose }: Props) {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="font-medium">{p.label}</div>
-                              <code className="mt-0.5 block truncate font-mono text-[11px] text-slate-500">
+                              <code className="mt-0.5 block truncate font-mono text-xs text-slate-500">
                                 {p.kind === 'regex' ? `/${p.text}/i` : p.text}
                               </code>
                             </div>
                             <div className="flex shrink-0 items-center gap-1">
-                              <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${sevColor(p.severity)}`}>
+                              <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${sevColor(p.severity)}`}>
                                 {sevLabel(p.severity)}
                               </span>
-                              <Badge variant="outline" className="text-[10px]">{p.kind}</Badge>
+                              <Badge variant="outline" className="text-xs">{p.kind}</Badge>
                               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => toggleEnabled(p.id)} title={p.enabled ? 'desabilitar' : 'habilitar'}>
                                 {p.enabled ? '●' : '○'}
                               </Button>
@@ -356,8 +356,8 @@ export function ProtectionsPanel({ onClose }: Props) {
                         <ul className="space-y-0.5 text-red-800">
                           {testResult.hits.map((h) => (
                             <li key={h.id}>
-                              <Badge variant="outline" className="mr-1 text-[10px]">{h.origin}</Badge>
-                              {h.label} → <code className="font-mono text-[10px]">{h.match}</code>
+                              <Badge variant="outline" className="mr-1 text-xs">{h.origin}</Badge>
+                              {h.label} → <code className="font-mono text-xs">{h.match}</code>
                             </li>
                           ))}
                         </ul>

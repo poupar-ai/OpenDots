@@ -386,7 +386,7 @@ export class AgentCanvas {
             h.id,
             h.name,
             h.skin || { skinTone: 0xf1c27d, hair: 0x44403c, shirt: 0x3b82f6, pants: 0x1f2937 },
-            { isMe, online },
+            { isMe, online, gender: h.gender || undefined },
           );
           sprite.position.set(initX, initY);
           sprite.on('pointerdown', (e) => {

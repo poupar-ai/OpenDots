@@ -1,10 +1,14 @@
 export type HumanLocation = 'core' | 'devs' | 'specialists' | 'integrators' | 'motors' | 'firefighter';
+export type HumanGender = 'male' | 'female' | 'other';
+
+export type HumanOutfit = 'pants' | 'dress';
 
 export interface HumanSkin {
   skinTone: number;
   hair: number;
   shirt: number;
   pants: number;
+  outfit?: HumanOutfit;
 }
 
 export interface HumanPosition {
@@ -21,6 +25,7 @@ export interface HumanProfile {
   notes?: string;
   offline_privacy?: { never_share: string[] };
   location?: HumanLocation | null;
+  gender?: HumanGender | null;
   skin?: HumanSkin | null;
   position?: HumanPosition | null;
   created_at: string;
@@ -36,6 +41,7 @@ export interface HumanCreateInput {
   notes?: string;
   offline_privacy?: { never_share: string[] };
   location?: HumanLocation | null;
+  gender?: HumanGender | null;
   skin?: HumanSkin | null;
   position?: HumanPosition | null;
 }
@@ -49,7 +55,22 @@ export const HUMAN_LOCATIONS: { id: HumanLocation; label: string }[] = [
   { id: 'firefighter', label: 'Monitoramento' },
 ];
 
-const SKIN_PALETTE = [0xffd1a4, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524];
+// Paleta de tons de pele — categorias reais (IBGE) + opções fantasia no final.
+// Usuário escolhe na UI; ordem importa pra apresentação.
+export const SKIN_TONES: { id: string; label: string; hex: number; fantasy?: boolean }[] = [
+  { id: 'branco',      label: 'Branco',      hex: 0xffe0d1 },
+  { id: 'amarelo',     label: 'Amarelo',     hex: 0xf1c27d },
+  { id: 'pardo',       label: 'Pardo',       hex: 0xc68642 },
+  { id: 'cafe-claro',  label: 'Café claro',  hex: 0x9a6b3f },
+  { id: 'cafe-escuro', label: 'Café escuro', hex: 0x5d3a1a },
+  { id: 'preto',       label: 'Preto',       hex: 0x3a2416 },
+  { id: 'rosa',        label: 'Rosa',        hex: 0xffb6c1, fantasy: true },
+  { id: 'verde',       label: 'Verde',       hex: 0x86d18b, fantasy: true },
+  { id: 'vermelho',    label: 'Vermelho',    hex: 0xe06666, fantasy: true },
+  { id: 'prata',       label: 'Prata',       hex: 0xc0c0c0, fantasy: true },
+];
+
+const SKIN_PALETTE = SKIN_TONES.map((t) => t.hex);
 const HAIR_PALETTE = [0x1f2937, 0x44403c, 0x78350f, 0xb45309, 0xeab308, 0x6b7280];
 const SHIRT_PALETTE = [0x3b82f6, 0xef4444, 0x10b981, 0x8b5cf6, 0xf59e0b, 0xec4899, 0x0ea5e9];
 const PANTS_PALETTE = [0x1f2937, 0x0f172a, 0x78350f, 0x334155, 0x4b5563];

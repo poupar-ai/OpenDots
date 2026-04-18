@@ -7,10 +7,24 @@ import {
   listHumans,
   randomSkin,
   HUMAN_LOCATIONS,
+  SKIN_TONES,
+  type HumanGender,
   type HumanLocation,
+  type HumanOutfit,
   type HumanProfile,
   type HumanSkin,
 } from '@/lib/humans';
+
+const GENDER_OPTIONS: { id: HumanGender; label: string }[] = [
+  { id: 'male', label: 'Masculino' },
+  { id: 'female', label: 'Feminino' },
+  { id: 'other', label: 'Outro' },
+];
+
+const OUTFIT_OPTIONS: { id: HumanOutfit; label: string }[] = [
+  { id: 'pants', label: 'Calça' },
+  { id: 'dress', label: 'Vestido' },
+];
 
 interface Props {
   onDone: (humanId: string) => void;
@@ -29,6 +43,7 @@ export function HumanOnboarding({ onDone }: Props) {
   const [important, setImportant] = useState('');
   const [neverShare, setNeverShare] = useState('');
   const [location, setLocation] = useState<HumanLocation>('devs');
+  const [gender, setGender] = useState<HumanGender>('other');
   const [skin, setSkin] = useState<HumanSkin>(() => randomSkin());
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -77,6 +92,7 @@ export function HumanOnboarding({ onDone }: Props) {
         important: important.trim() || undefined,
         offline_privacy: neverShareList.length ? { never_share: neverShareList } : undefined,
         location,
+        gender,
         skin,
       });
       onDone(h.id);
@@ -187,12 +203,31 @@ export function HumanOnboarding({ onDone }: Props) {
                   ))}
                 </select>
               </Field>
+
+              <Field label="Sexo">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {GENDER_OPTIONS.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setGender(g.id)}
+                      className={`rounded-md border px-2 py-1.5 text-xs font-medium transition ${
+                        gender === g.id
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
             </div>
 
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[11px] font-medium text-slate-600">Seu personagem</span>
+              <span className="text-xs font-medium text-slate-600">Seu personagem</span>
               <div className="rounded-lg border bg-slate-50 p-3">
-                <SkinPreview skin={skin} />
+                <SkinPreview skin={skin} gender={gender} />
               </div>
               <Button
                 type="button"
@@ -203,6 +238,59 @@ export function HumanOnboarding({ onDone }: Props) {
               >
                 <Dice5 className="h-3.5 w-3.5" /> aleatório
               </Button>
+
+              <div className="mt-1 w-full">
+                <span className="mb-1 block text-xs font-medium text-slate-600">
+                  Tom de pele
+                </span>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {SKIN_TONES.map((t) => {
+                    const selected = skin.skinTone === t.hex;
+                    const hex = '#' + t.hex.toString(16).padStart(6, '0');
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        title={t.label}
+                        aria-label={t.label}
+                        onClick={() => setSkin({ ...skin, skinTone: t.hex })}
+                        style={{ backgroundColor: hex }}
+                        className={`h-6 w-6 rounded-full border-2 transition ${
+                          selected
+                            ? 'border-indigo-600 ring-2 ring-indigo-200'
+                            : 'border-slate-300 hover:border-slate-500'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-2 w-full">
+                <span className="mb-1 block text-xs font-medium text-slate-600">
+                  Roupa
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {OUTFIT_OPTIONS.map((o) => {
+                    const current = skin.outfit ?? 'pants';
+                    const selected = current === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => setSkin({ ...skin, outfit: o.id })}
+                        className={`rounded-md border px-2 py-1.5 text-xs font-medium transition ${
+                          selected
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                            : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -261,16 +349,31 @@ export function HumanOnboarding({ onDone }: Props) {
   );
 }
 
-function SkinPreview({ skin }: { skin: HumanSkin }) {
+function SkinPreview({ skin, gender }: { skin: HumanSkin; gender?: HumanGender }) {
   const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+  const isFemale = gender === 'female';
   return (
     <svg width="88" height="120" viewBox="0 0 88 120" className="block">
+      {/* cabelo longo atrás (feminino) — cai até os ombros */}
+      {isFemale && (
+        <path
+          d="M 20 36 Q 12 18 30 12 Q 44 6 58 12 Q 76 18 68 36 L 68 92 Q 62 98 54 92 L 54 40 L 34 40 L 34 92 Q 26 98 20 92 Z"
+          fill={hex(skin.hair)}
+          stroke="#0f172a"
+          strokeOpacity="0.2"
+          strokeWidth="1"
+        />
+      )}
       {/* cabelo (topo) */}
-      <ellipse cx="44" cy="28" rx="22" ry="16" fill={hex(skin.hair)} />
+      <ellipse cx="44" cy="28" rx={isFemale ? 24 : 22} ry={isFemale ? 17 : 16} fill={hex(skin.hair)} />
       {/* cabeça */}
       <circle cx="44" cy="36" r="18" fill={hex(skin.skinTone)} />
       {/* franja */}
-      <path d="M 26 32 Q 44 18 62 32 L 62 36 Q 44 30 26 36 Z" fill={hex(skin.hair)} />
+      {isFemale ? (
+        <path d="M 26 34 Q 36 18 52 26 Q 58 30 62 34 L 62 38 Q 44 32 26 38 Z" fill={hex(skin.hair)} />
+      ) : (
+        <path d="M 26 32 Q 44 18 62 32 L 62 36 Q 44 30 26 36 Z" fill={hex(skin.hair)} />
+      )}
       {/* olhos */}
       <circle cx="38" cy="36" r="1.6" fill="#0f172a" />
       <circle cx="50" cy="36" r="1.6" fill="#0f172a" />
@@ -286,9 +389,27 @@ function SkinPreview({ skin }: { skin: HumanSkin }) {
       <rect x="61" y="60" width="7" height="26" rx="3" fill={hex(skin.shirt)} />
       <circle cx="23.5" cy="88" r="3.5" fill={hex(skin.skinTone)} />
       <circle cx="64.5" cy="88" r="3.5" fill={hex(skin.skinTone)} />
-      {/* calça */}
-      <rect x="28" y="90" width="14" height="24" fill={hex(skin.pants)} />
-      <rect x="46" y="90" width="14" height="24" fill={hex(skin.pants)} />
+      {skin.outfit === 'dress' ? (
+        <>
+          {/* vestido trapezoidal */}
+          <path
+            d="M 26 90 L 62 90 L 72 114 L 16 114 Z"
+            fill={hex(skin.shirt)}
+            stroke="#0f172a"
+            strokeOpacity="0.25"
+            strokeWidth="1"
+          />
+          {/* pernas expostas */}
+          <rect x="30" y="108" width="10" height="8" fill={hex(skin.skinTone)} />
+          <rect x="48" y="108" width="10" height="8" fill={hex(skin.skinTone)} />
+        </>
+      ) : (
+        <>
+          {/* calça */}
+          <rect x="28" y="90" width="14" height="24" fill={hex(skin.pants)} />
+          <rect x="46" y="90" width="14" height="24" fill={hex(skin.pants)} />
+        </>
+      )}
       {/* sapatos */}
       <rect x="26" y="114" width="17" height="4" rx="2" fill="#0f172a" />
       <rect x="45" y="114" width="17" height="4" rx="2" fill="#0f172a" />
@@ -314,7 +435,7 @@ function Field({
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-[11px] text-muted-foreground">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}
     </label>
   );
 }

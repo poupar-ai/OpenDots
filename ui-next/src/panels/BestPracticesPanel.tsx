@@ -78,7 +78,7 @@ export function BestPracticesPanel({ onClose }: Props) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <BookOpen className="h-4 w-4" /> Best-practices
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               conhecimento de domínio injetável nos agentes, versionado por projeto
             </p>
           </div>
@@ -95,7 +95,7 @@ export function BestPracticesPanel({ onClose }: Props) {
         <div className="grid flex-1 grid-cols-[280px_1fr] overflow-hidden">
           <aside className="soft-scroll overflow-y-auto border-r p-3">
             {err && (
-              <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">{err}</div>
+              <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">{err}</div>
             )}
             {!items && <p className="text-xs text-muted-foreground">carregando…</p>}
             {items?.map((p) => (
@@ -112,16 +112,16 @@ export function BestPracticesPanel({ onClose }: Props) {
                   <span className="font-semibold">{p.name}</span>
                   <span className="flex items-center gap-1">
                     {p.source === 'local' && (
-                      <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-amber-700">local</span>
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-xs font-semibold uppercase text-amber-700">local</span>
                     )}
                     {p.installed && <Check className="h-3 w-3 text-emerald-600" />}
                   </span>
                 </div>
-                <p className="mt-0.5 text-[10px] text-slate-500">{p.scope}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{p.scope}</p>
                 {p.tags && p.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {p.tags.slice(0, 4).map((t) => (
-                      <span key={t} className="rounded bg-slate-100 px-1 py-0.5 text-[9px] text-slate-600">
+                      <span key={t} className="rounded bg-slate-100 px-1 py-0.5 text-xs text-slate-600">
                         {t}
                       </span>
                     ))}
@@ -146,7 +146,7 @@ export function BestPracticesPanel({ onClose }: Props) {
                     <div className="mb-3 flex items-start justify-between gap-3">
                       <div>
                         <h2 className="text-base font-semibold">{p.name}</h2>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-xs text-slate-500">
                           {p.scope}
                           {p.tags && ` · ${p.tags.join(', ')}`}
                         </p>
@@ -203,7 +203,7 @@ export function BestPracticesPanel({ onClose }: Props) {
                         )}
                       </div>
                     </div>
-                    <pre className="whitespace-pre-wrap rounded bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800">
+                    <pre className="whitespace-pre-wrap rounded bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-800">
                       {content || '(sem conteúdo)'}
                     </pre>
                   </div>
@@ -355,7 +355,7 @@ function BestPracticeForm({ mode, existingIds, initial, onClose, onSaved }: Form
               {isEdit ? <Pencil className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
               {isEdit ? `editar ${effectiveId}` : 'nova best-practice'}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               fica em <code className="font-mono">.claude-project-memory/best-practices/&lt;id&gt;/</code> — versionada junto com o projeto
             </p>
           </div>
@@ -367,35 +367,35 @@ function BestPracticeForm({ mode, existingIds, initial, onClose, onSaved }: Form
         <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">nome</label>
+              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">nome</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ex: Padrões de migrations Alembic"
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">id (slug)</label>
+              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">id (slug)</label>
               <input
                 value={effectiveId}
                 readOnly={isEdit}
                 onChange={(e) => { if (!isEdit) { setId(e.target.value); setIdEdited(true); } }}
                 placeholder="migrations-alembic"
-                className={`w-full rounded border bg-white px-2 py-1.5 font-mono text-[11px] focus:outline-none ${
+                className={`w-full rounded border bg-white px-2 py-1.5 font-mono text-xs focus:outline-none ${
                   isEdit ? 'border-slate-200 bg-slate-50 text-slate-500' :
                   effectiveId && !idValid ? 'border-red-300 focus:border-red-400' : idTaken ? 'border-amber-300 focus:border-amber-400' : 'border-slate-200 focus:border-indigo-400'
                 }`}
               />
               {isEdit ? (
-                <p className="mt-0.5 text-[10px] text-slate-400">slug não pode mudar depois de criada</p>
+                <p className="mt-0.5 text-xs text-slate-400">slug não pode mudar depois de criada</p>
               ) : (
                 <>
                   {effectiveId && !idValid && (
-                    <p className="mt-0.5 text-[10px] text-red-600">slug inválido (só letras minúsculas, dígitos, hífen)</p>
+                    <p className="mt-0.5 text-xs text-red-600">slug inválido (só letras minúsculas, dígitos, hífen)</p>
                   )}
                   {idValid && idTaken && (
-                    <p className="mt-0.5 text-[10px] text-amber-600">já existe uma best-practice com esse id</p>
+                    <p className="mt-0.5 text-xs text-amber-600">já existe uma best-practice com esse id</p>
                   )}
                 </>
               )}
@@ -404,59 +404,59 @@ function BestPracticeForm({ mode, existingIds, initial, onClose, onSaved }: Form
 
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">scope</label>
+              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">scope</label>
               <input
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
                 placeholder="backend / frontend / infra / …"
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">tags (vírgulas)</label>
+              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">tags (vírgulas)</label>
               <input
                 value={tagsText}
                 onChange={(e) => setTagsText(e.target.value)}
                 placeholder="sql, migrations, postgres"
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="mt-3">
-            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">quando usar</label>
+            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">quando usar</label>
             <input
               value={whenToUse}
               onChange={(e) => setWhenToUse(e.target.value)}
               placeholder="quando for criar ou revisar uma migration Alembic"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
             />
           </div>
 
           <div className="mt-3">
-            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">não usar para</label>
+            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">não usar para</label>
             <input
               value={notFor}
               onChange={(e) => setNotFor(e.target.value)}
               placeholder="dados transacionais que precisam de raw SQL"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] focus:border-indigo-400 focus:outline-none"
+              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
             />
           </div>
 
           <div className="mt-3">
-            <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">conteúdo (markdown)</label>
+            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">conteúdo (markdown)</label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               spellCheck={false}
               placeholder={'# Migrations Alembic\n\n## Regras\n- nunca alterar migration já aplicada\n- ...'}
-              className="h-64 w-full resize-y rounded border border-slate-200 bg-white p-2 font-mono text-[11px] leading-snug focus:border-indigo-400 focus:outline-none"
+              className="h-64 w-full resize-y rounded border border-slate-200 bg-white p-2 font-mono text-xs leading-snug focus:border-indigo-400 focus:outline-none"
             />
-            <p className="mt-0.5 text-[10px] text-slate-500">{content.length} chars</p>
+            <p className="mt-0.5 text-xs text-slate-500">{content.length} chars</p>
           </div>
 
           {err && (
-            <div className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}

@@ -332,9 +332,9 @@ export function VaultPanel({ onClose }: Props) {
               <KeyRound className="h-4 w-4 text-amber-600" /> Cofre — credenciais do project-mem
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Cofre encriptado <strong>local</strong> (AES-256-GCM). Guarda credenciais que os <strong>agentes do project-mem</strong> precisam pra chamar serviços externos (tokens, chaves, webhooks). As credenciais que sua <strong>aplicação</strong> usa em runtime continuam nos arquivos <code className="rounded bg-slate-100 px-1 text-[10px]">.env</code> do seu projeto — o cofre só guarda <em>cópias/backup</em> deles na aba "arquivos .env".
+              Cofre encriptado <strong>local</strong> (AES-256-GCM). Guarda credenciais que os <strong>agentes do project-mem</strong> precisam pra chamar serviços externos (tokens, chaves, webhooks). As credenciais que sua <strong>aplicação</strong> usa em runtime continuam nos arquivos <code className="rounded bg-slate-100 px-1 text-xs">.env</code> do seu projeto — o cofre só guarda <em>cópias/backup</em> deles na aba "arquivos .env".
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               <strong>Modelo de acesso:</strong> agentes autorizados no manifest (<code>secrets: [...]</code>) acessam <em>sempre</em>, sem depender de senha. A <strong>senha mestra</strong> só protege esta UI — humano precisa dela pra ver/editar/apagar. Auto-lock só tranca a UI, agentes seguem trabalhando.
             </p>
           </div>
@@ -361,9 +361,9 @@ export function VaultPanel({ onClose }: Props) {
                 </p>
               </div>
               {paths && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   <div className="flex items-center gap-1.5"><HardDrive className="h-3 w-3" /> Cofre ficará em:</div>
-                  <code className="mt-1 block break-all font-mono text-[10px] text-slate-700">{paths.mem_dir}</code>
+                  <code className="mt-1 block break-all font-mono text-xs text-slate-700">{paths.mem_dir}</code>
                 </div>
               )}
               <label className="block text-sm font-semibold text-slate-700">Nova senha (mín. 8)</label>
@@ -399,7 +399,7 @@ export function VaultPanel({ onClose }: Props) {
                 </Button>
                 {importForm && (
                   <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <p className="text-[11px] text-slate-600">
+                    <p className="text-xs text-slate-600">
                       A <strong>senha do bundle</strong> é a que quem gerou o arquivo compartilhou contigo. A <strong>nova senha mestra</strong> é sua — só você precisa saber pra entrar nesta UI.
                     </p>
                     <input
@@ -487,7 +487,7 @@ export function VaultPanel({ onClose }: Props) {
                 <Unlock className="mr-2 h-3.5 w-3.5" />
                 {busy ? 'abrindo…' : 'desbloquear'}
               </Button>
-              <div className="mt-6 border-t pt-3 text-[10px] text-slate-500">
+              <div className="mt-6 border-t pt-3 text-xs text-slate-500">
                 Esqueceu a senha? Delete os arquivos <code className="rounded bg-slate-100 px-1">vault.enc</code> e <code className="rounded bg-slate-100 px-1">.vault-devicekey</code> do diretório de memória do projeto. Não existe reset remoto.
               </div>
             </div>
@@ -499,7 +499,7 @@ export function VaultPanel({ onClose }: Props) {
                 <div className="flex items-center gap-2 text-sm text-emerald-800">
                   <Unlock className="h-4 w-4" />
                   <span className="font-medium">UI desbloqueada</span>
-                  {expiresLabel && <Badge variant="outline" className="ml-1 text-[10px]">trava às {expiresLabel}</Badge>}
+                  {expiresLabel && <Badge variant="outline" className="ml-1 text-xs">trava às {expiresLabel}</Badge>}
                 </div>
                 <Button size="sm" variant="outline" onClick={handleLock} disabled={busy}>
                   <Lock className="mr-1.5 h-3 w-3" /> travar UI
@@ -507,12 +507,12 @@ export function VaultPanel({ onClose }: Props) {
               </div>
 
               {paths && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
                   <div className="flex items-center gap-1.5 font-semibold text-slate-800">
                     <HardDrive className="h-3 w-3" /> Localização física
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <code className="flex-1 truncate rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-700 border border-slate-200" title={paths.mem_dir}>
+                    <code className="flex-1 truncate rounded bg-white px-2 py-1 font-mono text-xs text-slate-700 border border-slate-200" title={paths.mem_dir}>
                       {paths.mem_dir}
                     </code>
                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCopyPath} title="copiar path">
@@ -542,7 +542,7 @@ export function VaultPanel({ onClose }: Props) {
 
               {tab === 'secrets' && (
                 <>
-                  <div className="rounded-md border border-indigo-100 bg-indigo-50/40 px-3 py-2 text-[11px] text-slate-600">
+                  <div className="rounded-md border border-indigo-100 bg-indigo-50/40 px-3 py-2 text-xs text-slate-600">
                     <strong>Pros agentes do project-mem</strong> chamarem APIs externas. Cada secret é injetado como env var no subprocess do agente que declarar o nome em <code className="rounded bg-white px-1">secrets: [...]</code> no manifest — vale como autorização automática, não precisa de senha a cada invocação.
                   </div>
 
@@ -626,7 +626,7 @@ export function VaultPanel({ onClose }: Props) {
                   <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
                     <div className="font-semibold text-slate-700">Como usar nos agentes</div>
                     <p className="mt-1">No manifest do agente, declare:</p>
-                    <pre className="mt-1.5 rounded bg-white p-2 text-[11px] font-mono text-slate-800">{`secrets: [ASAAS_TOKEN, OPENAI_KEY]`}</pre>
+                    <pre className="mt-1.5 rounded bg-white p-2 text-xs font-mono text-slate-800">{`secrets: [ASAAS_TOKEN, OPENAI_KEY]`}</pre>
                     <p className="mt-1.5">
                       No spawn do agente, essas envs são injetadas automaticamente — a UI pode estar travada que não afeta. Se algum nome não existir no cofre, agente roda sem aquela env e loga <code>vault_partial</code>.
                     </p>
@@ -636,7 +636,7 @@ export function VaultPanel({ onClose }: Props) {
 
               {tab === 'envfiles' && (
                 <>
-                  <div className="rounded-md border border-amber-100 bg-amber-50/60 px-3 py-2 text-[11px] text-slate-600">
+                  <div className="rounded-md border border-amber-100 bg-amber-50/60 px-3 py-2 text-xs text-slate-600">
                     <strong>Backup dos .env do seu projeto</strong> — guarde cópias aqui pra portabilidade entre máquinas ou compartilhar com o time. A aplicação em runtime continua lendo dos arquivos <code className="rounded bg-white px-1">.env</code> do disco. Daqui você pode <strong>copiar o conteúdo inteiro</strong> e colar onde precisar.
                   </div>
 
@@ -663,7 +663,7 @@ export function VaultPanel({ onClose }: Props) {
                           placeholder="apps/api/.env.local"
                           className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none disabled:bg-slate-100"
                         />
-                        <p className="mt-1 text-[10px] text-slate-500">use um caminho ou tag (ex: <code>prod</code>, <code>apps/api/.env.local</code>)</p>
+                        <p className="mt-1 text-xs text-slate-500">use um caminho ou tag (ex: <code>prod</code>, <code>apps/api/.env.local</code>)</p>
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700">Conteúdo do .env</label>
@@ -695,7 +695,7 @@ export function VaultPanel({ onClose }: Props) {
                         <li key={f.name} className="flex items-center justify-between rounded-md border bg-white px-3 py-2 hover:bg-slate-50">
                           <div className="min-w-0 flex-1">
                             <code className="text-sm font-mono text-slate-900">{f.name}</code>
-                            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-500">
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                               <span>{f.size} bytes</span>
                               {f.updated_at && <span>· {new Date(f.updated_at).toLocaleString('pt-BR')}</span>}
                             </div>
@@ -779,7 +779,7 @@ export function VaultPanel({ onClose }: Props) {
 
                 {exportForm !== null && (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
-                    <p className="text-[11px] text-slate-600">
+                    <p className="text-xs text-slate-600">
                       Exporta um bundle criptografado (<code>.pmvexp</code>) com vault + device-key. O arquivo fica inútil sem a senha do bundle — guarde-a separada do arquivo.
                     </p>
 
@@ -809,7 +809,7 @@ export function VaultPanel({ onClose }: Props) {
                       {exportForm.useRandom ? (
                         <>
                           <div className="flex items-center gap-1.5">
-                            <code className="flex-1 truncate rounded border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11px] text-slate-900" title={exportForm.bundle}>
+                            <code className="flex-1 truncate rounded border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-900" title={exportForm.bundle}>
                               {exportForm.bundle}
                             </code>
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopyBundle} title="copiar senha do bundle">
@@ -819,7 +819,7 @@ export function VaultPanel({ onClose }: Props) {
                               <KeyRound className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <div className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+                          <div className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
                             <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                             <span>
                               <strong>Anote agora</strong> em um gerenciador de senha. Se perder essa senha, o bundle <strong>não</strong> pode ser restaurado — nem por nós, nem por você.
@@ -828,7 +828,7 @@ export function VaultPanel({ onClose }: Props) {
                         </>
                       ) : (
                         <div>
-                          <label className="block text-[11px] text-slate-600">
+                          <label className="block text-xs text-slate-600">
                             Senha do bundle (deixe vazio pra reusar a senha mestra)
                           </label>
                           <input
@@ -839,7 +839,7 @@ export function VaultPanel({ onClose }: Props) {
                             className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-mono text-slate-900 focus:border-indigo-400 focus:outline-none"
                             autoComplete="off"
                           />
-                          <p className="mt-1 text-[10px] text-slate-500">
+                          <p className="mt-1 text-xs text-slate-500">
                             Se vazio: bundle encripta com a <strong>mesma senha mestra</strong> acima (menos seguro pra backup em nuvem).
                           </p>
                         </div>
@@ -859,10 +859,10 @@ export function VaultPanel({ onClose }: Props) {
 
                 {importForm && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                    <p className="text-[11px] text-amber-800">
+                    <p className="text-xs text-amber-800">
                       <strong>Atenção:</strong> importar vai <strong>substituir</strong> o cofre atual. Os secrets e .envs daqui serão perdidos.
                     </p>
-                    <p className="text-[11px] text-slate-600">
+                    <p className="text-xs text-slate-600">
                       A <strong>senha do bundle</strong> vem de quem te enviou o arquivo. A <strong>nova senha mestra</strong> é sua — independe da senha de quem exportou.
                     </p>
                     <input
@@ -941,7 +941,7 @@ export function VaultPanel({ onClose }: Props) {
                     </div>
                   </div>
                 )}
-                <p className="text-[10px] text-slate-500">destruir cofre apaga todos os secrets e envfiles — irreversível</p>
+                <p className="text-xs text-slate-500">destruir cofre apaga todos os secrets e envfiles — irreversível</p>
               </div>
             </div>
           )}

@@ -8,12 +8,13 @@ import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/t
 import {
   Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout,
   FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen, ChevronDown,
-  Zap, TrendingUp, Clock, Shield, ShieldAlert, ShieldCheck,
+  Zap, TrendingUp, Clock, Shield, ShieldAlert, ShieldCheck, KeyRound, Lock,
 } from 'lucide-react';
 import {
   updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent,
-  updateAgentScope,
+  updateAgentScope, updateAgentVault,
 } from '@/lib/agents';
+import { getVaultStatus, listVaultKeys } from '@/lib/vault';
 
 interface LogEntry {
   ts: string;
@@ -103,8 +104,26 @@ export function AgentInfoPanel({
   const [editContext, setEditContext] = useState(false);
   const [editMcps, setEditMcps] = useState(false);
   const [editScope, setEditScope] = useState(false);
+  const [editVault, setEditVault] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  // Trava visual dos nomes de secret quando o cofre está fechado.
+  // `null` = ainda não sabemos o status → mascarar por segurança (evita flash).
+  const [vaultLocked, setVaultLocked] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      getVaultStatus()
+        .then((s) => { if (alive) setVaultLocked(s.initialized ? s.locked : false); })
+        .catch(() => { if (alive) setVaultLocked(true); });
+    };
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const maskIfLocked = (s: string): string => (vaultLocked === false ? s : '••••••••');
 
   useEffect(() => {
     setActivityOpen(false);
@@ -115,6 +134,7 @@ export function AgentInfoPanel({
     setEditContext(false);
     setEditMcps(false);
     setEditScope(false);
+    setEditVault(false);
     setDeleteErr(null);
   }, [name]);
 
@@ -183,21 +203,21 @@ export function AgentInfoPanel({
               <CopyButton value={name} label="copiar nome do agente" />
             </div>
             {cfg.role && (
-              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+              <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">
                 {cfg.role}
               </p>
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-              <Badge variant="outline" className="text-[10px]">{type}</Badge>
+              <Badge variant="outline" className="text-xs">{type}</Badge>
               {cfg.autonomy && <AutonomyBadge level={cfg.autonomy.level} />}
               {cfg.watch && (
-                <span className="inline-flex items-center gap-0.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide text-red-700">
+                <span className="inline-flex items-center gap-0.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-0 text-xs font-semibold uppercase tracking-wide text-red-700">
                   <Eye className="h-2.5 w-2.5" /> watch
                 </span>
               )}
             </div>
             {origin && (
-              <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
+              <p className="mt-1 flex items-center gap-1 text-xs text-slate-400">
                 <Sprout className="h-3 w-3" />
                 <code className="truncate font-mono">{origin.category}/{origin.slug}</code>
               </p>
@@ -244,13 +264,13 @@ export function AgentInfoPanel({
                   {cfg.mcps.slice(0, 3).map((m) => (
                     <span
                       key={m}
-                      className="rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700"
+                      className="rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-xs text-violet-700"
                     >
                       {m}
                     </span>
                   ))}
                   {cfg.mcps.length > 3 && (
-                    <span className="text-[10px] text-slate-400">+{cfg.mcps.length - 3}</span>
+                    <span className="text-xs text-slate-400">+{cfg.mcps.length - 3}</span>
                   )}
                 </div>
               ) : (
@@ -258,6 +278,33 @@ export function AgentInfoPanel({
               )
             }
             onEdit={() => setEditMcps(true)}
+          />
+          <ConfigRow
+            icon={<KeyRound className="h-3.5 w-3.5" />}
+            label="cofre"
+            value={
+              cfg.secrets && cfg.secrets.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-end gap-1">
+                  {cfg.secrets.slice(0, 3).map((s) => (
+                    <span
+                      key={s}
+                      className="flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-mono text-xs text-amber-700"
+                      title={vaultLocked === false ? s : 'destrave o cofre pra ver o nome'}
+                    >
+                      {vaultLocked !== false && <Lock className="h-2.5 w-2.5" />}
+                      {maskIfLocked(s)}
+                    </span>
+                  ))}
+                  {cfg.secrets.length > 3 && (
+                    <span className="text-xs text-slate-400">+{cfg.secrets.length - 3}</span>
+                  )}
+                </div>
+              ) : (
+                <em className="text-slate-400">nenhum</em>
+              )
+            }
+            sub={cfg.secrets?.length ? `${cfg.secrets.length} secret${cfg.secrets.length === 1 ? '' : 's'} injetado${cfg.secrets.length === 1 ? '' : 's'} no spawn` : undefined}
+            onEdit={() => setEditVault(true)}
           />
           <ConfigRow
             icon={scopeRiskIcon(cfg)}
@@ -290,7 +337,7 @@ export function AgentInfoPanel({
             label="mini-contexto"
             value={
               context ? (
-                <span className="font-mono text-[11px] text-slate-700">
+                <span className="font-mono text-xs text-slate-700">
                   {context.length >= 1000 ? `${(context.length / 1000).toFixed(1)}k` : context.length} chars
                 </span>
               ) : (
@@ -308,7 +355,7 @@ export function AgentInfoPanel({
           <div className="space-y-3 p-3">
             {outgoing.length > 0 && (
               <div>
-                <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-orange-600">
+                <div className="mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-orange-600">
                   <ArrowRight className="h-3 w-3" /> fala com
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -316,7 +363,7 @@ export function AgentInfoPanel({
                     <button
                       key={c}
                       onClick={() => onSelect?.(c)}
-                      className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-700 transition-colors hover:bg-orange-100"
+                      className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100"
                     >
                       {c}
                     </button>
@@ -326,7 +373,7 @@ export function AgentInfoPanel({
             )}
             {incoming.length > 0 && (
               <div>
-                <div className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                <div className="mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-blue-600">
                   <ArrowLeft className="h-3 w-3" /> recebe de
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -334,7 +381,7 @@ export function AgentInfoPanel({
                     <button
                       key={c}
                       onClick={() => onSelect?.(c)}
-                      className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                      className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
                     >
                       {c}
                     </button>
@@ -349,13 +396,13 @@ export function AgentInfoPanel({
       {cfg.watch && (
         <div className="overflow-hidden rounded-xl border border-red-200 bg-red-50/60 shadow-sm">
           <div className="p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-red-700">
               <Eye className="h-3.5 w-3.5" /> watch ativo
             </div>
-            <div className="truncate rounded-md border border-red-200 bg-white px-2 py-1.5 font-mono text-[10px] text-red-700">
+            <div className="truncate rounded-md border border-red-200 bg-white px-2 py-1.5 font-mono text-xs text-red-700">
               {cfg.watch.query}
             </div>
-            <p className="mt-1 text-[10px] text-red-500">
+            <p className="mt-1 text-xs text-red-500">
               threshold {cfg.watch.threshold}/{cfg.watch.window_minutes}min
             </p>
           </div>
@@ -377,7 +424,7 @@ export function AgentInfoPanel({
           <Activity className="h-4 w-4 text-muted-foreground" />
           <h4 className="flex-1 text-xs font-semibold uppercase tracking-wide">Atividade</h4>
           {logSummary && (
-            <span className="font-mono text-[10px] text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               {logSummary.requests} req
             </span>
           )}
@@ -393,11 +440,11 @@ export function AgentInfoPanel({
           <div className="mx-3 mb-2 flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
             <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] text-red-500">
+              <div className="text-xs text-red-500">
                 último erro{' '}
                 {logSummary.lastErrorAt ? fmtRelativeDate(logSummary.lastErrorAt) : ''}
               </div>
-              <div className="truncate font-mono text-[10px]">{logSummary.lastErrorMsg}</div>
+              <div className="truncate font-mono text-xs">{logSummary.lastErrorMsg}</div>
             </div>
           </div>
         )}
@@ -456,14 +503,14 @@ export function AgentInfoPanel({
             type="button"
             onClick={handleDelete}
             disabled={deleting}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-[12px] font-medium text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
             title="remover agente"
           >
             <Trash2 className="h-3.5 w-3.5" />
             {deleting ? 'removendo…' : 'remover agente'}
           </button>
           {deleteErr && (
-            <p className="mt-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <p className="mt-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {deleteErr}
             </p>
           )}
@@ -498,6 +545,13 @@ export function AgentInfoPanel({
           currentTools={cfg.tools || []}
           currentBashAllow={cfg.scope?.bash_allow || []}
           onClose={() => setEditScope(false)}
+        />
+      )}
+      {editVault && (
+        <VaultAccessEditor
+          name={name}
+          current={cfg.secrets || []}
+          onClose={() => setEditVault(false)}
         />
       )}
     </div>
@@ -552,7 +606,7 @@ function scopeRiskIcon(cfg: AgentCfg) {
 function ScopeBadge({ cfg }: { cfg: AgentCfg }) {
   const level = classifyRisk(cfg);
   return (
-    <span className={cn('rounded-md border px-1.5 py-0 text-[10px] font-medium', riskColor(level))}>
+    <span className={cn('rounded-md border px-1.5 py-0 text-xs font-medium', riskColor(level))}>
       {riskLabel(level)}
     </span>
   );
@@ -617,7 +671,7 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-slate-600" />
             <h3 className="text-sm font-semibold">Escopo · {name}</h3>
-            <span className={cn('rounded-md border px-1.5 py-0 text-[10px] font-medium', riskColor(level))}>
+            <span className={cn('rounded-md border px-1.5 py-0 text-xs font-medium', riskColor(level))}>
               {riskLabel(level)}
             </span>
           </div>
@@ -631,7 +685,7 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
               Ferramentas
             </h4>
-            <p className="mb-2 text-[11px] text-slate-500">
+            <p className="mb-2 text-xs text-slate-500">
               Marque só o que o agente precisa. Sem <code>Read/Grep/Glob</code> ele não lê arquivos.
               Sem <code>Write/Edit</code> não altera nada. <code>Bash</code> sem padrões abaixo fica desativado.
             </p>
@@ -640,7 +694,7 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
                 <label
                   key={t}
                   className={cn(
-                    'flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px]',
+                    'flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
                     tools.includes(t)
                       ? 'border-blue-300 bg-blue-50 text-blue-800'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
@@ -662,7 +716,7 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
               Bash · comandos permitidos
             </h4>
-            <p className="mb-2 text-[11px] text-slate-500">
+            <p className="mb-2 text-xs text-slate-500">
               Um padrão por linha. Ex: <code>git *</code>, <code>npm run *</code>, <code>curl http://localhost:37778/*</code>.
               Padrões proibidos globalmente (<code>rm</code>, <code>sudo</code>, <code>chmod</code>, etc)
               são bloqueados mesmo se você incluir aqui.
@@ -671,7 +725,7 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
               value={bashText}
               onChange={(e) => setBashText(e.target.value)}
               placeholder={'git *\nnpm run *'}
-              className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-[11px]"
+              className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs"
               rows={6}
             />
           </section>
@@ -680,13 +734,13 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
             <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
               Preview do <code>--allowed-tools</code>
             </h4>
-            <pre className="overflow-auto rounded-md bg-slate-900 px-2 py-1.5 font-mono text-[10px] text-green-300">
+            <pre className="overflow-auto rounded-md bg-slate-900 px-2 py-1.5 font-mono text-xs text-green-300">
               {preview || '<vazio — agente não poderá fazer nada>'}
             </pre>
           </section>
 
           {err && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+            <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
               {err}
             </div>
           )}
@@ -694,14 +748,14 @@ function ScopeEditor({ name, currentTools, currentBashAllow, onClose }: ScopeEdi
           <div className="flex justify-end gap-2 border-t pt-3">
             <button
               onClick={onClose}
-              className="rounded-md border px-3 py-1 text-[12px] hover:bg-slate-50"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-slate-50"
             >
               Cancelar
             </button>
             <button
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" />
               {saving ? 'Salvando…' : 'Salvar'}
@@ -753,13 +807,13 @@ function MetricCell({
       <span
         className={cn(
           'tabular-nums leading-none',
-          small ? 'text-[11px] font-medium' : 'text-base font-semibold',
+          small ? 'text-xs font-medium' : 'text-base font-semibold',
           tone === 'danger' && value !== 0 && 'text-red-600',
         )}
       >
         {value}
       </span>
-      <span className="flex items-center gap-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-center gap-0.5 text-xs uppercase tracking-wide text-muted-foreground">
         {icon} {label}
       </span>
     </div>
@@ -783,10 +837,10 @@ function ConfigRow({
     <div className="group flex items-center gap-2 px-3 py-2 transition-colors hover:bg-slate-50/70">
       <span className="text-muted-foreground">{icon}</span>
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
-        {sub && <span className="text-[10px] text-slate-500">{sub}</span>}
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+        {sub && <span className="text-xs text-slate-500">{sub}</span>}
       </div>
-      <div className="flex min-w-0 shrink-0 items-center gap-1.5 text-[11px]">
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 text-xs">
         <div className="max-w-[150px] truncate text-right">{value}</div>
         <button
           onClick={onEdit}
@@ -817,7 +871,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors',
+        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors',
         active
           ? 'bg-white text-slate-800 shadow-sm'
           : 'text-muted-foreground hover:bg-white/60 hover:text-slate-700',
@@ -825,7 +879,7 @@ function TabButton({
     >
       {icon} {label}
       {count != null && count > 0 && (
-        <span className="rounded-full bg-slate-200 px-1 font-mono text-[9px] text-slate-600">
+        <span className="rounded-full bg-slate-200 px-1 font-mono text-xs text-slate-600">
           {count}
         </span>
       )}
@@ -834,7 +888,7 @@ function TabButton({
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div className="py-4 text-center text-[11px] text-slate-400">{text}</div>;
+  return <div className="py-4 text-center text-xs text-slate-400">{text}</div>;
 }
 
 function LogRow({ e }: { e: LogEntry }) {
@@ -851,7 +905,7 @@ function LogRow({ e }: { e: LogEntry }) {
         ? `${e.response_chars ?? 0} chars · ${e.duration_ms ?? 0}ms`
         : `prompt ${e.prompt_chars ?? 0} chars`;
   return (
-    <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+    <div className="flex items-start gap-1.5 py-0.5 text-xs leading-tight">
       <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
       <span className={`shrink-0 rounded px-1 font-semibold uppercase ${color}`}>{e.type}</span>
       <span className="min-w-0 flex-1 truncate text-slate-700">{detail}</span>
@@ -864,14 +918,14 @@ function WorkRow({ e }: { e: WorkEntry }) {
     const ins = e.diff?.ins;
     const del = e.diff?.del;
     return (
-      <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+      <div className="flex items-start gap-1.5 py-0.5 text-xs leading-tight">
         <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
         <FilePen className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" />
         <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.file}>
           {e.file}
         </span>
         {(typeof ins === 'number' || typeof del === 'number') && (
-          <span className="shrink-0 text-[10px]">
+          <span className="shrink-0 text-xs">
             {typeof ins === 'number' && <span className="text-emerald-700">+{ins}</span>}
             {typeof del === 'number' && <span className="ml-0.5 text-red-600">-{del}</span>}
           </span>
@@ -881,14 +935,14 @@ function WorkRow({ e }: { e: WorkEntry }) {
   }
   if (e.type === 'bash') {
     return (
-      <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+      <div className="flex items-start gap-1.5 py-0.5 text-xs leading-tight">
         <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
         <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-slate-600" />
         <span className="min-w-0 flex-1 truncate font-mono text-slate-700" title={e.cmd}>
           {e.cmd}
         </span>
         {e.output_summary && (
-          <span className="shrink-0 text-[10px] text-slate-500" title={e.output_summary}>
+          <span className="shrink-0 text-xs text-slate-500" title={e.output_summary}>
             {e.output_summary.slice(0, 24)}
           </span>
         )}
@@ -896,7 +950,7 @@ function WorkRow({ e }: { e: WorkEntry }) {
     );
   }
   return (
-    <div className="flex items-start gap-1.5 py-0.5 text-[10px] leading-tight">
+    <div className="flex items-start gap-1.5 py-0.5 text-xs leading-tight">
       <span className="shrink-0 text-slate-400">{e.ts.slice(11, 19)}</span>
       <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-indigo-600" />
       <span className="min-w-0 flex-1 truncate text-slate-700" title={e.prompt}>
@@ -915,7 +969,7 @@ function AutonomyBadge({ level }: { level: AutonomyLevel }) {
   return (
     <span
       title={`autonomia ${level}`}
-      className={`rounded-full border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide ${styles[level]}`}
+      className={`rounded-full border px-1.5 py-0 text-xs font-semibold uppercase tracking-wide ${styles[level]}`}
     >
       {level}
     </span>
@@ -975,7 +1029,7 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Sliders className="h-4 w-4" /> Autonomia de {name}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               quando o agente decide sozinho e quando chama você
             </p>
           </div>
@@ -984,7 +1038,7 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
           </Button>
         </header>
         <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
-          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+          <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
             Nível
           </label>
           <div className="mb-3 grid grid-cols-3 gap-1.5">
@@ -992,7 +1046,7 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
               <button
                 key={lv}
                 onClick={() => setLevel(lv)}
-                className={`rounded border px-2 py-1.5 text-[11px] font-medium transition ${
+                className={`rounded border px-2 py-1.5 text-xs font-medium transition ${
                   level === lv
                     ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                     : 'border-slate-200 hover:bg-slate-50'
@@ -1002,22 +1056,22 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
               </button>
             ))}
           </div>
-          <p className="mb-3 rounded bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+          <p className="mb-3 rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
             {LEVEL_DESC[level]}
           </p>
 
-          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+          <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
             Sempre chamar o humano quando… <span className="text-slate-400">(uma por linha)</span>
           </label>
           <textarea
             value={cases}
             onChange={(e) => setCases(e.target.value)}
             rows={6}
-            className="mb-3 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+            className="mb-3 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
             placeholder="decisão envolve gastar dinheiro&#10;mudança vai pra produção&#10;dois especialistas discordam"
           />
 
-          <label className="mb-3 flex items-start gap-2 text-[11px]">
+          <label className="mb-3 flex items-start gap-2 text-xs">
             <input
               type="checkbox"
               checked={propagate}
@@ -1030,14 +1084,14 @@ function AutonomyEditor({ name, cfg, origin, onClose }: AutonomyEditorProps) {
                 <code className="rounded bg-slate-100 px-1">{origin.category}/{origin.slug}</code>
               ) : '(origem do seed desconhecida pra este agente)'}
               <br />
-              <span className="text-[10px] text-slate-500">
+              <span className="text-xs text-slate-500">
                 se marcado, a mesma mudança é gravada no template — próximos projetos já vêm com essa autonomia.
               </span>
             </span>
           </label>
 
           {err && (
-            <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}
@@ -1108,7 +1162,7 @@ function ModelEditor({ name, current, origin, onClose }: ModelEditorProps) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Cpu className="h-4 w-4" /> Modelo de {name}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               versão do modelo que o agente usa ao responder
             </p>
           </div>
@@ -1117,7 +1171,7 @@ function ModelEditor({ name, current, origin, onClose }: ModelEditorProps) {
           </Button>
         </header>
         <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
-          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+          <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
             Modelo <span className="text-slate-400">(deixe vazio pra usar o default)</span>
           </label>
           <input
@@ -1125,19 +1179,19 @@ function ModelEditor({ name, current, origin, onClose }: ModelEditorProps) {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="opus, sonnet, opus-4.7, claude-sonnet-4-6…"
-            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
           />
           <datalist id="model-suggestions">
             {MODEL_SUGGESTIONS.map((m) => (
               <option key={m} value={m} />
             ))}
           </datalist>
-          <p className="mb-3 text-[10px] text-slate-500">
+          <p className="mb-3 text-xs text-slate-500">
             aceita aliases curtos (opus/sonnet/haiku) ou IDs completos (claude-opus-4-7). o valor
             é passado direto ao <code className="rounded bg-slate-100 px-1">claude -p --model</code>.
           </p>
 
-          <label className="mb-3 flex items-start gap-2 text-[11px]">
+          <label className="mb-3 flex items-start gap-2 text-xs">
             <input
               type="checkbox"
               checked={propagate}
@@ -1150,14 +1204,14 @@ function ModelEditor({ name, current, origin, onClose }: ModelEditorProps) {
                 <code className="rounded bg-slate-100 px-1">{origin.category}/{origin.slug}</code>
               ) : '(origem do seed desconhecida pra este agente)'}
               <br />
-              <span className="text-[10px] text-slate-500">
+              <span className="text-xs text-slate-500">
                 se marcado, a mesma mudança é gravada no template — próximos projetos já vêm com esse modelo.
               </span>
             </span>
           </label>
 
           {err && (
-            <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}
@@ -1215,7 +1269,7 @@ function ContextEditor({ name, current, onClose }: ContextEditorProps) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <FileText className="h-4 w-4" /> mini-contexto de {name}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               markdown injetado no prompt do agente a cada conversa
             </p>
           </div>
@@ -1228,15 +1282,15 @@ function ContextEditor({ name, current, onClose }: ContextEditorProps) {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             spellCheck={false}
-            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-[11px] leading-snug focus:border-indigo-400 focus:outline-none"
+            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-xs leading-snug focus:border-indigo-400 focus:outline-none"
             placeholder={'# Responsabilidade\n...\n\n## Princípios\n...'}
           />
-          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
             <span>{content.length} chars · markdown</span>
             {dirty && <span className="text-amber-600">alterações não salvas</span>}
           </div>
           {err && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}
@@ -1298,7 +1352,7 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Plug className="h-4 w-4" /> MCPs de {name}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               servidores MCP que o agente pode acessar quando invocado
             </p>
           </div>
@@ -1307,7 +1361,7 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
           </Button>
         </header>
         <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
-          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+          <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
             MCPs <span className="text-slate-400">(separe por vírgula ou quebra de linha)</span>
           </label>
           <input
@@ -1315,7 +1369,7 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="ex: resend, supabase"
-            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
           />
           <datalist id="mcps-editor-suggestions">
             {suggestions.map((m) => <option key={m} value={m} />)}
@@ -1323,18 +1377,18 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
           {parsed.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1">
               {parsed.map((m) => (
-                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700">
+                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-xs text-violet-700">
                   {m}
                 </span>
               ))}
             </div>
           )}
-          <p className="text-[10px] text-slate-500">
+          <p className="text-xs text-slate-500">
             sugestões vêm de <code className="rounded bg-slate-100 px-1">~/.claude.json</code> (global + projeto) e
             de MCPs já referenciados em outros agentes. você pode digitar um nome novo — basta confirmar.
           </p>
           {err && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}
@@ -1344,6 +1398,205 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
             cancelar
           </Button>
           <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'salvando…' : 'salvar'}
+          </Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// ── Editor do escopo do cofre (secrets injetados como env vars) ──────────────
+
+interface VaultAccessEditorProps {
+  name: string;
+  current: string[];
+  onClose: () => void;
+}
+
+function VaultAccessEditor({ name, current, onClose }: VaultAccessEditorProps) {
+  const [available, setAvailable] = useState<string[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(current));
+  const [vaultStatus, setVaultStatus] = useState<{ initialized: boolean; locked: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const st = await getVaultStatus();
+        if (!alive) return;
+        setVaultStatus({ initialized: st.initialized, locked: st.locked });
+        if (st.initialized && !st.locked) {
+          const keys = await listVaultKeys();
+          if (alive) setAvailable(keys);
+        } else {
+          if (alive) setAvailable([]);
+        }
+      } catch (e: any) {
+        if (alive) setErr(e?.message || 'falha ao ler cofre');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const toggle = (key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateAgentVault(name, Array.from(selected).sort());
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const missingInVault = Array.from(selected).filter((k) => available && !available.includes(k));
+  const allKeys = Array.from(new Set([...(available || []), ...current])).sort();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <KeyRound className="h-4 w-4 text-amber-600" /> Cofre de {name}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              secrets injetados como env vars no spawn do agente
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </header>
+
+        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-sm space-y-3">
+          {loading && <p className="text-slate-500">carregando secrets…</p>}
+
+          {!loading && vaultStatus && !vaultStatus.initialized && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <div className="font-semibold">Cofre não inicializado</div>
+              <p className="mt-1">crie o cofre na aba "Cofre" antes de configurar secrets por agente.</p>
+            </div>
+          )}
+
+          {!loading && vaultStatus?.initialized && vaultStatus.locked && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Lock className="h-3 w-3" /> UI do cofre travada
+              </div>
+              <p className="mt-1">
+                desbloqueie o cofre (painel "Cofre") pra ver a lista de secrets disponíveis. os secrets já vinculados
+                continuam sendo injetados nos agentes mesmo com a UI travada.
+              </p>
+              {current.length > 0 && (
+                <>
+                  <p className="mt-2 font-semibold text-slate-800">
+                    atualmente vinculados: <span className="font-normal text-slate-500">({current.length})</span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">nomes ocultos — destrave o cofre pra ver.</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {current.map((_, i) => (
+                      <span
+                        key={i}
+                        className="flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0 font-mono text-sm text-amber-700"
+                      >
+                        <Lock className="h-2.5 w-2.5" />••••••••
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {!loading && vaultStatus?.initialized && !vaultStatus.locked && (
+            <>
+              <div className="rounded-md border border-indigo-100 bg-indigo-50/50 px-3 py-2 text-sm text-slate-700">
+                marque os secrets que este agente pode usar. eles viram env vars (ex:{' '}
+                <code className="rounded bg-white px-1">ASAAS_TOKEN</code>) no subprocess do agente. fora daqui, o
+                agente não enxerga o resto do cofre.
+              </div>
+
+              {allKeys.length === 0 ? (
+                <p className="text-slate-500">
+                  nenhum secret no cofre ainda. adicione em <strong>Cofre → novo secret</strong> primeiro.
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {allKeys.map((k) => {
+                    const checked = selected.has(k);
+                    const missing = !!available && !available.includes(k);
+                    return (
+                      <li key={k}>
+                        <label
+                          className={cn(
+                            'flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 transition',
+                            checked ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:bg-slate-50',
+                            missing && 'border-red-200 bg-red-50/50',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggle(k)}
+                            className="h-3.5 w-3.5"
+                          />
+                          <code className="flex-1 font-mono text-sm text-slate-900">{k}</code>
+                          {missing && (
+                            <span className="text-sm text-red-600" title="secret vinculado mas não existe no cofre">
+                              ausente
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {missingInVault.length > 0 && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <strong>{missingInVault.length} secret(s) vinculados mas não existem no cofre</strong> — o agente
+                  roda sem essas envs e loga <code>vault_partial</code>. desmarque pra limpar a lista.
+                </div>
+              )}
+
+              <p className="text-sm text-slate-500">
+                mudanças aqui afetam o próximo spawn do agente. secrets não ficam no prompt — são env vars do processo.
+              </p>
+            </>
+          )}
+
+          {err && (
+            <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-sm text-red-700">
+              {err}
+            </div>
+          )}
+        </div>
+
+        <footer className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
+            cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving || loading} className="gap-1.5">
             <Save className="h-3.5 w-3.5" />
             {saving ? 'salvando…' : 'salvar'}
           </Button>

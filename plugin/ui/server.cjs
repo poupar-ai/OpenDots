@@ -213,11 +213,19 @@ function humanIsOnline(h) {
 }
 
 const HUMAN_LOCATIONS = ['core', 'devs', 'specialists', 'integrators', 'motors', 'firefighter'];
+const HUMAN_GENDERS = ['male', 'female', 'other'];
 
 function sanitizeLocation(v) {
   if (typeof v !== 'string') return null;
   return HUMAN_LOCATIONS.includes(v) ? v : null;
 }
+
+function sanitizeGender(v) {
+  if (typeof v !== 'string') return null;
+  return HUMAN_GENDERS.includes(v) ? v : null;
+}
+
+const HUMAN_OUTFITS = ['pants', 'dress'];
 
 function sanitizeSkin(v) {
   if (!v || typeof v !== 'object') return null;
@@ -226,12 +234,14 @@ function sanitizeSkin(v) {
   const hair = num(v.hair);
   const shirt = num(v.shirt);
   const pants = num(v.pants);
-  if (skinTone === null && hair === null && shirt === null && pants === null) return null;
+  const outfit = HUMAN_OUTFITS.includes(v.outfit) ? v.outfit : null;
+  if (skinTone === null && hair === null && shirt === null && pants === null && outfit === null) return null;
   return {
     skinTone: skinTone ?? 0xf1c27d,
     hair: hair ?? 0x44403c,
     shirt: shirt ?? 0x3b82f6,
     pants: pants ?? 0x1f2937,
+    outfit: outfit ?? 'pants',
   };
 }
 
@@ -252,6 +262,7 @@ function humanSummary(h) {
     important: h.important || '',
     offline_privacy: h.offline_privacy || { never_share: [] },
     location: h.location || null,
+    gender: h.gender || null,
     skin: h.skin || null,
     position: h.position || null,
     created_at: h.created_at,
@@ -1617,6 +1628,35 @@ async function handleAgentAutonomy(agentName, req, res) {
   sendJson(res, 200, { ok: true, agent: agentName, updated, propagated });
 }
 
+async function handleAgentVault(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { secrets } = body || {};
+  if (!Array.isArray(secrets)) {
+    return sendJson(res, 400, { error: 'need {secrets: string[]}' });
+  }
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+  let updated;
+  try {
+    updated = agents.updateVaultAccess(memDir, agentName, { secrets });
+  } catch (err) {
+    return sendJson(res, 400, { error: err.message });
+  }
+  appendAgentLog(agentName, {
+    ts: new Date().toISOString(),
+    type: 'vault_access_updated',
+    source: 'ui',
+    secrets: updated.secrets || [],
+  });
+  sendJson(res, 200, { ok: true, agent: agentName, secrets: updated.secrets || [] });
+}
+
 async function handleAgentScope(agentName, req, res) {
   const raw = await readBody(req);
   let body;
@@ -1716,16 +1756,18 @@ async function handleAgentCreate(req, res) {
   try { body = JSON.parse(raw); } catch {
     return sendJson(res, 400, { error: 'invalid json' });
   }
-  const { name, type, emoji, model, role, tools, mcps, can_talk_to, context } = body || {};
+  const { name, type, emoji, gender, model, role, tools, mcps, can_talk_to, context } = body || {};
   if (typeof name !== 'string' || !name.trim()) {
     return sendJson(res, 400, { error: 'name é obrigatório' });
   }
   if (typeof type !== 'string' || !agents.AGENT_TYPES.has(type)) {
     return sendJson(res, 400, { error: `type inválido. Use: ${[...agents.AGENT_TYPES].join(', ')}` });
   }
+  const genderClean = ['male', 'female', 'other'].includes(gender) ? gender : undefined;
   const config = {
     type,
     emoji: typeof emoji === 'string' ? emoji.trim().slice(0, 8) : undefined,
+    gender: genderClean,
     model: typeof model === 'string' && model.trim() ? model.trim() : undefined,
     role:  typeof role === 'string'  ? role.trim().slice(0, 500) : undefined,
     tools: sanitizeStringArray(tools, { max: 50, maxLen: 60 }),
@@ -2552,7 +2594,7 @@ async function handleHumansCreate(req, res) {
   const raw = await readBody(req);
   let body;
   try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: 'invalid json' }); }
-  const { name, description, skills, important, offline_privacy, notes, location, skin, position } = body || {};
+  const { name, description, skills, important, offline_privacy, notes, location, gender, skin, position } = body || {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     return sendJson(res, 400, { error: 'need name' });
   }
@@ -2575,6 +2617,7 @@ async function handleHumansCreate(req, res) {
     },
     notes: (notes || '').toString().slice(0, 2000),
     location: sanitizeLocation(location),
+    gender: sanitizeGender(gender),
     skin: sanitizeSkin(skin),
     position: sanitizePosition(position),
     created_at: now,
@@ -2601,7 +2644,7 @@ async function handleHumanUpdate(id, req, res) {
   const data = loadHumans();
   const h = data.humans[id];
   if (!h) return sendJson(res, 404, { error: 'not found' });
-  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'skin', 'position'];
+  const fields = ['name', 'description', 'skills', 'important', 'offline_privacy', 'notes', 'location', 'gender', 'skin', 'position'];
   for (const f of fields) {
     if (body[f] === undefined) continue;
     if (f === 'skills') {
@@ -2613,6 +2656,8 @@ async function handleHumanUpdate(id, req, res) {
       h.offline_privacy = { never_share: ns };
     } else if (f === 'location') {
       h.location = sanitizeLocation(body.location);
+    } else if (f === 'gender') {
+      h.gender = sanitizeGender(body.gender);
     } else if (f === 'skin') {
       h.skin = sanitizeSkin(body.skin);
     } else if (f === 'position') {
@@ -2871,6 +2916,12 @@ const server = http.createServer((req, res) => {
   if (scopeMatch && req.method === 'PUT') {
     const agentName = decodeURIComponent(scopeMatch[1]);
     handleAgentScope(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  const vaultAccessMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/vault$/);
+  if (vaultAccessMatch && req.method === 'PUT') {
+    const agentName = decodeURIComponent(vaultAccessMatch[1]);
+    handleAgentVault(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
     return;
   }
   const contextMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/context$/);

@@ -1,5 +1,5 @@
 import { Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
-import type { HumanSkin } from '@/lib/humans';
+import type { HumanGender, HumanSkin } from '@/lib/humans';
 
 const OUTLINE = 0x0f172a;
 const SHADOW = 0x0f172a;
@@ -8,6 +8,7 @@ export class HumanSprite extends Container {
   public humanName: string;
   public humanId: string;
   private skin: HumanSkin;
+  private gender: HumanGender;
   private isMe: boolean;
   private isOnline: boolean;
   private shadow: Graphics;
@@ -27,12 +28,13 @@ export class HumanSprite extends Container {
     humanId: string,
     humanName: string,
     skin: HumanSkin,
-    opts: { isMe?: boolean; online?: boolean } = {},
+    opts: { isMe?: boolean; online?: boolean; gender?: HumanGender | null } = {},
   ) {
     super();
     this.humanId = humanId;
     this.humanName = humanName;
     this.skin = skin;
+    this.gender = (opts.gender as HumanGender) || 'other';
     this.isMe = !!opts.isMe;
     this.isOnline = opts.online !== false;
 
@@ -49,15 +51,29 @@ export class HumanSprite extends Container {
     this.body = new Container();
     this.addChild(this.body);
 
-    // pernas / calça
-    const legL = new Graphics();
-    legL.roundRect(-3, 0, 6, 12, 1.5).fill({ color: skin.pants });
-    legL.position.set(-4, 14);
-    this.body.addChild(legL);
-    const legR = new Graphics();
-    legR.roundRect(-3, 0, 6, 12, 1.5).fill({ color: skin.pants });
-    legR.position.set(4, 14);
-    this.body.addChild(legR);
+    const isDress = skin.outfit === 'dress';
+
+    if (isDress) {
+      // pernas expostas (cor da pele)
+      const legL = new Graphics();
+      legL.roundRect(-2.5, 0, 5, 12, 1.5).fill({ color: skin.skinTone });
+      legL.position.set(-4, 14);
+      this.body.addChild(legL);
+      const legR = new Graphics();
+      legR.roundRect(-2.5, 0, 5, 12, 1.5).fill({ color: skin.skinTone });
+      legR.position.set(4, 14);
+      this.body.addChild(legR);
+    } else {
+      // pernas / calça
+      const legL = new Graphics();
+      legL.roundRect(-3, 0, 6, 12, 1.5).fill({ color: skin.pants });
+      legL.position.set(-4, 14);
+      this.body.addChild(legL);
+      const legR = new Graphics();
+      legR.roundRect(-3, 0, 6, 12, 1.5).fill({ color: skin.pants });
+      legR.position.set(4, 14);
+      this.body.addChild(legR);
+    }
 
     // sapatos
     const shoes = new Graphics();
@@ -65,7 +81,7 @@ export class HumanSprite extends Container {
     shoes.roundRect(0, 26, 8, 3, 1.5).fill({ color: 0x0f172a });
     this.body.addChild(shoes);
 
-    // torso (camisa)
+    // torso (camisa/vestido)
     const torso = new Graphics();
     torso
       .roundRect(-10, -7, 20, 20, 5)
@@ -73,6 +89,20 @@ export class HumanSprite extends Container {
       .stroke({ width: 1.2, color: OUTLINE, alpha: 0.35 });
     torso.rect(-10, 11, 20, 3).fill({ color: 0x00000022 });
     this.body.addChild(torso);
+
+    if (isDress) {
+      // saia trapezoidal cobrindo topo das pernas
+      const skirt = new Graphics();
+      skirt
+        .moveTo(-10, 11)
+        .lineTo(10, 11)
+        .lineTo(15, 24)
+        .lineTo(-15, 24)
+        .closePath()
+        .fill({ color: skin.shirt })
+        .stroke({ width: 1.2, color: OUTLINE, alpha: 0.35 });
+      this.body.addChild(skirt);
+    }
 
     // braços
     const armL = new Graphics();
@@ -92,20 +122,56 @@ export class HumanSprite extends Container {
 
     // cabeça
     this.head = new Container();
+
+    const isFemale = this.gender === 'female';
+
+    // cabelo de trás (feminino) — desenhado ANTES do rosto, cai até os ombros
+    if (isFemale) {
+      const backHair = new Graphics();
+      backHair
+        .moveTo(-13, -15)
+        .quadraticCurveTo(-18, -22, -11, -28)
+        .quadraticCurveTo(0, -32, 11, -28)
+        .quadraticCurveTo(18, -22, 13, -15)
+        .lineTo(13, 12)
+        .quadraticCurveTo(10, 15, 6, 12)
+        .lineTo(6, -8)
+        .lineTo(-6, -8)
+        .lineTo(-6, 12)
+        .quadraticCurveTo(-10, 15, -13, 12)
+        .closePath()
+        .fill({ color: skin.hair })
+        .stroke({ width: 1, color: OUTLINE, alpha: 0.25 });
+      this.head.addChild(backHair);
+    }
+
     const face = new Graphics();
     face.circle(0, -18, 10).fill({ color: skin.skinTone }).stroke({ width: 1.2, color: OUTLINE, alpha: 0.4 });
     this.head.addChild(face);
 
     // cabelo (topo + franja)
     const hair = new Graphics();
-    hair.ellipse(0, -24, 11, 7).fill({ color: skin.hair });
-    hair
-      .moveTo(-10, -20)
-      .quadraticCurveTo(0, -28, 10, -20)
-      .lineTo(10, -17)
-      .quadraticCurveTo(0, -22, -10, -17)
-      .closePath()
-      .fill({ color: skin.hair });
+    if (isFemale) {
+      // topo mais cheio + franja lateral
+      hair.ellipse(0, -24, 12, 8).fill({ color: skin.hair });
+      hair
+        .moveTo(-11, -19)
+        .quadraticCurveTo(-6, -28, 4, -22)
+        .quadraticCurveTo(8, -20, 11, -19)
+        .lineTo(11, -16)
+        .quadraticCurveTo(0, -22, -11, -16)
+        .closePath()
+        .fill({ color: skin.hair });
+    } else {
+      hair.ellipse(0, -24, 11, 7).fill({ color: skin.hair });
+      hair
+        .moveTo(-10, -20)
+        .quadraticCurveTo(0, -28, 10, -20)
+        .lineTo(10, -17)
+        .quadraticCurveTo(0, -22, -10, -17)
+        .closePath()
+        .fill({ color: skin.hair });
+    }
     this.head.addChild(hair);
 
     this.eyeL = new Graphics();

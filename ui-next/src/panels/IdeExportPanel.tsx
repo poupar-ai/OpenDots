@@ -37,7 +37,7 @@ export function IdeExportPanel({ onClose }: Props) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Code2 className="h-4 w-4" /> Exportar para IDE
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               gera os agentes no formato nativo de cada editor. fonte única: .claude-project-memory/
             </p>
           </div>
@@ -59,7 +59,7 @@ export function IdeExportPanel({ onClose }: Props) {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold">{meta.label}</p>
-                      <p className="font-mono text-[10px] text-slate-500">{meta.hint}</p>
+                      <p className="font-mono text-xs text-slate-500">{meta.hint}</p>
                     </div>
                     <Button
                       size="sm"
@@ -81,7 +81,7 @@ export function IdeExportPanel({ onClose }: Props) {
               <div className="flex items-center gap-1.5 font-semibold">
                 <Check className="h-3.5 w-3.5" /> {IDE_META[last.ide].label} — {last.written.length} arquivos
               </div>
-              <ul className="mt-1 space-y-0.5 font-mono text-[10px] text-emerald-800">
+              <ul className="mt-1 space-y-0.5 font-mono text-xs text-emerald-800">
                 {last.written.slice(0, 12).map((f) => (
                   <li key={f}>· {f}</li>
                 ))}

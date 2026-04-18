@@ -216,14 +216,14 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
                         )}
                       >
                         {m.shadow && !mine && (
-                          <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-slate-500">
+                          <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
                             <Ghost className="h-3 w-3" /> shadow de {selectedHuman.name}
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words">{m.content}</div>
                         <div
                           className={cn(
-                            'mt-1 text-right text-[10px]',
+                            'mt-1 text-right text-xs',
                             mine ? 'text-white/70' : 'text-slate-400',
                           )}
                         >

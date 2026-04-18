@@ -96,7 +96,7 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Package className="h-4 w-4" /> Instalar time de agentes
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               projeto: <span className="font-mono">{projectRoot || '…'}</span>
             </p>
           </div>
@@ -128,7 +128,7 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
                 {cat.label}
               </h3>
               {cat.description && (
-                <p className="text-[11px] text-muted-foreground">{cat.description}</p>
+                <p className="text-xs text-muted-foreground">{cat.description}</p>
               )}
 
               <div className="mt-2 space-y-2">
@@ -153,7 +153,7 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
                           <span className="text-sm font-semibold">{p.label}</span>
                           <Badge variant="outline">{p.agents.length} agentes</Badge>
                         </div>
-                        <span className="font-mono text-[10px] text-slate-400">{ref}</span>
+                        <span className="font-mono text-xs text-slate-400">{ref}</span>
                       </button>
 
                       {expanded && (
@@ -163,12 +163,12 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
                           )}
 
                           <div className="mb-3 flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-500">
+                            <span className="text-xs font-semibold text-slate-500">
                               Selecionados: {sel.size}/{p.agents.length}
                             </span>
                             <button
                               type="button"
-                              className="text-[11px] text-slate-500 hover:text-slate-900"
+                              className="text-xs text-slate-500 hover:text-slate-900"
                               onClick={() => resetPicked(ref, p.agents)}
                             >
                               todos
@@ -200,7 +200,7 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
                           </div>
 
                           <div className="mt-4 flex items-center justify-between gap-2">
-                            <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
                               <input
                                 type="checkbox"
                                 checked={overwrite}

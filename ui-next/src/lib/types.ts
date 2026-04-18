@@ -1,5 +1,6 @@
 export type AgentType = 'core' | 'specialist' | 'integrator' | 'motor' | 'firefighter';
 export type AutonomyLevel = 'low' | 'medium' | 'high';
+export type Gender = 'male' | 'female' | 'other';
 
 export interface Autonomy {
   level: AutonomyLevel;
@@ -11,12 +12,14 @@ export interface AgentCfg {
   profession?: string;
   role?: string;
   emoji?: string;
+  gender?: Gender;
   can_talk_to?: string[];
   consults?: string[]; // legacy
   model?: string;
   context_file?: string;
   tools?: string[];
   mcps?: string[];
+  secrets?: string[];
   scope?: {
     bash_allow?: string[];
   };

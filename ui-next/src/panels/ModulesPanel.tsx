@@ -88,7 +88,7 @@ export function ModulesPanel({ data }: Props) {
               {data.project.name}
             </h2>
             <p
-              className="truncate font-mono text-[10px] text-muted-foreground"
+              className="truncate font-mono text-xs text-muted-foreground"
               title={data.project.root}
             >
               {data.project.root.replace(/^.*\//, '…/')}
@@ -159,7 +159,7 @@ export function ModulesPanel({ data }: Props) {
               e.stopPropagation();
               setCreateAgentOpen(true);
             }}
-            className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+            className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
             title="criar novo agente"
           >
             <Plus className="h-3 w-3" /> novo
@@ -180,7 +180,7 @@ export function ModulesPanel({ data }: Props) {
 
       {stats.codeIndex && (
         <div className="rounded-xl border bg-white p-3 shadow-sm">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Code2 className="h-3.5 w-3.5" /> Code Index
           </div>
           <div className="flex items-baseline justify-between">
@@ -188,7 +188,7 @@ export function ModulesPanel({ data }: Props) {
               <div className="text-lg font-semibold tabular-nums leading-none">
                 {fmtCompact(stats.codeIndex.files)}
               </div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">
                 arquivos
               </div>
             </div>
@@ -197,7 +197,7 @@ export function ModulesPanel({ data }: Props) {
               <div className="text-lg font-semibold tabular-nums leading-none">
                 {fmtCompact(stats.codeIndex.symbols)}
               </div>
-              <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">
                 símbolos
               </div>
             </div>
@@ -226,7 +226,7 @@ export function ModulesPanel({ data }: Props) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+    <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </h3>
   );
@@ -260,7 +260,7 @@ function Section({
           {label}
         </h3>
         {badge != null && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
             {badge}
           </span>
         )}
@@ -305,7 +305,7 @@ function StatCard({
       <div className="mt-2 text-xl font-semibold tabular-nums leading-none">
         {fmtCompact(value ?? 0)}
       </div>
-      <div className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
     </div>
@@ -339,11 +339,11 @@ function DocRow({
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-mono text-[12px] font-medium text-slate-800 group-hover:text-indigo-700">
+          <span className="truncate font-mono text-xs font-medium text-slate-800 group-hover:text-indigo-700">
             {label}
           </span>
         </div>
-        <p className="truncate text-[10px] text-muted-foreground">{hint}</p>
+        <p className="truncate text-xs text-muted-foreground">{hint}</p>
       </div>
       <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
@@ -369,10 +369,10 @@ function TypeRow({
           style={{ background: meta.color, boxShadow: `0 0 0 2px ${meta.color}20` }}
           aria-hidden
         />
-        <span className="flex-1 truncate text-[12px] font-medium text-slate-800">
+        <span className="flex-1 truncate text-xs font-medium text-slate-800">
           {meta.label}
         </span>
-        <span className="font-mono text-[11px] tabular-nums text-slate-600">
+        <span className="font-mono text-xs tabular-nums text-slate-600">
           {count}
         </span>
       </div>
@@ -426,7 +426,7 @@ function DocEditor({ name, current, hint, onClose }: DocEditorProps) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <FileText className="h-4 w-4" /> {name}
             </div>
-            <p className="text-[11px] text-muted-foreground">{hint}</p>
+            <p className="text-xs text-muted-foreground">{hint}</p>
           </div>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={tryClose}>
             <X className="h-4 w-4" />
@@ -437,15 +437,15 @@ function DocEditor({ name, current, hint, onClose }: DocEditorProps) {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             spellCheck={false}
-            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-[11px] leading-snug focus:border-indigo-400 focus:outline-none"
+            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-xs leading-snug focus:border-indigo-400 focus:outline-none"
             placeholder={current ? '' : `# ${name.replace('.md', '')}\n\n...`}
           />
-          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
             <span>{content.length} chars · markdown</span>
             {dirty && <span className="text-amber-600">alterações não salvas</span>}
           </div>
           {err && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
               {err}
             </div>
           )}

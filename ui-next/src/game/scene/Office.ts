@@ -18,6 +18,20 @@ interface Cloud {
   drift: number;
 }
 
+interface Lamp {
+  // Cada lâmpada tem a cúpula (fixa) e o halo (alpha varia com a hora).
+  fixture: Graphics;
+  bulb: Graphics;
+  halo: Graphics;
+}
+
+interface WindowRect {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+}
+
 interface Room {
   id: string;
   label: string;
@@ -27,6 +41,9 @@ interface Room {
   floor: number;
   container: Container;
   decorContainer: Container;
+  lampsContainer: Container;
+  lamps: Lamp[];
+  windows: WindowRect[];
   x: number;
   width: number;
   floorY: number;
@@ -41,11 +58,65 @@ interface Room {
   };
 }
 
+type DayPhase = 'night' | 'dawn' | 'morning' | 'midday' | 'afternoon' | 'dusk';
+
+interface DayState {
+  hours: number;       // hora fracionária 0..24
+  phase: DayPhase;
+  isDay: boolean;      // sol visível (~6h-18h)
+  sunAlt: number;      // 0..1: altura do sol no céu
+  moonAlt: number;     // 0..1: altura da lua
+  sunX: number;        // 0..1: posição horizontal (L→O)
+  moonX: number;       // 0..1
+  lampIntensity: number; // 0 (dia pleno) → 1 (noite)
+}
+
+function computeDaylight(now = new Date()): DayState {
+  const h = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+  const isDay = h >= 6 && h < 18;
+  const sunAlt = isDay ? Math.sin(((h - 6) / 12) * Math.PI) : 0;
+  let moonAlt = 0;
+  if (!isDay) {
+    const nh = (h + 24 - 18) % 24; // 0..12 (18h→0, 06h→12)
+    moonAlt = Math.sin((nh / 12) * Math.PI);
+  }
+  const sunX = (h - 6) / 12;
+  const moonX = ((h + 24 - 18) % 24) / 12;
+  let phase: DayPhase;
+  if (h >= 5 && h < 7) phase = 'dawn';
+  else if (h >= 7 && h < 11) phase = 'morning';
+  else if (h >= 11 && h < 15) phase = 'midday';
+  else if (h >= 15 && h < 17) phase = 'afternoon';
+  else if (h >= 17 && h < 19) phase = 'dusk';
+  else phase = 'night';
+  // Lâmpadas ligam gradualmente no crepúsculo e ficam plenas à noite.
+  let lampIntensity = 0;
+  if (phase === 'night') lampIntensity = 1;
+  else if (phase === 'dawn') lampIntensity = Math.max(0, 1 - (h - 5) / 2);
+  else if (phase === 'dusk') lampIntensity = Math.max(0, (h - 17) / 2);
+  else if (phase === 'afternoon') lampIntensity = Math.max(0, (h - 16.5) / 2);
+  return { hours: h, phase, isDay, sunAlt, moonAlt, sunX, moonX, lampIntensity };
+}
+
+// Gradiente do céu (topo → horizonte) por fase.
+const SKY_GRADIENT: Record<DayPhase, [number, number]> = {
+  night:     [0x0a0f1f, 0x1e1b4b],
+  dawn:      [0x1e1b4b, 0xfbbf77],
+  morning:   [0xbfdbfe, 0xfde4ff],
+  midday:    [0x93c5fd, 0xdbeafe],
+  afternoon: [0xfdba74, 0xbae6fd],
+  dusk:      [0x7c3aed, 0xf97316],
+  // night repetido: usado quando fora das faixas
+};
+
 // Cenário 2D multi-andar (plataforma). Céu + skyline no topo, andares empilhados,
 // calçada/chão embaixo. O mundo pode ser maior que o viewport — câmera/scroll
 // fica a cargo do chamador (agentsPixi). Cada andar distribui salas horizontalmente.
 export class Office extends Container {
   private sky: Graphics;
+  private starsG: Graphics;
+  private sunG: Graphics;
+  private moonG: Graphics;
   private skyline: Graphics;
   private cloudLayer: Container;
   private clouds: Cloud[] = [];
@@ -53,6 +124,8 @@ export class Office extends Container {
   private building: Container;
   private groundG: Graphics;
   private floorDividers: Graphics;
+  private nightTint: Graphics;
+  private celestialInWindow: Graphics;
   private rooms = new Map<string, Room>();
   private positions = new Map<string, [number, number]>();
   private pendingDepts: DepartmentInput[] | null = null;
@@ -62,6 +135,8 @@ export class Office extends Container {
   private worldH = 0;
   private numFloors = 0;
   private t = 0;
+  private day: DayState = computeDaylight();
+  private dayTickAccum = 999; // força update no primeiro tick
 
   private readonly SKY_H = 64;
   private readonly ROOF_H = 8;
@@ -72,19 +147,29 @@ export class Office extends Container {
   constructor() {
     super();
     this.sky = new Graphics();
+    this.starsG = new Graphics();
+    this.sunG = new Graphics();
+    this.moonG = new Graphics();
     this.skyline = new Graphics();
     this.cloudLayer = new Container();
     this.roof = new Graphics();
     this.building = new Container();
     this.floorDividers = new Graphics();
     this.groundG = new Graphics();
+    this.nightTint = new Graphics();
+    this.celestialInWindow = new Graphics();
     this.addChild(this.sky);
+    this.addChild(this.starsG);
+    this.addChild(this.sunG);
+    this.addChild(this.moonG);
     this.addChild(this.cloudLayer);
     this.addChild(this.skyline);
     this.addChild(this.roof);
     this.addChild(this.building);
+    this.addChild(this.celestialInWindow);
     this.addChild(this.floorDividers);
     this.addChild(this.groundG);
+    this.addChild(this.nightTint);
   }
 
   resize(w: number, h: number) {
@@ -116,6 +201,7 @@ export class Office extends Container {
     for (const d of depts) {
       const container = new Container();
       const decorContainer = new Container();
+      const lampsContainer = new Container();
       this.building.addChild(container);
       this.rooms.set(d.id, {
         id: d.id,
@@ -126,6 +212,9 @@ export class Office extends Container {
         floor: d.floor,
         container,
         decorContainer,
+        lampsContainer,
+        lamps: [],
+        windows: [],
         x: 0,
         width: 0,
         floorY: 0,
@@ -177,6 +266,12 @@ export class Office extends Container {
 
   tick(t: Ticker) {
     this.t += t.deltaTime;
+    // Atualiza ciclo dia/noite a cada ~2s para economizar desenho.
+    this.dayTickAccum += t.deltaTime;
+    if (this.dayTickAccum >= 120) {
+      this.dayTickAccum = 0;
+      this.refreshDaylight();
+    }
     for (const c of this.clouds) {
       c.baseX -= c.drift * t.deltaTime;
       if (c.baseX < -60) c.baseX = this.worldW + 60;
@@ -218,13 +313,19 @@ export class Office extends Container {
   // ── layout geral ─────────────────────────────────────────────
   private relayoutAll() {
     this.computeWorldSize();
+    this.day = computeDaylight();
     this.drawSky();
+    this.drawStars();
+    this.drawSun();
+    this.drawMoon();
     this.drawSkyline();
     this.drawRoof();
     this.seedClouds();
     this.layoutRooms();
     this.drawFloorDividers();
     this.drawGround();
+    this.drawNightTint();
+    this.drawCelestialInWindows();
   }
 
   private computeWorldSize() {
@@ -252,14 +353,90 @@ export class Office extends Container {
   // ── cenário ──────────────────────────────────────────────────
   private drawSky() {
     this.sky.clear();
+    const [top, bot] = SKY_GRADIENT[this.day.phase] || SKY_GRADIENT.midday;
     const bands = 16;
     for (let i = 0; i < bands; i++) {
       const t = i / (bands - 1);
-      const c = lerpColor(0xbfdbfe, 0xfde4ff, t);
+      const c = lerpColor(top, bot, t);
       this.sky
         .rect(0, (this.SKY_H * i) / bands, this.worldW, this.SKY_H / bands + 1)
         .fill({ color: c });
     }
+  }
+
+  private drawStars() {
+    this.starsG.clear();
+    // Visível só à noite / aurora / crepúsculo com baixa intensidade.
+    const alpha = this.day.phase === 'night' ? 1
+      : (this.day.phase === 'dawn' || this.day.phase === 'dusk') ? 0.35
+      : 0;
+    if (alpha === 0) { this.starsG.alpha = 0; return; }
+    this.starsG.alpha = alpha;
+    let seed = 42;
+    const rnd = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    const count = Math.max(30, Math.floor(this.worldW / 18));
+    for (let i = 0; i < count; i++) {
+      const x = rnd() * this.worldW;
+      const y = rnd() * (this.SKY_H - 6);
+      const r = rnd() > 0.9 ? 1.4 : 0.7;
+      const a = 0.5 + rnd() * 0.5;
+      this.starsG.circle(x, y, r).fill({ color: 0xffffff, alpha: a });
+    }
+  }
+
+  private drawSun() {
+    this.sunG.clear();
+    if (!this.day.isDay || this.day.sunAlt <= 0) { this.sunG.alpha = 0; return; }
+    this.sunG.alpha = 1;
+    // Arco semicircular: x vai da esquerda à direita; y mais alto quanto maior sunAlt.
+    const margin = 40;
+    const x = margin + (this.worldW - margin * 2) * this.day.sunX;
+    const ySkyBot = this.SKY_H - 2;
+    const y = ySkyBot - Math.max(6, this.day.sunAlt * (this.SKY_H - 14));
+    const R = 9;
+    // Halo leve
+    this.sunG.circle(x, y, R + 6).fill({ color: 0xfef3c7, alpha: 0.35 });
+    this.sunG.circle(x, y, R + 3).fill({ color: 0xfde68a, alpha: 0.55 });
+    // Corpo do sol — cor varia com a fase
+    const sunColor = this.day.phase === 'dawn' || this.day.phase === 'dusk'
+      ? 0xf97316
+      : this.day.phase === 'afternoon'
+        ? 0xfb923c
+        : 0xfde047;
+    this.sunG.circle(x, y, R).fill({ color: sunColor });
+  }
+
+  private drawMoon() {
+    this.moonG.clear();
+    if (this.day.isDay || this.day.moonAlt <= 0) { this.moonG.alpha = 0; return; }
+    this.moonG.alpha = 1;
+    const margin = 40;
+    const x = margin + (this.worldW - margin * 2) * this.day.moonX;
+    const ySkyBot = this.SKY_H - 2;
+    const y = ySkyBot - Math.max(6, this.day.moonAlt * (this.SKY_H - 14));
+    const R = 8;
+    this.moonG.circle(x, y, R + 5).fill({ color: 0xe0e7ff, alpha: 0.18 });
+    this.moonG.circle(x, y, R).fill({ color: 0xf1f5f9 });
+    // Cratera pra dar textura
+    this.moonG.circle(x - 2, y - 1, 1.4).fill({ color: 0xcbd5e1, alpha: 0.8 });
+    this.moonG.circle(x + 2.5, y + 2, 0.9).fill({ color: 0xcbd5e1, alpha: 0.8 });
+  }
+
+  private drawNightTint() {
+    this.nightTint.clear();
+    if (this.numFloors === 0) return;
+    // Camada escura aplicada sobre o prédio à noite para que as lâmpadas
+    // sejam a fonte de luz visível. Alpha cresce com a intensidade de noite.
+    const alpha = this.day.lampIntensity * 0.42;
+    if (alpha <= 0) return;
+    const y = this.SKY_H + this.ROOF_H;
+    const h = this.numFloors * this.FLOOR_H;
+    this.nightTint
+      .rect(0, y, this.worldW, h)
+      .fill({ color: 0x020617, alpha });
   }
 
   private drawSkyline() {
@@ -381,6 +558,8 @@ export class Office extends Container {
   private drawRoom(r: Room, isLast: boolean, isFirst: boolean) {
     r.container.removeChildren();
     r.decorContainer.removeChildren();
+    r.lampsContainer.removeChildren();
+    r.lamps = [];
     r.animState = {};
 
     const wallColor = lerpColor(r.color, 0xffffff, 0.82);
@@ -393,13 +572,33 @@ export class Office extends Container {
     bg.rect(r.x, r.floorY - 14, r.width, 14).fill({ color: wallShade });
     bg.rect(r.x, r.floorY - 14, r.width, 1).fill({ color: 0x334155, alpha: 0.45 });
     bg.rect(r.x, r.ceilingY, r.width, 4).fill({ color: ceilColor });
-    bg.rect(r.x, r.floorY, r.width, 6).fill({ color: floorColor });
+
+    // Piso cerâmico: faixa base + grid de azulejos com destaque nas juntas.
+    const tileH = 10;
+    const tileW = 26;
+    bg.rect(r.x, r.floorY, r.width, tileH).fill({ color: floorColor });
+    bg.rect(r.x, r.floorY, r.width, 1).fill({ color: 0x0f172a, alpha: 0.45 });
+    const tileDark = lerpColor(floorColor, 0x0f172a, 0.3);
+    const tileLight = lerpColor(floorColor, 0xffffff, 0.15);
+    for (let tx = 0; tx < r.width; tx += tileW) {
+      // Alterna tom claro/escuro pra dar profundidade.
+      const alt = ((tx / tileW) | 0) % 2 === 0;
+      bg.rect(r.x + tx + 1, r.floorY + 2, tileW - 2, tileH - 3)
+        .fill({ color: alt ? tileLight : tileDark, alpha: 0.18 });
+      // Junta vertical
+      bg.rect(r.x + tx, r.floorY + 1, 1, tileH - 1).fill({ color: 0x0f172a, alpha: 0.35 });
+    }
+    // Junta horizontal (topo do rodapé)
+    bg.rect(r.x, r.floorY + tileH - 1, r.width, 1).fill({ color: 0x0f172a, alpha: 0.25 });
+
     if (isFirst) {
       bg.rect(r.x, r.ceilingY, 2, r.floorY - r.ceilingY + 6).fill({ color: 0x334155, alpha: 0.7 });
     }
     bg.rect(r.x + r.width - 2, r.ceilingY, 2, r.floorY - r.ceilingY + 6)
       .fill({ color: 0x334155, alpha: isLast ? 0.7 : 0.7 });
     r.container.addChild(bg);
+
+    this.drawWindows(r);
 
     // Porta no canto inferior direito + placa logo acima.
     const doorW = 28;
@@ -466,7 +665,209 @@ export class Office extends Container {
     this.drawDecor(r);
     r.container.addChild(r.decorContainer);
 
+    this.drawLamps(r);
+    r.container.addChild(r.lampsContainer);
+
     this.allocateAgents(r);
+  }
+
+  // ── janelas ───────────────────────────────────────────────────
+  // Duas janelas na parede do fundo, acima do nível dos agentes, com
+  // cor/brilho interno refletindo o céu atual (céu claro de dia, escuro
+  // à noite quando as lâmpadas predominam).
+  private drawWindows(r: Room) {
+    r.windows = [];
+    const doorW = 28;
+    const doorMarginRight = 14;
+    const doorX = r.x + r.width - doorMarginRight - doorW;
+
+    // Área disponível pra janelas: descarta a faixa perto da porta.
+    const avail = { left: r.x + 18, right: doorX - 18 };
+    if (avail.right - avail.left < 80) return;
+
+    const winH = 34;
+    const winW = 46;
+    const winY = r.ceilingY + 30;
+
+    // Decide quantas janelas cabem (1 ou 2) centralizadas.
+    const span = avail.right - avail.left;
+    const count = span >= 2 * winW + 24 ? 2 : 1;
+    const gap = count === 2 ? (span - 2 * winW) / 3 : 0;
+
+    const windowG = new Graphics();
+    for (let i = 0; i < count; i++) {
+      const x = count === 2
+        ? avail.left + gap + i * (winW + gap)
+        : avail.left + (span - winW) / 2;
+      // Moldura
+      windowG
+        .rect(x - 2, winY - 2, winW + 4, winH + 4)
+        .fill({ color: 0x334155 });
+      // Vidro — céu visível por trás. Usa cor do céu com leve transparência
+      // e brilho sutil para parecer vidro limpo (sem reflexo diagonal).
+      const skyColors = SKY_GRADIENT[this.day.phase] || SKY_GRADIENT.midday;
+      const glassTop = lerpColor(skyColors[0], 0xffffff, 0.15);
+      const glassBot = lerpColor(skyColors[1], 0xffffff, 0.05);
+      windowG.rect(x, winY, winW, winH / 2).fill({ color: glassTop, alpha: 0.9 });
+      windowG.rect(x, winY + winH / 2, winW, winH / 2).fill({ color: glassBot, alpha: 0.9 });
+      // Cruz (caixilho)
+      windowG.rect(x + winW / 2 - 1, winY, 2, winH).fill({ color: 0x334155 });
+      windowG.rect(x, winY + winH / 2 - 1, winW, 2).fill({ color: 0x334155 });
+      // Peitoril
+      windowG
+        .rect(x - 4, winY + winH + 2, winW + 8, 3)
+        .fill({ color: 0x475569 });
+
+      r.windows.push({ cx: x + winW / 2, cy: winY + winH / 2, w: winW, h: winH });
+    }
+    r.container.addChild(windowG);
+  }
+
+  // ── sol/lua aparecem só na janela mais próxima ─────────────────
+  private drawCelestialInWindows() {
+    this.celestialInWindow.clear();
+    const d = this.day;
+    const showSun = d.isDay && d.sunAlt > 0;
+    const showMoon = !d.isDay && d.moonAlt > 0;
+    if (!showSun && !showMoon) return;
+
+    // Posição horizontal real do astro no mundo (mesmo cálculo do drawSun/drawMoon).
+    const margin = 40;
+    const celestialX = showSun
+      ? margin + (this.worldW - margin * 2) * d.sunX
+      : margin + (this.worldW - margin * 2) * d.moonX;
+
+    // Acha a janela mais próxima do astro (por distância horizontal).
+    let best: WindowRect | null = null;
+    let bestDist = Infinity;
+    for (const r of this.rooms.values()) {
+      for (const w of r.windows) {
+        const dist = Math.abs(w.cx - celestialX);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = w;
+        }
+      }
+    }
+    if (!best) return;
+
+    // Só mostra o astro se a janela está razoavelmente perto (não força em janelas muito afastadas).
+    if (bestDist > best.w * 2.5) return;
+
+    const g = this.celestialInWindow;
+    const halfW = best.w / 2 - 3;
+    const halfH = best.h / 2 - 3;
+    // Limita o centro do astro dentro do vidro.
+    const cx = best.cx + Math.max(-halfW, Math.min(halfW, (celestialX - best.cx) * 0.25));
+    const cy = best.cy;
+    const R = Math.min(best.w, best.h) * 0.22;
+
+    if (showSun) {
+      g.circle(cx, cy, R + 3).fill({ color: 0xfef3c7, alpha: 0.45 });
+      const sunColor = d.phase === 'dawn' || d.phase === 'dusk' ? 0xfb923c : 0xfcd34d;
+      g.circle(cx, cy, R).fill({ color: sunColor });
+      g.circle(cx - R * 0.3, cy - R * 0.3, R * 0.35)
+        .fill({ color: 0xffffff, alpha: 0.35 });
+    } else {
+      g.circle(cx, cy, R + 3).fill({ color: 0xe0e7ff, alpha: 0.25 });
+      g.circle(cx, cy, R).fill({ color: 0xf8fafc });
+      // cratera sutil
+      g.circle(cx + R * 0.35, cy - R * 0.1, R * 0.18)
+        .fill({ color: 0xcbd5e1, alpha: 0.7 });
+      g.circle(cx - R * 0.25, cy + R * 0.2, R * 0.12)
+        .fill({ color: 0xcbd5e1, alpha: 0.6 });
+    }
+  }
+
+  // ── lâmpadas pendentes ────────────────────────────────────────
+  // Uma ou duas lâmpadas penduradas no teto. À noite acendem (halo).
+  private drawLamps(r: Room) {
+    const doorW = 28;
+    const doorMarginRight = 14;
+    const doorX = r.x + r.width - doorMarginRight - doorW;
+
+    // Lâmpadas dispostas na metade superior da sala, evitando a porta.
+    const leftLim = r.x + 30;
+    const rightLim = doorX - 20;
+    const available = rightLim - leftLim;
+    if (available < 40) return;
+
+    const count = available >= 220 ? 2 : 1;
+    const positions: number[] = [];
+    if (count === 1) {
+      positions.push(leftLim + available / 2);
+    } else {
+      positions.push(leftLim + available * 0.28);
+      positions.push(leftLim + available * 0.72);
+    }
+
+    for (const lx of positions) {
+      // Fio
+      const fixture = new Graphics();
+      const cordLen = 22;
+      const ceilTop = r.ceilingY + 4;
+      fixture.rect(lx - 0.5, ceilTop, 1, cordLen).fill({ color: 0x1e293b });
+      // Canopla
+      fixture.rect(lx - 3, ceilTop - 1, 6, 2).fill({ color: 0x334155 });
+
+      // Cúpula (abajur cônico)
+      const bulbY = ceilTop + cordLen;
+      fixture
+        .moveTo(lx - 7, bulbY)
+        .lineTo(lx + 7, bulbY)
+        .lineTo(lx + 5, bulbY + 6)
+        .lineTo(lx - 5, bulbY + 6)
+        .closePath()
+        .fill({ color: 0x1f2937 })
+        .stroke({ width: 1, color: 0x0f172a, alpha: 0.6 });
+      fixture.rect(lx - 6, bulbY, 12, 1).fill({ color: 0x0f172a, alpha: 0.7 });
+
+      // Halo (luz) e bulbo — alpha controlado pelo tick
+      const halo = new Graphics();
+      halo.circle(lx, bulbY + 9, 42).fill({ color: 0xfde68a, alpha: 0.22 });
+      halo.circle(lx, bulbY + 9, 24).fill({ color: 0xfef3c7, alpha: 0.35 });
+      halo.alpha = this.day.lampIntensity;
+
+      const bulb = new Graphics();
+      bulb.circle(lx, bulbY + 6, 3).fill({ color: 0xfde68a });
+      bulb.circle(lx, bulbY + 6, 2).fill({ color: 0xfef9c3 });
+      bulb.alpha = 0.25 + this.day.lampIntensity * 0.75;
+
+      // Ordem: halo atrás (fica atrás da cúpula também), depois cúpula, depois bulbo.
+      r.lampsContainer.addChild(halo);
+      r.lampsContainer.addChild(fixture);
+      r.lampsContainer.addChild(bulb);
+      r.lamps.push({ fixture, bulb, halo });
+    }
+  }
+
+  // Recalcula a hora e atualiza sky + astros + lâmpadas sem reconstruir salas.
+  private refreshDaylight() {
+    const prevPhase = this.day.phase;
+    this.day = computeDaylight();
+    // Sempre redesenha sol/lua (posição muda ao longo do dia).
+    this.drawSun();
+    this.drawMoon();
+    // Sol/lua na janela mais próxima — recalcula a cada refresh.
+    this.drawCelestialInWindows();
+    // Se mudou a fase: atualiza sky, stars e tint.
+    if (prevPhase !== this.day.phase) {
+      this.drawSky();
+      this.drawStars();
+      this.drawNightTint();
+      // Vidros das janelas dependem do céu — redesenhar as salas é custoso,
+      // então só atualiza lâmpadas aqui e deixa vidros para o próximo relayout.
+    } else {
+      // Intensidade pode ter mudado no entardecer sem mudar de fase.
+      this.drawNightTint();
+    }
+    // Lâmpadas acompanham a intensidade em tempo real.
+    for (const r of this.rooms.values()) {
+      for (const l of r.lamps) {
+        l.halo.alpha = this.day.lampIntensity;
+        l.bulb.alpha = 0.25 + this.day.lampIntensity * 0.75;
+      }
+    }
   }
 
   private drawDecor(r: Room) {

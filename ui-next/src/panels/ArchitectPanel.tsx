@@ -34,7 +34,7 @@ export function ArchitectPanel({ onClose, onOpenChat }: Props) {
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Sparkles className="h-4 w-4" /> Arquiteto
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               agente meta que entrevista o humano e desenha um time customizado
             </p>
           </div>

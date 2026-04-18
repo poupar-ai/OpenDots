@@ -214,7 +214,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-[260px_1fr_460px] gap-3 overflow-hidden p-3">
+      <div className="grid flex-1 grid-cols-[300px_1fr_460px] gap-3 overflow-hidden p-3">
         <aside className="soft-scroll overflow-y-auto pr-1">
           <ModulesPanel data={data} />
           {selected && agentCfg && (

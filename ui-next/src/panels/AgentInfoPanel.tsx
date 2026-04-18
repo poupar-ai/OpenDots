@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/CopyButton';
 import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/types';
-import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil } from 'lucide-react';
-import { updateAutonomy, updateModel, updateAgentContext } from '@/lib/agents';
+import { Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout, FileText, Pencil, Plug, Trash2 } from 'lucide-react';
+import { updateAutonomy, updateModel, updateAgentContext, updateAgentMcps, listMcps, deleteAgent } from '@/lib/agents';
 
 interface LogEntry {
   ts: string;
@@ -29,6 +29,7 @@ interface Props {
   manifest?: Manifest | null;
   logSummary?: AgentLogSummary;
   onSelect?: (name: string) => void;
+  onDeleted?: (name: string) => void;
 }
 
 function edges(c: AgentCfg): string[] {
@@ -66,6 +67,7 @@ export function AgentInfoPanel({
   manifest,
   logSummary,
   onSelect,
+  onDeleted,
 }: Props) {
   const type = cfg.type || 'specialist';
   const outgoing = edges(cfg);
@@ -80,6 +82,9 @@ export function AgentInfoPanel({
   const [editAuto, setEditAuto] = useState(false);
   const [editModel, setEditModel] = useState(false);
   const [editContext, setEditContext] = useState(false);
+  const [editMcps, setEditMcps] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   useEffect(() => {
     setLogOpen(false);
@@ -87,7 +92,26 @@ export function AgentInfoPanel({
     setEditAuto(false);
     setEditModel(false);
     setEditContext(false);
+    setEditMcps(false);
+    setDeleteErr(null);
   }, [name]);
+
+  const isProtected = !!manifest && (name === (manifest as any).manager || name === (manifest as any).oracle);
+
+  const handleDelete = async () => {
+    if (isProtected) return;
+    if (!confirm(`Remover o agente "${name}"? Isso apaga manifest + arquivo de mini-contexto.`)) return;
+    setDeleting(true);
+    setDeleteErr(null);
+    try {
+      await deleteAgent(name);
+      onDeleted?.(name);
+    } catch (e: any) {
+      setDeleteErr(e?.message || 'falha ao remover');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadLog = async () => {
     if (logEntries) return;
@@ -146,6 +170,35 @@ export function AgentInfoPanel({
             current={cfg.model || ''}
             origin={manifest?._meta?.agent_origin?.[name] || null}
             onClose={() => setEditModel(false)}
+          />
+        )}
+        <div className="flex items-start justify-between gap-2">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Plug className="h-3 w-3" /> mcps
+          </span>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+            {(cfg.mcps && cfg.mcps.length > 0) ? (
+              cfg.mcps.map((m) => (
+                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700">
+                  {m}
+                </span>
+              ))
+            ) : (
+              <span className="text-[10px] text-slate-400">nenhum</span>
+            )}
+            <button
+              onClick={() => setEditMcps(true)}
+              className="text-[10px] text-indigo-700 underline-offset-2 hover:underline"
+            >
+              editar
+            </button>
+          </div>
+        </div>
+        {editMcps && (
+          <McpsEditor
+            name={name}
+            current={cfg.mcps || []}
+            onClose={() => setEditMcps(false)}
           />
         )}
         {cfg.watch && (
@@ -321,6 +374,25 @@ export function AgentInfoPanel({
             current={context}
             onClose={() => setEditContext(false)}
           />
+        )}
+        {!isProtected && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50/60 px-2 py-1.5 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              title="remover agente"
+            >
+              <Trash2 className="h-3 w-3" />
+              {deleting ? 'removendo…' : 'remover agente'}
+            </button>
+            {deleteErr && (
+              <p className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] text-red-700">
+                {deleteErr}
+              </p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -667,6 +739,104 @@ function ContextEditor({ name, current, onClose }: ContextEditorProps) {
             cancelar
           </Button>
           <Button size="sm" onClick={save} disabled={saving || !dirty} className="gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'salvando…' : 'salvar'}
+          </Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+interface McpsEditorProps {
+  name: string;
+  current: string[];
+  onClose: () => void;
+}
+
+function McpsEditor({ name, current, onClose }: McpsEditorProps) {
+  const [draft, setDraft] = useState<string>((current || []).join(', '));
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    listMcps()
+      .then((r) => { if (alive) setSuggestions(r.all || []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const parsed = draft.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+
+  const save = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      await updateAgentMcps(name, parsed);
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao salvar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Plug className="h-4 w-4" /> MCPs de {name}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              servidores MCP que o agente pode acessar quando invocado
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </header>
+        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
+          <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">
+            MCPs <span className="text-slate-400">(separe por vírgula ou quebra de linha)</span>
+          </label>
+          <input
+            list="mcps-editor-suggestions"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="ex: resend, supabase"
+            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] focus:border-indigo-400 focus:outline-none"
+          />
+          <datalist id="mcps-editor-suggestions">
+            {suggestions.map((m) => <option key={m} value={m} />)}
+          </datalist>
+          {parsed.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {parsed.map((m) => (
+                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-[10px] text-violet-700">
+                  {m}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-slate-500">
+            sugestões vêm de <code className="rounded bg-slate-100 px-1">~/.claude.json</code> (global + projeto) e
+            de MCPs já referenciados em outros agentes. você pode digitar um nome novo — basta confirmar.
+          </p>
+          {err && (
+            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+              {err}
+            </div>
+          )}
+        </div>
+        <footer className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
+            cancelar
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
             <Save className="h-3.5 w-3.5" />
             {saving ? 'salvando…' : 'salvar'}
           </Button>

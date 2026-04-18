@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, BookOpen, Check, Download, Plus, Save, Sparkles } from 'lucide-react';
+import { X, BookOpen, Check, Download, Plus, Save, Sparkles, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -7,6 +7,8 @@ import {
   getBestPractice,
   applyBestPractices,
   createBestPractice,
+  updateBestPractice,
+  deleteBestPractice,
   type BestPractice,
 } from '@/lib/bestPractices';
 
@@ -21,6 +23,8 @@ export function BestPracticesPanel({ onClose }: Props) {
   const [installing, setInstalling] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<BestPractice | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const reload = async () => {
     try {
@@ -49,6 +53,20 @@ export function BestPracticesPanel({ onClose }: Props) {
       setErr(e?.message || 'falha ao instalar');
     } finally {
       setInstalling(null);
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm(`Apagar best-practice "${id}"? Essa ação não pode ser desfeita.`)) return;
+    setDeleting(id);
+    try {
+      await deleteBestPractice(id);
+      if (selected === id) setSelected(null);
+      await reload();
+    } catch (e: any) {
+      setErr(e?.message || 'falha ao apagar');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -143,21 +161,47 @@ export function BestPracticesPanel({ onClose }: Props) {
                           </p>
                         )}
                       </div>
-                      {!p.installed ? (
-                        <Button
-                          size="sm"
-                          onClick={() => install(p.id)}
-                          disabled={installing === p.id}
-                          className="shrink-0 gap-1.5"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          {installing === p.id ? 'instalando…' : 'instalar'}
-                        </Button>
-                      ) : (
-                        <Badge variant="outline" className="shrink-0">
-                          <Check className="h-3 w-3" /> instalado
-                        </Badge>
-                      )}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {p.source === 'local' && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => setEditTarget(p)}
+                              title="editar metadata e conteúdo"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 border-red-200 text-red-700 hover:bg-red-50"
+                              onClick={() => remove(p.id)}
+                              disabled={deleting === p.id}
+                              title="apagar best-practice local"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {deleting === p.id ? 'apagando…' : 'apagar'}
+                            </Button>
+                          </>
+                        )}
+                        {!p.installed ? (
+                          <Button
+                            size="sm"
+                            onClick={() => install(p.id)}
+                            disabled={installing === p.id}
+                            className="gap-1.5"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {installing === p.id ? 'instalando…' : 'instalar'}
+                          </Button>
+                        ) : (
+                          <Badge variant="outline">
+                            <Check className="h-3 w-3" /> instalado
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <pre className="whitespace-pre-wrap rounded bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800">
                       {content || '(sem conteúdo)'}
@@ -170,13 +214,39 @@ export function BestPracticesPanel({ onClose }: Props) {
         </div>
       </div>
       {newOpen && (
-        <NewBestPracticeForm
+        <BestPracticeForm
+          mode="create"
           existingIds={(items || []).map(p => p.id)}
           onClose={() => setNewOpen(false)}
-          onCreated={async (id) => {
+          onSaved={async (id) => {
             setNewOpen(false);
             await reload();
             setSelected(id);
+          }}
+        />
+      )}
+      {editTarget && (
+        <BestPracticeForm
+          mode="edit"
+          existingIds={(items || []).map(p => p.id)}
+          initial={{
+            id: editTarget.id,
+            name: editTarget.name,
+            scope: editTarget.scope || '',
+            tags: editTarget.tags || [],
+            when_to_use: editTarget.when_to_use || '',
+            not_for: editTarget.not_for || '',
+            content,
+          }}
+          onClose={() => setEditTarget(null)}
+          onSaved={async (id) => {
+            setEditTarget(null);
+            await reload();
+            setSelected(id);
+            try {
+              const j = await getBestPractice(id);
+              setContent(j.content);
+            } catch {}
           }}
         />
       )}
@@ -184,10 +254,20 @@ export function BestPracticesPanel({ onClose }: Props) {
   );
 }
 
-interface NewFormProps {
+interface FormProps {
+  mode: 'create' | 'edit';
   existingIds: string[];
+  initial?: {
+    id: string;
+    name: string;
+    scope: string;
+    tags: string[];
+    when_to_use: string;
+    not_for: string;
+    content: string;
+  };
   onClose: () => void;
-  onCreated: (id: string) => void;
+  onSaved: (id: string) => void;
 }
 
 function slugify(s: string): string {
@@ -200,20 +280,21 @@ function slugify(s: string): string {
     .slice(0, 50);
 }
 
-function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) {
-  const [name, setName] = useState('');
-  const [id, setId] = useState('');
-  const [idEdited, setIdEdited] = useState(false);
-  const [scope, setScope] = useState('');
-  const [tagsText, setTagsText] = useState('');
-  const [whenToUse, setWhenToUse] = useState('');
-  const [notFor, setNotFor] = useState('');
-  const [content, setContent] = useState('');
+function BestPracticeForm({ mode, existingIds, initial, onClose, onSaved }: FormProps) {
+  const isEdit = mode === 'edit';
+  const [name, setName] = useState(initial?.name || '');
+  const [id, setId] = useState(initial?.id || '');
+  const [idEdited, setIdEdited] = useState(isEdit);
+  const [scope, setScope] = useState(initial?.scope || '');
+  const [tagsText, setTagsText] = useState((initial?.tags || []).join(', '));
+  const [whenToUse, setWhenToUse] = useState(initial?.when_to_use || '');
+  const [notFor, setNotFor] = useState(initial?.not_for || '');
+  const [content, setContent] = useState(initial?.content || '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const effectiveId = idEdited ? id : slugify(name);
-  const idTaken = existingIds.includes(effectiveId);
+  const effectiveId = isEdit ? (initial?.id || '') : (idEdited ? id : slugify(name));
+  const idTaken = !isEdit && existingIds.includes(effectiveId);
   const idValid = /^[a-z][a-z0-9-]{1,48}[a-z0-9]$/.test(effectiveId);
   const canSave = !!name.trim() && !!content.trim() && idValid && !idTaken && !saving;
 
@@ -222,27 +303,46 @@ function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) 
     setSaving(true);
     try {
       const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
-      await createBestPractice({
-        id: effectiveId,
-        name: name.trim(),
-        scope: scope.trim() || undefined,
-        tags: tags.length ? tags : undefined,
-        when_to_use: whenToUse.trim() || undefined,
-        not_for: notFor.trim() || undefined,
-        content,
-      });
-      onCreated(effectiveId);
+      if (isEdit) {
+        await updateBestPractice(effectiveId, {
+          name: name.trim(),
+          scope: scope.trim(),
+          tags,
+          when_to_use: whenToUse.trim(),
+          not_for: notFor.trim(),
+          content,
+        });
+      } else {
+        await createBestPractice({
+          id: effectiveId,
+          name: name.trim(),
+          scope: scope.trim() || undefined,
+          tags: tags.length ? tags : undefined,
+          when_to_use: whenToUse.trim() || undefined,
+          not_for: notFor.trim() || undefined,
+          content,
+        });
+      }
+      onSaved(effectiveId);
     } catch (e: any) {
-      setErr(e?.message || 'falha ao criar');
+      setErr(e?.message || `falha ao ${isEdit ? 'salvar' : 'criar'}`);
     } finally {
       setSaving(false);
     }
   };
 
+  const dirty = isEdit
+    ? (name !== (initial?.name || '')
+        || content !== (initial?.content || '')
+        || scope !== (initial?.scope || '')
+        || whenToUse !== (initial?.when_to_use || '')
+        || notFor !== (initial?.not_for || '')
+        || tagsText !== (initial?.tags || []).join(', '))
+    : !!(name || content || scope || whenToUse || notFor || tagsText);
+
   const tryClose = () => {
     if (saving) return;
-    const dirty = name || content || scope || whenToUse || notFor || tagsText;
-    if (dirty && !confirm('Descartar nova best-practice?')) return;
+    if (dirty && !confirm(isEdit ? 'Descartar alterações?' : 'Descartar nova best-practice?')) return;
     onClose();
   };
 
@@ -252,7 +352,8 @@ function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) 
         <header className="flex items-center justify-between border-b px-4 py-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="h-4 w-4" /> nova best-practice
+              {isEdit ? <Pencil className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              {isEdit ? `editar ${effectiveId}` : 'nova best-practice'}
             </div>
             <p className="text-[11px] text-muted-foreground">
               fica em <code className="font-mono">.claude-project-memory/best-practices/&lt;id&gt;/</code> — versionada junto com o projeto
@@ -278,17 +379,25 @@ function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) 
               <label className="mb-1 block text-[11px] font-semibold uppercase text-slate-600">id (slug)</label>
               <input
                 value={effectiveId}
-                onChange={(e) => { setId(e.target.value); setIdEdited(true); }}
+                readOnly={isEdit}
+                onChange={(e) => { if (!isEdit) { setId(e.target.value); setIdEdited(true); } }}
                 placeholder="migrations-alembic"
                 className={`w-full rounded border bg-white px-2 py-1.5 font-mono text-[11px] focus:outline-none ${
+                  isEdit ? 'border-slate-200 bg-slate-50 text-slate-500' :
                   effectiveId && !idValid ? 'border-red-300 focus:border-red-400' : idTaken ? 'border-amber-300 focus:border-amber-400' : 'border-slate-200 focus:border-indigo-400'
                 }`}
               />
-              {effectiveId && !idValid && (
-                <p className="mt-0.5 text-[10px] text-red-600">slug inválido (só letras minúsculas, dígitos, hífen)</p>
-              )}
-              {idValid && idTaken && (
-                <p className="mt-0.5 text-[10px] text-amber-600">já existe uma best-practice com esse id</p>
+              {isEdit ? (
+                <p className="mt-0.5 text-[10px] text-slate-400">slug não pode mudar depois de criada</p>
+              ) : (
+                <>
+                  {effectiveId && !idValid && (
+                    <p className="mt-0.5 text-[10px] text-red-600">slug inválido (só letras minúsculas, dígitos, hífen)</p>
+                  )}
+                  {idValid && idTaken && (
+                    <p className="mt-0.5 text-[10px] text-amber-600">já existe uma best-practice com esse id</p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -357,9 +466,9 @@ function NewBestPracticeForm({ existingIds, onClose, onCreated }: NewFormProps) 
           <Button size="sm" variant="outline" onClick={tryClose} disabled={saving}>
             cancelar
           </Button>
-          <Button size="sm" onClick={save} disabled={!canSave} className="gap-1.5">
+          <Button size="sm" onClick={save} disabled={!canSave || (isEdit && !dirty)} className="gap-1.5">
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'criando…' : 'criar'}
+            {saving ? (isEdit ? 'salvando…' : 'criando…') : (isEdit ? 'salvar' : 'criar')}
           </Button>
         </footer>
       </div>

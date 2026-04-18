@@ -369,6 +369,80 @@ async function drainAutoQueue(toAgent) {
   }
 }
 
+// ── Detector de bloqueio: auto-escala pro internal_firefighter ──────────────
+// Qualquer handoff entre agentes cujo conteúdo tenha sinais de bloqueio
+// operacional dispara, em paralelo, um auto-turn pro internal_firefighter.
+// Objetivo: bombeiro SEMPRE é acionado quando há blocker — independente de
+// o manager (ou outro coordenador) lembrar da regra do prompt. Lista é
+// explícita e editável aqui.
+const BLOCKER_SIGNALS = [
+  /\bbloquead[oa]s?\b/i,
+  /\bbloqueio\b/i,
+  /\bn[aã]o\s+conseg(ui|ue|uimos|uiram|uir)/i,
+  /\bn[aã]o\s+tenho\s+(como|permiss[aã]o|autoriza[çc][aã]o|acesso)/i,
+  /\bpermiss[aã]o\s+negada\b/i,
+  /\bpermission\s+denied\b/i,
+  /\bfalha\s+de\s+(permiss[aã]o|ambiente|autoriza[çc][aã]o)/i,
+  /\bpreciso\s+(de\s+)?(autoriza[çc][aã]o|aprova[çc][aã]o)\b/i,
+  /\bambiente\s+quebrado\b/i,
+  /\bferramenta\s+n[aã]o\s+responde\b/i,
+  /\bcanal\s+indispon[ií]vel\b/i,
+  /\btask\s+travad[ao]\b/i,
+  /\btravou\b/i,
+];
+
+function detectBlocker(message) {
+  if (!message || typeof message !== 'string') return { matched: false, signals: [] };
+  const hits = [];
+  for (const re of BLOCKER_SIGNALS) {
+    const m = message.match(re);
+    if (m && !hits.includes(m[0])) hits.push(m[0]);
+  }
+  return { matched: hits.length > 0, signals: hits };
+}
+
+function tryAutoEscalateBlocker({ manifest, fromAgent, toAgent, message, originalTs }) {
+  if (toAgent === 'internal_firefighter' || fromAgent === 'internal_firefighter') return null;
+  if (!manifest || !manifest.agents || !manifest.agents.internal_firefighter) return null;
+  const det = detectBlocker(message);
+  if (!det.matched) return null;
+
+  const ts = new Date().toISOString();
+  const composed =
+    `[auto-escalação] ${fromAgent} reportou possível bloqueio pra ${toAgent}.\n` +
+    `Sinais detectados: ${det.signals.join(', ')}\n\n` +
+    `Mensagem original (${originalTs || ts}):\n${message}`;
+
+  try {
+    appendChat('internal_firefighter', {
+      ts,
+      role: 'user',
+      content: composed,
+      from: fromAgent,
+      auto_escalation: true,
+      original_to: toAgent,
+      signals: det.signals,
+    });
+  } catch {}
+  appendAgentLog(fromAgent, {
+    ts,
+    type: 'auto_escalation_out',
+    target: 'internal_firefighter',
+    original_to: toAgent,
+    signals: det.signals,
+  });
+  appendAgentLog('internal_firefighter', {
+    ts,
+    type: 'auto_escalation_in',
+    source: fromAgent,
+    original_to: toAgent,
+    signals: det.signals,
+    chars: message.length,
+  });
+  enqueueAutoTurn('internal_firefighter', fromAgent, composed);
+  return { ts, signals: det.signals };
+}
+
 // ── Shadow agent: humano offline respondido por claude com base no perfil ───
 // Quando outro humano manda mensagem pra X e X está offline:
 // - Carrega perfil de X (descrição, skills, offline_privacy.never_share)
@@ -1014,8 +1088,17 @@ async function handleHandoff(req, res) {
   // Dispara auto-turn: o destinatário processa a mensagem sem precisar de
   // intervenção humana. A fila garante ordem; o rate-limit quebra loops.
   enqueueAutoTurn(to, from, message);
+  // Guard-rail: se a mensagem tem cara de bloqueio operacional, aciona o
+  // internal_firefighter em paralelo — independente de o destinatário lembrar
+  // da regra do prompt.
+  const escalation = tryAutoEscalateBlocker({
+    manifest, fromAgent: from, toAgent: to, message, originalTs: ts,
+  });
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ ok: true, ts, to, auto_queued: true }));
+  res.end(JSON.stringify({
+    ok: true, ts, to, auto_queued: true,
+    auto_escalated: escalation ? { to: 'internal_firefighter', signals: escalation.signals } : null,
+  }));
 }
 
 async function handleAgentModel(agentName, req, res) {
@@ -1153,6 +1236,116 @@ async function handleAgentContext(agentName, req, res) {
   sendJson(res, 200, { ok: true, agent: agentName, context_file: contextFile, bytes: content.length });
 }
 
+// ── Criação / remoção / MCPs de agentes ─────────────────────────────────────
+
+function sanitizeStringArray(input, { max = 50, maxLen = 80 } = {}) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map(x => (typeof x === 'string' ? x.trim() : ''))
+    .filter(Boolean)
+    .filter(x => x.length <= maxLen)
+    .slice(0, max);
+}
+
+async function handleAgentCreate(req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { name, type, emoji, model, role, tools, mcps, can_talk_to, context } = body || {};
+  if (typeof name !== 'string' || !name.trim()) {
+    return sendJson(res, 400, { error: 'name é obrigatório' });
+  }
+  if (typeof type !== 'string' || !agents.AGENT_TYPES.has(type)) {
+    return sendJson(res, 400, { error: `type inválido. Use: ${[...agents.AGENT_TYPES].join(', ')}` });
+  }
+  const config = {
+    type,
+    emoji: typeof emoji === 'string' ? emoji.trim().slice(0, 8) : undefined,
+    model: typeof model === 'string' && model.trim() ? model.trim() : undefined,
+    role:  typeof role === 'string'  ? role.trim().slice(0, 500) : undefined,
+    tools: sanitizeStringArray(tools, { max: 50, maxLen: 60 }),
+    mcps:  sanitizeStringArray(mcps,  { max: 20, maxLen: 80 }),
+    can_talk_to: sanitizeStringArray(can_talk_to, { max: 50, maxLen: 60 }),
+    context: typeof context === 'string' ? context : undefined,
+  };
+  // Remove chaves vazias para cair nos defaults do addAgent
+  if (!config.tools.length) delete config.tools;
+  if (!config.can_talk_to.length) delete config.can_talk_to;
+  if (!config.mcps.length) config.mcps = [];
+
+  try {
+    const created = agents.addAgent(memDir, name.trim(), config);
+    sendJson(res, 200, { ok: true, agent: name.trim(), created });
+  } catch (err) {
+    sendJson(res, 400, { error: err.message });
+  }
+}
+
+function handleAgentDelete(agentName, res) {
+  const manifest = agents.loadManifest(memDir);
+  if (!manifest || !manifest.agents || !manifest.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+  if (agentName === manifest.manager || agentName === manifest.oracle) {
+    return sendJson(res, 400, { error: `não pode remover "${agentName}" (manager/oracle do manifest)` });
+  }
+  try {
+    const ok = agents.removeAgent(memDir, agentName);
+    sendJson(res, 200, { ok, agent: agentName });
+  } catch (err) {
+    sendJson(res, 500, { error: err.message });
+  }
+}
+
+async function handleAgentMcps(agentName, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  const { mcps } = body || {};
+  if (!Array.isArray(mcps)) {
+    return sendJson(res, 400, { error: 'need {mcps: string[]}' });
+  }
+  const cfg = agents.loadManifest(memDir);
+  if (!cfg || !cfg.agents || !cfg.agents[agentName]) {
+    return sendJson(res, 404, { error: `agent "${agentName}" not found` });
+  }
+  const clean = sanitizeStringArray(mcps, { max: 20, maxLen: 80 });
+  cfg.agents[agentName].mcps = clean;
+  try {
+    agents.saveManifest(memDir, cfg);
+    sendJson(res, 200, { ok: true, agent: agentName, mcps: clean });
+  } catch (err) {
+    sendJson(res, 500, { error: err.message });
+  }
+}
+
+function handleMcpsList(res) {
+  const out = { global: [], project: [], referenced: [] };
+  try {
+    const cfgPath = path.join(process.env.HOME || '', '.claude.json');
+    if (fs.existsSync(cfgPath)) {
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      out.global = Object.keys(raw.mcpServers || {});
+      const proj = (raw.projects && raw.projects[projectRoot]) || null;
+      out.project = proj ? Object.keys(proj.mcpServers || {}) : [];
+    }
+  } catch {}
+  try {
+    const manifest = agents.loadManifest(memDir);
+    const seen = new Set();
+    for (const a of Object.values(manifest?.agents || {})) {
+      for (const m of (a.mcps || [])) seen.add(m);
+    }
+    out.referenced = [...seen];
+  } catch {}
+  const all = [...new Set([...out.global, ...out.project, ...out.referenced])];
+  sendJson(res, 200, { ...out, all });
+}
+
 function handleChatHistory(url, res) {
   const agent = url.searchParams.get('agent');
   if (!agent) {
@@ -1190,7 +1383,7 @@ async function handleChatSend(req, res) {
   if (human_id && typeof human_id === 'string') {
     try {
       const all = loadHumans();
-      humanProfile = (all.humans || []).find((h) => h.id === human_id) || null;
+      humanProfile = (all.humans && all.humans[human_id]) || null;
       if (humanProfile) touchHuman(human_id);
     } catch {}
   }
@@ -1411,6 +1604,29 @@ async function handleBestPracticeCreate(req, res) {
   }
   try {
     const r = bestPractices.createLocalPractice({ memDir, input: body, overwrite: !!body?.overwrite });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+async function handleBestPracticeUpdate(id, req, res) {
+  const raw = await readBody(req);
+  let body;
+  try { body = JSON.parse(raw); } catch {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  try {
+    const r = bestPractices.updateLocalPractice({ memDir, id, input: body });
+    sendJson(res, 200, { ok: true, ...r });
+  } catch (e) {
+    sendJson(res, 400, { error: e.message });
+  }
+}
+
+function handleBestPracticeDelete(id, res) {
+  try {
+    const r = bestPractices.deleteLocalPractice({ memDir, id });
     sendJson(res, 200, { ok: true, ...r });
   } catch (e) {
     sendJson(res, 400, { error: e.message });
@@ -1819,6 +2035,30 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (url.pathname === '/api/agents' && req.method === 'POST') {
+    handleAgentCreate(req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
+  if (url.pathname === '/api/mcps' && req.method === 'GET') {
+    handleMcpsList(res);
+    return;
+  }
+  const agentRootMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)$/);
+  if (agentRootMatch && req.method === 'DELETE') {
+    const agentName = decodeURIComponent(agentRootMatch[1]);
+    if (agentName === 'handoff') {
+      // rota /api/agents/handoff é POST — DELETE aqui não faz sentido
+      return sendJson(res, 405, { error: 'method not allowed' });
+    }
+    handleAgentDelete(agentName, res);
+    return;
+  }
+  const mcpsMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/mcps$/);
+  if (mcpsMatch && req.method === 'PUT') {
+    const agentName = decodeURIComponent(mcpsMatch[1]);
+    handleAgentMcps(agentName, req, res).catch(err => sendJson(res, 500, { error: err.message }));
+    return;
+  }
   const autonomyMatch = url.pathname.match(/^\/api\/agents\/([^\/]+)\/autonomy$/);
   if (autonomyMatch && req.method === 'PATCH') {
     const agentName = decodeURIComponent(autonomyMatch[1]);
@@ -1897,8 +2137,13 @@ const server = http.createServer((req, res) => {
     handleBestPracticeCreate(req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
   }
   const bpMatch = url.pathname.match(/^\/api\/best-practices\/([a-z0-9-]+)$/);
-  if (bpMatch && req.method === 'GET') {
-    handleBestPracticeGet(bpMatch[1], res); return;
+  if (bpMatch) {
+    const bpId = bpMatch[1];
+    if (req.method === 'GET') { handleBestPracticeGet(bpId, res); return; }
+    if (req.method === 'PUT') {
+      handleBestPracticeUpdate(bpId, req, res).catch((e) => sendJson(res, 500, { error: e.message })); return;
+    }
+    if (req.method === 'DELETE') { handleBestPracticeDelete(bpId, res); return; }
   }
 
   // Pipelines

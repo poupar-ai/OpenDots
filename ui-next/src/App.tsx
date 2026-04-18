@@ -216,6 +216,7 @@ export default function App() {
                 manifest={agents?.manifest}
                 logSummary={agents?.logs?.[selected]}
                 onSelect={setSelected}
+                onDeleted={() => setSelected(null)}
               />
             </div>
           )}

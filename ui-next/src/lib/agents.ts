@@ -1,4 +1,4 @@
-import type { Autonomy, AutonomyLevel } from '@/lib/types';
+import type { Autonomy, AutonomyLevel, AgentType } from '@/lib/types';
 
 export interface UpdateAutonomyPayload {
   level: AutonomyLevel;
@@ -59,4 +59,59 @@ export async function updateAgentContext(agent: string, content: string) {
   const j = await r.json();
   if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
   return j as { ok: true; agent: string; context_file: string; bytes: number };
+}
+
+export interface CreateAgentPayload {
+  name: string;
+  type: AgentType;
+  emoji?: string;
+  model?: string;
+  role?: string;
+  tools?: string[];
+  mcps?: string[];
+  can_talk_to?: string[];
+  context?: string;
+}
+
+export async function createAgent(payload: CreateAgentPayload) {
+  const r = await fetch('/api/agents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as { ok: true; agent: string; created: unknown };
+}
+
+export async function deleteAgent(agent: string) {
+  const r = await fetch(`/api/agents/${encodeURIComponent(agent)}`, { method: 'DELETE' });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as { ok: true; agent: string };
+}
+
+export async function updateAgentMcps(agent: string, mcps: string[]) {
+  const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/mcps`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mcps }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as { ok: true; agent: string; mcps: string[] };
+}
+
+export interface McpsList {
+  global: string[];
+  project: string[];
+  referenced: string[];
+  all: string[];
+}
+
+export async function listMcps(): Promise<McpsList> {
+  const r = await fetch('/api/mcps');
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+  return j as McpsList;
 }

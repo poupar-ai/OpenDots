@@ -55,3 +55,30 @@ export async function createBestPractice(input: CreateBestPracticeInput): Promis
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
+
+export interface UpdateBestPracticeInput {
+  name?: string;
+  scope?: string;
+  tags?: string[];
+  when_to_use?: string;
+  not_for?: string;
+  content?: string;
+}
+
+export async function updateBestPractice(id: string, input: UpdateBestPracticeInput) {
+  const r = await fetch(`/api/best-practices/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j as { ok: true; id: string };
+}
+
+export async function deleteBestPractice(id: string) {
+  const r = await fetch(`/api/best-practices/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j as { ok: true; id: string; removed: true };
+}

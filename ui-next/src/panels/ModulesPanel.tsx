@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { FileText, Database, AlertTriangle, ScrollText, Package, X, Save, Pencil } from 'lucide-react';
+import { FileText, Database, AlertTriangle, ScrollText, Package, X, Save, Pencil, Users, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ServerData } from '@/lib/types';
 import { saveDoc, type DocName } from '@/lib/docs';
+import { CreateAgentModal } from '@/panels/CreateAgentModal';
 
 interface Props {
   data: ServerData | null;
@@ -21,6 +22,7 @@ const DOC_HINTS: Record<DocName, string> = {
 
 export function ModulesPanel({ data }: Props) {
   const [editDoc, setEditDoc] = useState<{ name: DocName; content: string } | null>(null);
+  const [createAgentOpen, setCreateAgentOpen] = useState(false);
 
   if (!data) {
     return (
@@ -93,6 +95,31 @@ export function ModulesPanel({ data }: Props) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+              <Users className="h-3.5 w-3.5" /> Agentes
+            </CardTitle>
+            <button
+              onClick={() => setCreateAgentOpen(true)}
+              className="flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-100"
+              title="criar novo agente"
+            >
+              <Plus className="h-3 w-3" /> novo
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">total</span>
+            <span className="font-mono">
+              {data.agents?.manifest ? Object.keys(data.agents.manifest.agents).length : 0}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       {stats.codeIndex && (
         <Card>
           <CardHeader className="pb-2">
@@ -119,6 +146,13 @@ export function ModulesPanel({ data }: Props) {
           current={editDoc.content}
           hint={DOC_HINTS[editDoc.name]}
           onClose={() => setEditDoc(null)}
+        />
+      )}
+
+      {createAgentOpen && (
+        <CreateAgentModal
+          existingNames={data.agents?.manifest ? Object.keys(data.agents.manifest.agents) : []}
+          onClose={() => setCreateAgentOpen(false)}
         />
       )}
     </div>

@@ -192,6 +192,55 @@ function createLocalPractice({ memDir, input, overwrite = false }) {
   return { id, path: practiceFile, meta };
 }
 
+function updateLocalPractice({ memDir, id, input }) {
+  if (!ID_RE.test(id || '')) throw new Error('id inválido');
+  const dir = path.join(memDir, 'best-practices', id);
+  const practiceFile = path.join(dir, 'practice.md');
+  if (!fs.existsSync(practiceFile)) {
+    throw new Error(`best-practice "${id}" não existe localmente`);
+  }
+  const { name, scope, tags, when_to_use, not_for, content } = input || {};
+  if (content !== undefined) {
+    if (typeof content !== 'string' || !content.trim()) throw new Error('content inválido');
+    if (content.length > 200_000) throw new Error('content muito longo (máx 200KB)');
+    const normalized = content.endsWith('\n') ? content : content + '\n';
+    fs.writeFileSync(practiceFile, normalized);
+  }
+  const metaFile = path.join(dir, 'meta.json');
+  let meta = { id, source: 'local' };
+  if (fs.existsSync(metaFile)) {
+    try { meta = { ...meta, ...JSON.parse(fs.readFileSync(metaFile, 'utf8')) }; } catch {}
+  }
+  if (name !== undefined) meta.name = String(name).trim();
+  if (scope !== undefined) meta.scope = String(scope).trim();
+  if (tags !== undefined) {
+    meta.tags = Array.isArray(tags) ? tags.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim()) : [];
+  }
+  if (when_to_use !== undefined) meta.when_to_use = String(when_to_use).trim();
+  if (not_for !== undefined) meta.not_for = String(not_for).trim();
+  meta.id = id;
+  meta.source = 'local';
+  fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2) + '\n');
+  return { id, meta };
+}
+
+function deleteLocalPractice({ memDir, id }) {
+  if (!ID_RE.test(id || '')) throw new Error('id inválido');
+  const dir = path.join(memDir, 'best-practices', id);
+  if (!fs.existsSync(dir)) throw new Error(`best-practice "${id}" não existe`);
+  const metaFile = path.join(dir, 'meta.json');
+  let source = 'local';
+  if (fs.existsSync(metaFile)) {
+    try { source = (JSON.parse(fs.readFileSync(metaFile, 'utf8')).source) || 'local'; } catch {}
+  }
+  // Segurança: só apaga se source=local (evita remover cópia do catálogo global por engano)
+  if (source !== 'local') {
+    throw new Error(`best-practice "${id}" veio do catálogo — remova pelo seed/filesystem`);
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { id, removed: true };
+}
+
 module.exports = {
   BP_DIR,
   listPractices,
@@ -199,4 +248,6 @@ module.exports = {
   loadPracticeContent,
   applyPractices,
   createLocalPractice,
+  updateLocalPractice,
+  deleteLocalPractice,
 };

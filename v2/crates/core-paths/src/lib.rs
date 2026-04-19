@@ -28,9 +28,14 @@
 //!   [`find_project_root`], [`mem_dir`], [`tmp_dir`]).
 //! - **Ponto 2** — ensure helpers idempotentes ([`ensure_mem_dir`],
 //!   [`ensure_tmp_dir`]).
+//! - **Ponto 3** — JSONL I/O ([`append_jsonl`], [`read_jsonl`],
+//!   [`read_last_jsonl_line`]).
+//! - **Ponto 4** — estimativa de tokens ([`estimate_tokens`]).
+//! - **Ponto 5** — stats cache ([`load_stats`], [`save_stats`],
+//!   [`increment_stats`]).
 //!
-//! Pontos pendentes (próximos, um por vez): JSONL I/O, estimativa de
-//! tokens, stats, project config, sync do CLAUDE.md, stdin/cwd helpers.
+//! Pontos pendentes (próximos, um por vez): project config, sync do
+//! CLAUDE.md, stdin/cwd helpers.
 //!
 //! ## Garantias de paridade
 //!
@@ -47,6 +52,12 @@
 
 pub mod jsonl;
 pub use jsonl::{append_jsonl, read_jsonl, read_last_jsonl_line, JsonlError};
+
+pub mod tokens;
+pub use tokens::estimate_tokens;
+
+pub mod stats;
+pub use stats::{increment_stats, load_stats, save_stats, STATS_FILE};
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

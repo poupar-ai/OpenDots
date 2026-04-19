@@ -3,6 +3,7 @@
 //! Estratégia: criar dois diretórios irmãos temporários e chamar:
 //!   - v1 via `node -e` carregando `lib.cjs` sobre o primeiro
 //!   - v2 direto via Rust sobre o segundo
+//!
 //! Depois comparar a listagem de entradas relativas entre os dois —
 //! se `.cjs` e Rust criaram a mesma estrutura, `BTreeSet<PathBuf>` bate.
 

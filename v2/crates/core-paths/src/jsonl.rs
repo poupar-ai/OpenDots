@@ -68,7 +68,7 @@ pub fn read_jsonl(path: &Path) -> Result<Vec<Value>, JsonlError> {
         .split('\n')
         .filter(|l| !l.trim().is_empty())
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|v| is_truthy(v))
+        .filter(is_truthy)
         .collect();
     Ok(out)
 }

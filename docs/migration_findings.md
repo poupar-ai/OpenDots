@@ -145,6 +145,28 @@ corrompe e o arquivo cabe num chunk
 - **Paridade v2:** ✅ feature ligada em `core-paths/Cargo.toml`,
   propaga por unification para todo o workspace.
 
+### [F2-10] 🟡 `estimateTokens` retorna `NaN` silenciosamente para não-string
+- **Onde:** `plugin/scripts/lib.cjs:97-100`.
+- **Comportamento:** `if (!str) return 0; return Math.ceil(str.length / 3.5);`.
+  Para argumentos não-string, JS não falha:
+  - `estimateTokens(42)` → `NaN` (number não tem `.length`, `undefined/3.5=NaN`).
+  - `estimateTokens(true)` → `NaN`.
+  - `estimateTokens({a:1})` → `NaN`.
+  - `estimateTokens(-5)` → `NaN`.
+  - `estimateTokens([1,2,3])` → `ceil(3/3.5)` = 1 (arrays têm `.length`, silenciosamente tratados como strings).
+- **Impacto:** caller atual é único (`session-init.cjs:140`) e passa `text.trim()`
+  (sempre string), então bug é latente. Se um caller futuro passar número
+  ou undefined member access, grava `NaN` em `blocks[i].tokens`, que
+  `JSON.stringify` converte para `null` — corrompendo arquivo de estatística
+  ou orçamento de contexto sem erro visível.
+- **Recomendação pós-cutover:** validar `typeof str === 'string'` e lançar
+  ou retornar 0 explicitamente. No Rust isso já é prevenido pelo tipo
+  (`&str`) — não é possível passar não-string.
+- **Paridade v2:** ✅ **Rust mais forte por design** (prevenção em compile
+  time via `&str`). Parity tests cobrem só inputs string, que é o que o
+  caller real passa. Sem teste `#[ignore]` necessário — divergência só
+  aparece em caller incorreto.
+
 ---
 
 ## Fase 3+ (pendente)

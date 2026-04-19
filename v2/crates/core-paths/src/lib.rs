@@ -33,9 +33,11 @@
 //! - **Ponto 4** — estimativa de tokens ([`estimate_tokens`]).
 //! - **Ponto 5** — stats cache ([`load_stats`], [`save_stats`],
 //!   [`increment_stats`]).
+//! - **Ponto 6** — project config ([`load_project_config`],
+//!   [`save_project_config`], [`init_project_config`]).
 //!
-//! Pontos pendentes (próximos, um por vez): project config, sync do
-//! CLAUDE.md, stdin/cwd helpers.
+//! Pontos pendentes (próximos, um por vez): sync do CLAUDE.md,
+//! stdin/cwd helpers.
 //!
 //! ## Garantias de paridade
 //!
@@ -58,6 +60,11 @@ pub use tokens::estimate_tokens;
 
 pub mod stats;
 pub use stats::{increment_stats, load_stats, save_stats, STATS_FILE};
+
+pub mod config;
+pub use config::{
+    init_project_config, load_project_config, save_project_config, ConfigError, CONFIG_FILE,
+};
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

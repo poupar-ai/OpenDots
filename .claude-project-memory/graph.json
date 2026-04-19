@@ -1,7 +1,7 @@
 {
   "version": 2,
   "rebuilt_at": null,
-  "updated_at": "2026-04-19T03:40:02.360Z",
+  "updated_at": "2026-04-19T03:46:25.947Z",
   "nodes": {
     "command:cd /home/tiago/pessoal/project-mem/ui-next/src &&": {
       "kind": "command",
@@ -204,8 +204,8 @@
     "file:v2/crates/core-paths/src/lib.rs": {
       "kind": "file",
       "label": "v2/crates/core-paths/src/lib.rs",
-      "count": 9,
-      "last_seen": "2026-04-19T03:39:10.164Z"
+      "count": 11,
+      "last_seen": "2026-04-19T03:45:29.399Z"
     },
     "file:v2/crates/core-paths/tests/parity_paths.rs": {
       "kind": "file",
@@ -222,8 +222,8 @@
     "command:cargo test -p": {
       "kind": "command",
       "label": "cargo test -p core-paths",
-      "count": 11,
-      "last_seen": "2026-04-19T03:40:02.358Z"
+      "count": 14,
+      "last_seen": "2026-04-19T03:46:25.945Z"
     },
     "command:cargo test 2>&1": {
       "kind": "command",
@@ -270,8 +270,8 @@
     "file:docs/migration_findings.md": {
       "kind": "file",
       "label": "docs/migration_findings.md",
-      "count": 2,
-      "last_seen": "2026-04-19T03:30:51.174Z"
+      "count": 4,
+      "last_seen": "2026-04-19T03:42:11.058Z"
     },
     "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md": {
       "kind": "file",
@@ -288,8 +288,8 @@
     "command:node -e '": {
       "kind": "command",
       "label": "node -e '\n// Caracterizar",
-      "count": 3,
-      "last_seen": "2026-04-19T03:35:11.906Z"
+      "count": 4,
+      "last_seen": "2026-04-19T03:40:37.322Z"
     },
     "file:v2/crates/core-paths/src/tokens.rs": {
       "kind": "file",
@@ -356,6 +356,36 @@
       "label": "v2/crates/core-paths/tests/parity_stats.rs",
       "count": 1,
       "last_seen": "2026-04-19T03:39:59.369Z"
+    },
+    "command:grep -n \"^###": {
+      "kind": "command",
+      "label": "grep -n \"^### \\[F\"",
+      "count": 1,
+      "last_seen": "2026-04-19T03:42:16.316Z"
+    },
+    "command:grep -n \"ProjectConfig\\|project_config\\|PROJECT_CONFIG\\|config.json\"": {
+      "kind": "command",
+      "label": "grep -n \"ProjectConfig\\|project_config\\|PROJECT_CONFIG\\|config.json\" /home/tiago/pessoal/project-mem/plugin/scripts/lib.cjs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:43:49.160Z"
+    },
+    "command:grep -rn \"loadProjectConfig\\|saveProjectConfig\\|initProjectConfig\"": {
+      "kind": "command",
+      "label": "grep -rn \"loadProjectConfig\\|saveProjectConfig\\|initProjectConfig\" /home/tiago/pessoal/project-mem/plugin/scripts/",
+      "count": 1,
+      "last_seen": "2026-04-19T03:43:56.353Z"
+    },
+    "file:v2/crates/core-paths/src/config.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/src/config.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:45:19.397Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_config.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/tests/parity_config.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:46:22.978Z"
     }
   },
   "edges": {
@@ -818,8 +848,8 @@
       "from": "file:v2/crates/core-paths/src/lib.rs",
       "to": "command:cargo test -p",
       "rel": "followed_by",
-      "count": 2,
-      "last_seen": "2026-04-19T03:39:13.229Z"
+      "count": 3,
+      "last_seen": "2026-04-19T03:45:32.185Z"
     },
     "command:mkdir -p /tmp/jsonl_audit→file:v2/crates/core-paths/src/jsonl.rs→then_edited": {
       "from": "command:mkdir -p /tmp/jsonl_audit",
@@ -986,15 +1016,15 @@
       "from": "command:node -e '",
       "to": "file:docs/migration_findings.md",
       "rel": "then_edited",
-      "count": 1,
-      "last_seen": "2026-04-19T03:30:51.174Z"
+      "count": 2,
+      "last_seen": "2026-04-19T03:41:10.637Z"
     },
     "file:docs/migration_findings.md→command:cargo test -p→followed_by": {
       "from": "file:docs/migration_findings.md",
       "to": "command:cargo test -p",
       "rel": "followed_by",
-      "count": 1,
-      "last_seen": "2026-04-19T03:30:57.583Z"
+      "count": 2,
+      "last_seen": "2026-04-19T03:41:17.497Z"
     },
     "command:cargo clippy -p→file:v2/crates/core-paths/src/jsonl.rs→then_edited": {
       "from": "command:cargo clippy -p",
@@ -1072,6 +1102,55 @@
       "rel": "followed_by",
       "count": 1,
       "last_seen": "2026-04-19T03:40:02.358Z"
+    },
+    "command:cargo test -p→file:docs/migration_findings.md→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:docs/migration_findings.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:42:11.058Z"
+    },
+    "file:docs/migration_findings.md→command:grep -n \"^###→followed_by": {
+      "from": "file:docs/migration_findings.md",
+      "to": "command:grep -n \"^###",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:42:16.316Z"
+    },
+    "command:grep -rn \"loadProjectConfig\\|saveProjectConfig\\|initProjectConfig\"→file:v2/crates/core-paths/src/config.rs→then_edited": {
+      "from": "command:grep -rn \"loadProjectConfig\\|saveProjectConfig\\|initProjectConfig\"",
+      "to": "file:v2/crates/core-paths/src/config.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:45:19.397Z"
+    },
+    "file:v2/crates/core-paths/src/config.rs→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/config.rs",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:45:23.428Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-paths/src/config.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-paths/src/config.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:45:23.428Z"
+    },
+    "command:cargo test -p→file:v2/crates/core-paths/tests/parity_config.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/core-paths/tests/parity_config.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:46:22.978Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_config.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/core-paths/tests/parity_config.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:46:25.945Z"
     }
   }
 }

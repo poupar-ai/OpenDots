@@ -167,6 +167,48 @@ corrompe e o arquivo cabe num chunk
   caller real passa. Sem teste `#[ignore]` necessário — divergência só
   aparece em caller incorreto.
 
+### [F2-11] 🟡 `incrementStats` faz coerção exótica quando campo não é número
+- **Onde:** `plugin/scripts/lib.cjs:118` — `stats[field] = (stats[field] || 0) + 1`.
+- **Comportamento empírico (confirmado com node `-e`):**
+  - `stats[field] = "5"` → `(stats[field] || 0) + 1` = `"5" + 1` = `"51"` (concat string).
+  - `stats[field] = [1,2,3]` → `"1,2,3" + 1` = `"1,2,31"`.
+  - `stats[field] = "foo"` → `"foo1"`.
+  - `stats[field] = true` → `2` (coerce bool→int, depois +1).
+- **Impacto:** zero hoje — callers reais passam só `'sessions'` e
+  `'observations'`, ambos inteiros. Um caller futuro que passar campo
+  heterogêneo (ex.: `'last_injection_at'` por typo) corrompe stats.
+- **Recomendação pós-cutover:** validar `typeof stats[field] === 'number'`
+  antes de incrementar; se não for, fazer overwrite para 1 ou logar erro.
+- **Paridade v2:** ⚠️ **diverge por design** — `increment_js_semantics` em
+  `stats::increment_stats` trata non-numeric truthy como "falsy" (retorna
+  `1`) em vez de replicar a coerção. Rust não propaga o bug. Parity tests
+  atuais cobrem só os casos realistas (`null`, int 0, int positivo,
+  missing). Caso um dia precisemos replicar bit-a-bit, trivial adicionar
+  flag.
+
+### [F2-12] 🔴 `loadStats` parse-fail faz `incrementStats` **sobrescrever** stats válido
+- **Onde:** `plugin/scripts/lib.cjs:107` (swallow parse) + `lib.cjs:117`
+  (fallback default).
+- **Comportamento (confirmado empiricamente):**
+  ```
+  stats.json inicial: "\uFEFF{\"sessions\":9999,\"observations\":42,\"critical_metric\":\"keep-me\"}"
+  # (BOM UTF-8 na primeira linha — parse falha)
+  incrementStats(memDir, "sessions")
+  → stats.json final: {"sessions":1,"observations":0}
+  # sessions=9999 virou 1; critical_metric desapareceu
+  ```
+- **Impacto:** **perda silenciosa de dados**. Qualquer coisa que rode o
+  JSON parse em falha — BOM (F2-07), truncagem por crash, edição manual
+  com caractere inválido — faz a próxima chamada de `incrementStats`
+  zerar o arquivo inteiro.
+- **Recomendação pós-cutover:** se parse falhar, fazer backup do arquivo
+  atual (`stats.json.corrupt-<timestamp>`) antes de sobrescrever, OU não
+  tocar no arquivo e apenas logar warning. Atualização atômica via
+  `tmp + rename`.
+- **Paridade v2:** ✅ replica literalmente (`load_stats` → `None` →
+  `default_stats()` → `save_stats` sobrescreve). Parity test
+  `parity_increment_over_corrupt_file` confirma comportamento idêntico.
+
 ---
 
 ## Fase 3+ (pendente)

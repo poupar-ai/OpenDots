@@ -225,6 +225,7 @@ export class AgentCanvas {
   private flowArrows: FlowArrow[] = [];
   private flowDots: FlowDot[] = [];
   private flowPulse = 0;
+  private flowSignature: string | null = null;
   private drag: DragState | null = null;
   private humanDrag: HumanDragState | null = null;
   private pan: PanState | null = null;
@@ -672,8 +673,30 @@ export class AgentCanvas {
     return out;
   }
 
+  private computeFlowSignature(): string {
+    if (!this.selected) return '';
+    const sel = this.nodes.get(this.selected);
+    if (!sel) return '';
+    const parts: string[] = [this.selected];
+    for (const target of edges(sel.cfg)) {
+      if (this.nodes.has(target)) parts.push(`o:${target}`);
+    }
+    for (const [name, node] of this.nodes) {
+      if (name === this.selected) continue;
+      if (edges(node.cfg).includes(this.selected)) parts.push(`i:${name}`);
+    }
+    return parts.join('|');
+  }
+
+  // Reconstrói arrows/dots apenas quando a "assinatura" do flow muda
+  // (selecionado + edges). Sem isso, cada update() periódico (10s + eventos
+  // de streaming) destruía e recriava todas as Graphics, causando stutter
+  // visível no pulso das bolinhas.
   private buildFlow() {
-    // limpar flow antigo
+    const sig = this.computeFlowSignature();
+    if (sig === this.flowSignature) return;
+    this.flowSignature = sig;
+
     for (const a of this.flowArrows) {
       this.flowLabelsLayer.removeChild(a.label);
       this.flowLabelsLayer.removeChild(a.labelBg);

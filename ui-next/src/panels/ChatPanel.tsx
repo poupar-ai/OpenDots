@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Send, X, Bot, Brain, User as UserIcon, Sparkles, Loader2, PanelRightClose, PanelRightOpen } from 'lucide-react';
@@ -186,9 +186,11 @@ export function ChatPanel({
     ta.style.height = next + 'px';
   };
 
+  // autoResize roda em onInput — não duplicar via useEffect([input]) pra
+  // evitar layout síncrono extra a cada tecla.
   useEffect(() => {
     autoResize(taRef.current);
-  }, [input, agent]);
+  }, [agent]);
 
   // Agrupa msgs por dia e marca runs consecutivos com mesmo group_id como thread.
   const grouped = useMemo(() => {
@@ -623,12 +625,7 @@ export function ChatPanel({
   );
 }
 
-function Bubble({
-  msg,
-  humanName,
-  agentType,
-  agentProfession,
-}: {
+interface BubbleProps {
   msg: {
     role: 'user' | 'agent';
     content: string;
@@ -640,7 +637,14 @@ function Bubble({
   humanName?: string | null;
   agentType?: string;
   agentProfession?: string;
-}) {
+}
+
+const Bubble = memo(function Bubble({
+  msg,
+  humanName,
+  agentType,
+  agentProfession,
+}: BubbleProps) {
   const isUser = msg.role === 'user';
   const thinking = msg.streaming && msg.phase === 'thinking';
   const writing = msg.streaming && msg.phase === 'writing';
@@ -713,4 +717,4 @@ function Bubble({
       )}
     </div>
   );
-}
+});

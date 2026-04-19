@@ -1,7 +1,7 @@
 {
   "version": 2,
   "rebuilt_at": null,
-  "updated_at": "2026-04-18T20:14:35.277Z",
+  "updated_at": "2026-04-19T03:26:48.121Z",
   "nodes": {
     "command:cd /home/tiago/pessoal/project-mem/ui-next/src &&": {
       "kind": "command",
@@ -32,7 +32,860 @@
       "label": "find . -name '*.tsx'",
       "count": 2,
       "last_seen": "2026-04-18T20:14:35.275Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&": {
+      "kind": "command",
+      "label": "cd /home/tiago/pessoal/project-mem/v2 && cargo",
+      "count": 5,
+      "last_seen": "2026-04-19T03:21:09.918Z"
+    },
+    "file:v2/rust-toolchain.toml": {
+      "kind": "file",
+      "label": "v2/rust-toolchain.toml",
+      "count": 1,
+      "last_seen": "2026-04-19T02:34:27.622Z"
+    },
+    "file:v2/Cargo.toml": {
+      "kind": "file",
+      "label": "v2/Cargo.toml",
+      "count": 3,
+      "last_seen": "2026-04-19T03:01:26.090Z"
+    },
+    "command:cargo check --workspace": {
+      "kind": "command",
+      "label": "cargo check --workspace 2>&1",
+      "count": 1,
+      "last_seen": "2026-04-19T02:35:26.813Z"
+    },
+    "command:cargo test --workspace": {
+      "kind": "command",
+      "label": "cargo test --workspace 2>&1",
+      "count": 1,
+      "last_seen": "2026-04-19T02:35:39.718Z"
+    },
+    "command:rustc --version &&": {
+      "kind": "command",
+      "label": "rustc --version && cat",
+      "count": 1,
+      "last_seen": "2026-04-19T02:35:46.951Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem &&": {
+      "kind": "command",
+      "label": "cd /home/tiago/pessoal/project-mem && git",
+      "count": 1,
+      "last_seen": "2026-04-19T02:36:37.208Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md": {
+      "kind": "file",
+      "label": "/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md",
+      "count": 1,
+      "last_seen": "2026-04-19T02:37:00.074Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md": {
+      "kind": "file",
+      "label": "/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "count": 3,
+      "last_seen": "2026-04-19T03:25:17.269Z"
+    },
+    "command:wc -l /home/tiago/pessoal/project-mem/scripts/*.cjs": {
+      "kind": "command",
+      "label": "wc -l /home/tiago/pessoal/project-mem/scripts/*.cjs /home/tiago/pessoal/project-mem/plugin/hooks/hooks.json",
+      "count": 1,
+      "last_seen": "2026-04-19T02:41:25.990Z"
+    },
+    "command:for f in": {
+      "kind": "command",
+      "label": "for f in /home/tiago/pessoal/project-mem/plugin/scripts/{agents,pipelines,architect,best-practices,firefighter,nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs;",
+      "count": 1,
+      "last_seen": "2026-04-19T02:43:16.913Z"
+    },
+    "command:head -80 /home/tiago/pessoal/project-mem/plugin/scripts/{pipelines,architect,best-practices,firefighter,nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs": {
+      "kind": "command",
+      "label": "head -80 /home/tiago/pessoal/project-mem/plugin/scripts/{pipelines,architect,best-practices,firefighter,nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs 2>&1",
+      "count": 1,
+      "last_seen": "2026-04-19T02:43:21.618Z"
+    },
+    "command:head -45 /home/tiago/pessoal/project-mem/plugin/scripts/{nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs": {
+      "kind": "command",
+      "label": "head -45 /home/tiago/pessoal/project-mem/plugin/scripts/{nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs 2>&1",
+      "count": 1,
+      "last_seen": "2026-04-19T02:43:29.531Z"
+    },
+    "file:docs/migrato_to_rust.md": {
+      "kind": "file",
+      "label": "docs/migrato_to_rust.md",
+      "count": 9,
+      "last_seen": "2026-04-19T02:52:50.516Z"
+    },
+    "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src": {
+      "kind": "command",
+      "label": "mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:17.709Z"
+    },
+    "file:v2/crates/core-ports/Cargo.toml": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/Cargo.toml",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:21.270Z"
+    },
+    "file:v2/crates/core-ports/src/lib.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/lib.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:06:28.746Z"
+    },
+    "file:v2/crates/core-ports/src/clock.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/clock.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:06:43.909Z"
+    },
+    "file:v2/crates/core-ports/src/observation.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/observation.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:07.639Z"
+    },
+    "file:v2/crates/core-ports/src/session.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/session.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:22.312Z"
+    },
+    "file:v2/crates/core-ports/src/vault.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/vault.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:52.711Z"
+    },
+    "file:v2/crates/core-ports/src/graph.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/graph.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:06.612Z"
+    },
+    "file:v2/crates/core-ports/src/license.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/license.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:29.445Z"
+    },
+    "file:v2/crates/core-ports/src/update.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/update.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:46.938Z"
+    },
+    "file:v2/crates/core-ports/src/telemetry.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/telemetry.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:01.435Z"
+    },
+    "file:v2/crates/core-ports/src/notifier.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-ports/src/notifier.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:18.825Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md": {
+      "kind": "file",
+      "label": "/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md",
+      "count": 1,
+      "last_seen": "2026-04-19T02:53:03.287Z"
+    },
+    "file:v2/crates/core-paths/Cargo.toml": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/Cargo.toml",
+      "count": 2,
+      "last_seen": "2026-04-19T03:17:04.565Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/src/lib.rs",
+      "count": 5,
+      "last_seen": "2026-04-19T03:18:03.783Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_paths.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/tests/parity_paths.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:02:09.744Z"
+    },
+    "command:cargo build -p": {
+      "kind": "command",
+      "label": "cargo build -p core-paths",
+      "count": 1,
+      "last_seen": "2026-04-19T03:02:13.894Z"
+    },
+    "command:cargo test -p": {
+      "kind": "command",
+      "label": "cargo test -p core-paths",
+      "count": 5,
+      "last_seen": "2026-04-19T03:19:45.960Z"
+    },
+    "command:cargo test 2>&1": {
+      "kind": "command",
+      "label": "cargo test 2>&1 |",
+      "count": 6,
+      "last_seen": "2026-04-19T03:22:18.919Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/tests/parity_ensure_dirs.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:04:39.669Z"
+    },
+    "file:v2/crates/core-branding/src/lib.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-branding/src/lib.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:09:40.817Z"
+    },
+    "file:v2/AGENTS.md": {
+      "kind": "file",
+      "label": "v2/AGENTS.md",
+      "count": 3,
+      "last_seen": "2026-04-19T03:24:47.700Z"
+    },
+    "file:v2/crates/core-paths/src/jsonl.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/src/jsonl.rs",
+      "count": 4,
+      "last_seen": "2026-04-19T03:21:59.061Z"
+    },
+    "command:mkdir -p /tmp/jsonl_audit": {
+      "kind": "command",
+      "label": "mkdir -p /tmp/jsonl_audit &&",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:35.356Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_jsonl.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/tests/parity_jsonl.rs",
+      "count": 2,
+      "last_seen": "2026-04-19T03:22:04.989Z"
+    },
+    "file:docs/migration_findings.md": {
+      "kind": "file",
+      "label": "docs/migration_findings.md",
+      "count": 1,
+      "last_seen": "2026-04-19T03:24:31.873Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md": {
+      "kind": "file",
+      "label": "/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md",
+      "count": 1,
+      "last_seen": "2026-04-19T03:25:05.316Z"
+    },
+    "command:grep -n estimateTokens": {
+      "kind": "command",
+      "label": "grep -n estimateTokens /home/tiago/pessoal/project-mem/plugin/scripts/indexer.cjs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:26:05.294Z"
+    },
+    "command:node -e '": {
+      "kind": "command",
+      "label": "node -e '\n// Caracterizar",
+      "count": 1,
+      "last_seen": "2026-04-19T03:26:14.635Z"
+    },
+    "file:v2/crates/core-paths/src/tokens.rs": {
+      "kind": "file",
+      "label": "v2/crates/core-paths/src/tokens.rs",
+      "count": 1,
+      "last_seen": "2026-04-19T03:26:48.117Z"
     }
   },
-  "edges": {}
+  "edges": {
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&→file:v2/rust-toolchain.toml→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "to": "file:v2/rust-toolchain.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:34:27.622Z"
+    },
+    "file:v2/rust-toolchain.toml→file:v2/Cargo.toml→co_edited": {
+      "from": "file:v2/rust-toolchain.toml",
+      "to": "file:v2/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:34:30.173Z"
+    },
+    "file:v2/Cargo.toml→file:v2/rust-toolchain.toml→co_edited": {
+      "from": "file:v2/Cargo.toml",
+      "to": "file:v2/rust-toolchain.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:34:30.173Z"
+    },
+    "file:v2/Cargo.toml→command:cargo check --workspace→followed_by": {
+      "from": "file:v2/Cargo.toml",
+      "to": "command:cargo check --workspace",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T02:35:26.813Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem &&→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem &&",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:37:00.074Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:37:04.629Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/reference_project_mem_repo.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:37:04.629Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→command:wc -l /home/tiago/pessoal/project-mem/scripts/*.cjs→followed_by": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "command:wc -l /home/tiago/pessoal/project-mem/scripts/*.cjs",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T02:41:25.990Z"
+    },
+    "command:head -45 /home/tiago/pessoal/project-mem/plugin/scripts/{nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs→file:docs/migrato_to_rust.md→then_edited": {
+      "from": "command:head -45 /home/tiago/pessoal/project-mem/plugin/scripts/{nudge,destructive,indexer,ide-adapters,skills-install,seed}.cjs",
+      "to": "file:docs/migrato_to_rust.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:44:18.070Z"
+    },
+    "file:docs/migrato_to_rust.md→file:v2/Cargo.toml→co_edited": {
+      "from": "file:docs/migrato_to_rust.md",
+      "to": "file:v2/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:08.864Z"
+    },
+    "file:v2/Cargo.toml→file:docs/migrato_to_rust.md→co_edited": {
+      "from": "file:v2/Cargo.toml",
+      "to": "file:docs/migrato_to_rust.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:08.864Z"
+    },
+    "file:v2/Cargo.toml→command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src→followed_by": {
+      "from": "file:v2/Cargo.toml",
+      "to": "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:17.709Z"
+    },
+    "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src→file:v2/crates/core-ports/Cargo.toml→then_edited": {
+      "from": "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/core-ports/src",
+      "to": "file:v2/crates/core-ports/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:21.270Z"
+    },
+    "file:v2/crates/core-ports/Cargo.toml→file:v2/crates/core-ports/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/Cargo.toml",
+      "to": "file:v2/crates/core-ports/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:37.981Z"
+    },
+    "file:v2/crates/core-ports/src/lib.rs→file:v2/crates/core-ports/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/core-ports/src/lib.rs",
+      "to": "file:v2/crates/core-ports/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:48:37.981Z"
+    },
+    "file:v2/crates/core-ports/src/lib.rs→file:v2/crates/core-ports/src/clock.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/lib.rs",
+      "to": "file:v2/crates/core-ports/src/clock.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:06:43.909Z"
+    },
+    "file:v2/crates/core-ports/src/clock.rs→file:v2/crates/core-ports/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/clock.rs",
+      "to": "file:v2/crates/core-ports/src/lib.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:06:43.909Z"
+    },
+    "file:v2/crates/core-ports/src/clock.rs→file:v2/crates/core-ports/src/observation.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/clock.rs",
+      "to": "file:v2/crates/core-ports/src/observation.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:07.639Z"
+    },
+    "file:v2/crates/core-ports/src/observation.rs→file:v2/crates/core-ports/src/clock.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/observation.rs",
+      "to": "file:v2/crates/core-ports/src/clock.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:07.639Z"
+    },
+    "file:v2/crates/core-ports/src/observation.rs→file:v2/crates/core-ports/src/session.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/observation.rs",
+      "to": "file:v2/crates/core-ports/src/session.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:22.312Z"
+    },
+    "file:v2/crates/core-ports/src/session.rs→file:v2/crates/core-ports/src/observation.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/session.rs",
+      "to": "file:v2/crates/core-ports/src/observation.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:22.312Z"
+    },
+    "file:v2/crates/core-ports/src/session.rs→file:v2/crates/core-ports/src/vault.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/session.rs",
+      "to": "file:v2/crates/core-ports/src/vault.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:52.711Z"
+    },
+    "file:v2/crates/core-ports/src/vault.rs→file:v2/crates/core-ports/src/session.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/vault.rs",
+      "to": "file:v2/crates/core-ports/src/session.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:07:52.711Z"
+    },
+    "file:v2/crates/core-ports/src/vault.rs→file:v2/crates/core-ports/src/graph.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/vault.rs",
+      "to": "file:v2/crates/core-ports/src/graph.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:06.612Z"
+    },
+    "file:v2/crates/core-ports/src/graph.rs→file:v2/crates/core-ports/src/vault.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/graph.rs",
+      "to": "file:v2/crates/core-ports/src/vault.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:06.612Z"
+    },
+    "file:v2/crates/core-ports/src/graph.rs→file:v2/crates/core-ports/src/license.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/graph.rs",
+      "to": "file:v2/crates/core-ports/src/license.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:29.445Z"
+    },
+    "file:v2/crates/core-ports/src/license.rs→file:v2/crates/core-ports/src/graph.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/license.rs",
+      "to": "file:v2/crates/core-ports/src/graph.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:29.445Z"
+    },
+    "file:v2/crates/core-ports/src/license.rs→file:v2/crates/core-ports/src/update.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/license.rs",
+      "to": "file:v2/crates/core-ports/src/update.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:46.938Z"
+    },
+    "file:v2/crates/core-ports/src/update.rs→file:v2/crates/core-ports/src/license.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/update.rs",
+      "to": "file:v2/crates/core-ports/src/license.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:08:46.938Z"
+    },
+    "file:v2/crates/core-ports/src/update.rs→file:v2/crates/core-ports/src/telemetry.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/update.rs",
+      "to": "file:v2/crates/core-ports/src/telemetry.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:01.435Z"
+    },
+    "file:v2/crates/core-ports/src/telemetry.rs→file:v2/crates/core-ports/src/update.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/telemetry.rs",
+      "to": "file:v2/crates/core-ports/src/update.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:01.435Z"
+    },
+    "file:v2/crates/core-ports/src/telemetry.rs→file:v2/crates/core-ports/src/notifier.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/telemetry.rs",
+      "to": "file:v2/crates/core-ports/src/notifier.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:18.825Z"
+    },
+    "file:v2/crates/core-ports/src/notifier.rs→file:v2/crates/core-ports/src/telemetry.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/notifier.rs",
+      "to": "file:v2/crates/core-ports/src/telemetry.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-19T03:09:18.825Z"
+    },
+    "file:v2/crates/core-ports/src/notifier.rs→command:cd /home/tiago/pessoal/project-mem/v2 &&→followed_by": {
+      "from": "file:v2/crates/core-ports/src/notifier.rs",
+      "to": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T02:50:24.884Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&→file:docs/migrato_to_rust.md→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "to": "file:docs/migrato_to_rust.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:52:50.516Z"
+    },
+    "file:docs/migrato_to_rust.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md→co_edited": {
+      "from": "file:docs/migrato_to_rust.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:53:03.287Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md→file:docs/migrato_to_rust.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md",
+      "to": "file:docs/migrato_to_rust.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:53:03.287Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:53:11.386Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_rust_paridade.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T02:53:11.386Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→command:cd /home/tiago/pessoal/project-mem/v2 &&→followed_by": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T02:57:14.001Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&→file:v2/Cargo.toml→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "to": "file:v2/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:01:26.090Z"
+    },
+    "file:v2/Cargo.toml→file:v2/crates/core-paths/Cargo.toml→co_edited": {
+      "from": "file:v2/Cargo.toml",
+      "to": "file:v2/crates/core-paths/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:01:29.981Z"
+    },
+    "file:v2/crates/core-paths/Cargo.toml→file:v2/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/core-paths/Cargo.toml",
+      "to": "file:v2/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:01:29.981Z"
+    },
+    "file:v2/crates/core-paths/Cargo.toml→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/Cargo.toml",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:01:50.104Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-paths/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-paths/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:01:50.104Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-paths/tests/parity_paths.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-paths/tests/parity_paths.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:02:09.744Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_paths.rs→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/tests/parity_paths.rs",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:02:09.744Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_paths.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/core-paths/tests/parity_paths.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:02:13.894Z"
+    },
+    "command:cargo test 2>&1→file:v2/crates/core-paths/src/lib.rs→then_edited": {
+      "from": "command:cargo test 2>&1",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:04:00.049Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-paths/tests/parity_ensure_dirs.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:04:39.669Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:04:39.669Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/core-paths/tests/parity_ensure_dirs.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:04:42.849Z"
+    },
+    "command:cargo test -p→file:v2/crates/core-paths/src/lib.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:06:01.306Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-ports/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-ports/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:06:28.746Z"
+    },
+    "file:v2/crates/core-ports/src/lib.rs→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/lib.rs",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:06:28.746Z"
+    },
+    "file:v2/crates/core-ports/src/notifier.rs→file:v2/crates/core-branding/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-ports/src/notifier.rs",
+      "to": "file:v2/crates/core-branding/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:09:40.817Z"
+    },
+    "file:v2/crates/core-branding/src/lib.rs→file:v2/crates/core-ports/src/notifier.rs→co_edited": {
+      "from": "file:v2/crates/core-branding/src/lib.rs",
+      "to": "file:v2/crates/core-ports/src/notifier.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:09:40.817Z"
+    },
+    "file:v2/crates/core-branding/src/lib.rs→command:cargo test 2>&1→followed_by": {
+      "from": "file:v2/crates/core-branding/src/lib.rs",
+      "to": "command:cargo test 2>&1",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:09:45.138Z"
+    },
+    "command:cargo test 2>&1→file:v2/AGENTS.md→then_edited": {
+      "from": "command:cargo test 2>&1",
+      "to": "file:v2/AGENTS.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:10:39.515Z"
+    },
+    "file:v2/AGENTS.md→command:cargo test 2>&1→followed_by": {
+      "from": "file:v2/AGENTS.md",
+      "to": "command:cargo test 2>&1",
+      "rel": "followed_by",
+      "count": 2,
+      "last_seen": "2026-04-19T03:22:18.919Z"
+    },
+    "command:cargo test 2>&1→file:v2/crates/core-paths/Cargo.toml→then_edited": {
+      "from": "command:cargo test 2>&1",
+      "to": "file:v2/crates/core-paths/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:17:04.565Z"
+    },
+    "file:v2/crates/core-paths/Cargo.toml→file:v2/crates/core-paths/src/jsonl.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/Cargo.toml",
+      "to": "file:v2/crates/core-paths/src/jsonl.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:00.046Z"
+    },
+    "file:v2/crates/core-paths/src/jsonl.rs→file:v2/crates/core-paths/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/core-paths/src/jsonl.rs",
+      "to": "file:v2/crates/core-paths/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:00.046Z"
+    },
+    "file:v2/crates/core-paths/src/jsonl.rs→file:v2/crates/core-paths/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/jsonl.rs",
+      "to": "file:v2/crates/core-paths/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:03.783Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→file:v2/crates/core-paths/src/jsonl.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "file:v2/crates/core-paths/src/jsonl.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:03.783Z"
+    },
+    "file:v2/crates/core-paths/src/lib.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/core-paths/src/lib.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:09.036Z"
+    },
+    "command:mkdir -p /tmp/jsonl_audit→file:v2/crates/core-paths/src/jsonl.rs→then_edited": {
+      "from": "command:mkdir -p /tmp/jsonl_audit",
+      "to": "file:v2/crates/core-paths/src/jsonl.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:18:50.323Z"
+    },
+    "file:v2/crates/core-paths/src/jsonl.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/core-paths/src/jsonl.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:19:00.891Z"
+    },
+    "command:cargo test -p→file:v2/crates/core-paths/tests/parity_jsonl.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:19:42.556Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_jsonl.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:19:45.960Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&→file:v2/crates/core-paths/src/jsonl.rs→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "to": "file:v2/crates/core-paths/src/jsonl.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:21:59.061Z"
+    },
+    "file:v2/crates/core-paths/src/jsonl.rs→file:v2/crates/core-paths/tests/parity_jsonl.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/src/jsonl.rs",
+      "to": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:22:04.989Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_jsonl.rs→file:v2/crates/core-paths/src/jsonl.rs→co_edited": {
+      "from": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "to": "file:v2/crates/core-paths/src/jsonl.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:22:04.989Z"
+    },
+    "file:v2/crates/core-paths/tests/parity_jsonl.rs→file:v2/AGENTS.md→co_edited": {
+      "from": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "to": "file:v2/AGENTS.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:22:14.720Z"
+    },
+    "file:v2/AGENTS.md→file:v2/crates/core-paths/tests/parity_jsonl.rs→co_edited": {
+      "from": "file:v2/AGENTS.md",
+      "to": "file:v2/crates/core-paths/tests/parity_jsonl.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:22:14.720Z"
+    },
+    "command:cargo test 2>&1→file:docs/migration_findings.md→then_edited": {
+      "from": "command:cargo test 2>&1",
+      "to": "file:docs/migration_findings.md",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:24:31.873Z"
+    },
+    "file:docs/migration_findings.md→file:v2/AGENTS.md→co_edited": {
+      "from": "file:docs/migration_findings.md",
+      "to": "file:v2/AGENTS.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:24:47.700Z"
+    },
+    "file:v2/AGENTS.md→file:docs/migration_findings.md→co_edited": {
+      "from": "file:v2/AGENTS.md",
+      "to": "file:docs/migration_findings.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:24:47.700Z"
+    },
+    "file:v2/AGENTS.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md→co_edited": {
+      "from": "file:v2/AGENTS.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:25:05.316Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md→file:v2/AGENTS.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md",
+      "to": "file:v2/AGENTS.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:25:05.316Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:25:17.269Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md→co_edited": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/feedback_port_divergencia_bilateral.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:25:17.269Z"
+    },
+    "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md→command:grep -n estimateTokens→followed_by": {
+      "from": "file:/home/tiago/.claude/projects/-home-tiago-pessoal-bankin/memory/MEMORY.md",
+      "to": "command:grep -n estimateTokens",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-19T03:26:05.294Z"
+    },
+    "command:node -e '→file:v2/crates/core-paths/src/tokens.rs→then_edited": {
+      "from": "command:node -e '",
+      "to": "file:v2/crates/core-paths/src/tokens.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-19T03:26:48.117Z"
+    }
+  }
 }

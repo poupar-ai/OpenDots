@@ -1,9 +1,34 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/adapter-fs",
+    "crates/adapter-vault-file",
+    "crates/api-cli",
+    "crates/api-hooks",
+    "crates/api-http",
+    "crates/api-mcp",
     "crates/core-branding",
     "crates/core-ports",
     "crates/core-paths",
+    "crates/core-queue",
+    "crates/domain-agents",
+    "crates/domain-architect",
+    "crates/domain-best-practices",
+    "crates/domain-bus",
+    "crates/domain-destructive",
+    "crates/domain-firefighter",
+    "crates/domain-graph",
+    "crates/domain-humans",
+    "crates/domain-ide-adapters",
+    "crates/domain-indexer",
+    "crates/domain-integrity",
+    "crates/domain-nudge",
+    "crates/domain-pipelines",
+    "crates/domain-seed",
+    "crates/domain-session",
+    "crates/domain-sigilo",
+    "crates/domain-skills-install",
+    "crates/domain-vault",
 ]
 
 [workspace.package]
@@ -22,6 +47,16 @@ thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+regex = "1"
+rand = "0.9"
+sha2 = "0.10"
+hex = "0.4"
+clap = { version = "4", features = ["derive"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "query", "tokio"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+bytes = "1"
+mime_guess = "2"
 
 [profile.release]
 lto = true

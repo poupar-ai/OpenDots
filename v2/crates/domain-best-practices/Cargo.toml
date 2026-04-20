@@ -1,0 +1,16 @@
+[package]
+name = "domain-best-practices"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+# preserve_order: mantém ordem de inserção em Value::Object para paridade
+# com JSON.stringify do Node (que preserva ordem das chaves).
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3"

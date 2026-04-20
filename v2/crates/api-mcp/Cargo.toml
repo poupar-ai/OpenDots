@@ -1,0 +1,25 @@
+[package]
+name = "api-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# MCP server stdio para `claude-project-memory`. Expõe memória do projeto
+# como tools callable pelo Claude durante a conversa. Lib pura (tools +
+# JSON-RPC dispatch) + bin thin (readline-like stdio loop).
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pmem-mcp"
+path = "src/bin/mcp.rs"
+
+[dependencies]
+core-paths = { path = "../core-paths" }
+domain-graph = { path = "../domain-graph" }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = { workspace = true, features = ["preserve_order"] }

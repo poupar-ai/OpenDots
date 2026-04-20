@@ -1,0 +1,50 @@
+[package]
+name = "api-hooks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# Biblioteca com a lógica pura dos 4 hooks. Cada binário é um thin main
+# que lê stdin JSON, chama a lib, e escreve o resultado. Todo o
+# comportamento testável mora aqui.
+[lib]
+path = "src/lib.rs"
+
+# Hook: SessionStart (startup | clear | compact). Mostra banner de status,
+# ensure UI autostart, warn se MCP não está registrado.
+[[bin]]
+name = "pmem-hook-startup"
+path = "src/bin/startup.rs"
+
+# Hook: PostToolUse. Captura tool calls do Claude (Write/Edit/Bash/Task)
+# e grava observação JSONL + atualiza grafo.
+[[bin]]
+name = "pmem-hook-observe"
+path = "src/bin/observe.rs"
+
+# Hook: SessionEnd. Gera summary da sessão, detecta gotchas (fail→edit→success),
+# regenera DECISIONS/GOTCHAS/GLOSSARY.md, update incremental do code index.
+[[bin]]
+name = "pmem-hook-session-end"
+path = "src/bin/session_end.rs"
+
+# Hook: UserPromptSubmit. Primeira vez → onboarding; subsequentes → injeta
+# SOUL + PROJECT + MDs hierárquicos + agentes + git + ADRs + sessões +
+# correções + decisões + gotchas + observações + code index + graph,
+# com token budget priority-aware.
+[[bin]]
+name = "pmem-hook-session-init"
+path = "src/bin/session_init.rs"
+
+[dependencies]
+core-paths = { path = "../core-paths" }
+domain-agents = { path = "../domain-agents" }
+domain-graph = { path = "../domain-graph" }
+domain-indexer = { path = "../domain-indexer" }
+regex = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = { workspace = true, features = ["preserve_order"] }

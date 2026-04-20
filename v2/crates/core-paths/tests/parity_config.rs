@@ -255,6 +255,91 @@ fn parity_init_project_name_with_special_chars() {
 }
 
 #[test]
+fn parity_init_overwrites_when_existing_is_json_null() {
+    // config.json = "null" literal. JS: `null` falsy → overwrite.
+    // Se Rust só checasse `Option::Some`, divergiria aqui (preserva o null).
+    // Corrigido no Ponto 6 adicionando `is_js_truthy`.
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("null"));
+    call_v1("initProjectConfig", &a, "novo");
+    init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
+fn parity_init_overwrites_when_existing_is_zero() {
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("0"));
+    call_v1("initProjectConfig", &a, "novo");
+    init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
+fn parity_init_overwrites_when_existing_is_false() {
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("false"));
+    call_v1("initProjectConfig", &a, "novo");
+    init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
+fn parity_init_overwrites_when_existing_is_empty_string() {
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("\"\"")).clone();
+    call_v1("initProjectConfig", &a, "novo");
+    init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
+fn parity_init_preserves_when_existing_is_truthy_string() {
+    // String não-vazia é truthy — .cjs retorna a string como-está.
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("\"hello\""));
+    let v1 = call_v1("initProjectConfig", &a, "novo");
+    let v2 = init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(v1, serde_json::to_string(&v2).unwrap());
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
+fn parity_init_preserves_when_existing_is_empty_object() {
+    // {} é truthy em JS (armadilha clássica — diferente de Python).
+    if !node_available() {
+        eprintln!("node indisponível — pulando");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let (a, b) = twin_dirs(&tmp, Some("{}"));
+    let v1 = call_v1("initProjectConfig", &a, "novo");
+    let v2 = init_project_config(&b, "novo", FIXED_ISO).unwrap();
+    assert_eq!(v1, serde_json::to_string(&v2).unwrap());
+    assert_eq!(read_bytes(&a.join(CONFIG_FILE)), read_bytes(&b.join(CONFIG_FILE)));
+}
+
+#[test]
 fn parity_init_over_corrupt_overwrites() {
     if !node_available() {
         eprintln!("node indisponível — pulando");

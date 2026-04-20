@@ -1,0 +1,15 @@
+[package]
+name = "domain-humans"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+# preserve_order: paridade com JSON.stringify do Node (ordem das chaves).
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3"

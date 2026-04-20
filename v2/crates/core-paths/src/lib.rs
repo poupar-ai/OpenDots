@@ -35,9 +35,12 @@
 //!   [`increment_stats`]).
 //! - **Ponto 6** — project config ([`load_project_config`],
 //!   [`save_project_config`], [`init_project_config`]).
+//! - **Ponto 7** — sync do CLAUDE.md ([`sync_claude_md`]).
+//! - **Ponto 8** — stdin/cwd helpers ([`read_stdin`], [`read_stdin_from_str`],
+//!   [`get_cwd`]).
 //!
-//! Pontos pendentes (próximos, um por vez): sync do CLAUDE.md,
-//! stdin/cwd helpers.
+//! Fase 2 completa. Próximas fases: adapters (CLI / IDE), domain
+//! (observations / graph / vault), etc.
 //!
 //! ## Garantias de paridade
 //!
@@ -65,6 +68,14 @@ pub mod config;
 pub use config::{
     init_project_config, load_project_config, save_project_config, ConfigError, CONFIG_FILE,
 };
+
+pub mod claude_md;
+pub use claude_md::{
+    sync_claude_md, CLAUDE_DIR_NAME, CLAUDE_MD_END, CLAUDE_MD_FILE, CLAUDE_MD_START,
+};
+
+pub mod stdin;
+pub use stdin::{get_cwd, read_stdin, read_stdin_from_str};
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

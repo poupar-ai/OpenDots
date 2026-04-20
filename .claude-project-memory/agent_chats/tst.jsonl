@@ -1,0 +1,4 @@
+{"ts":"2026-04-19T14:09:49.971Z","role":"user","content":"Ta online?","human_id":"tiago","from":"Tiago"}
+{"ts":"2026-04-19T14:09:52.578Z","role":"agent","content":"You've hit your limit · resets 12pm (America/Sao_Paulo)\n","duration_ms":2594}
+{"ts":"2026-04-19T14:40:38.580Z","role":"user","content":"Voltou","human_id":"jose","from":"José"}
+{"ts":"2026-04-19T14:40:41.132Z","role":"agent","content":"You've hit your limit · resets 12pm (America/Sao_Paulo)\n","duration_ms":2545}

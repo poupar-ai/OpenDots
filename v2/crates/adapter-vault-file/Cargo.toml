@@ -1,0 +1,18 @@
+[package]
+name = "adapter-vault-file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+core-ports = { path = "../core-ports" }
+domain-vault = { path = "../domain-vault" }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+hex = { workspace = true }

@@ -51,6 +51,28 @@ use std::path::Path;
 /// Nome do arquivo de config, relativo a `mem_dir`.
 pub const CONFIG_FILE: &str = "config.json";
 
+/// Replica `if (value)` em JavaScript.
+///
+/// Falsy em JS: `null`, `false`, `0`, `""`, `NaN`, `undefined`.
+/// Truthy em JS: todo o resto — incluindo `[]`, `{}`, `"0"`, `" "`.
+fn is_js_truthy(v: &Value) -> bool {
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => {
+            if let Some(f) = n.as_f64() {
+                f != 0.0 && !f.is_nan()
+            } else {
+                // i64/u64 que não cabe em f64 — na prática sempre truthy
+                // (número grande ≠ 0). Mantemos truthy por consistência.
+                true
+            }
+        }
+        Value::String(s) => !s.is_empty(),
+        Value::Array(_) | Value::Object(_) => true,
+    }
+}
+
 /// Erros de I/O ao gravar config. Fino wrapper em `std::io::Error` +
 /// serialização (praticamente nunca falha com `Value` bem-formado).
 #[derive(Debug, thiserror::Error)]
@@ -125,8 +147,14 @@ pub fn init_project_config(
     project_name: &str,
     now_iso: &str,
 ) -> Result<Value, ConfigError> {
+    // `.cjs` faz `if (existing)` — semântica truthy JS, não só presença.
+    // `null`, `false`, `0`, `""`, `NaN` no arquivo → falsy → overwrite.
+    // Objetos e arrays vazios → truthy → preservam. Replicamos
+    // literalmente via `is_js_truthy`.
     if let Some(existing) = load_project_config(mem_dir) {
-        return Ok(existing);
+        if is_js_truthy(&existing) {
+            return Ok(existing);
+        }
     }
     let mut cfg = Map::new();
     cfg.insert("version".to_string(), Value::String("1".to_string()));
@@ -231,6 +259,66 @@ mod tests {
         // Arquivo antigo foi sobrescrito.
         let raw = fs::read_to_string(tmp.path().join(CONFIG_FILE)).unwrap();
         assert!(raw.contains("\"project\": \"novo\""));
+    }
+
+    #[test]
+    fn init_overwrites_when_existing_is_json_null() {
+        // JSON `null` no arquivo → JS trata como falsy → overwrite.
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "null").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert_eq!(cfg["project"], "novo");
+    }
+
+    #[test]
+    fn init_overwrites_when_existing_is_zero() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "0").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert_eq!(cfg["project"], "novo");
+    }
+
+    #[test]
+    fn init_overwrites_when_existing_is_false() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "false").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert_eq!(cfg["project"], "novo");
+    }
+
+    #[test]
+    fn init_overwrites_when_existing_is_empty_string() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "\"\"").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert_eq!(cfg["project"], "novo");
+    }
+
+    #[test]
+    fn init_preserves_when_existing_is_truthy_string() {
+        // String não-vazia é truthy em JS → .cjs retorna a string.
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "\"hello\"").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert_eq!(cfg, serde_json::Value::String("hello".to_string()));
+    }
+
+    #[test]
+    fn init_preserves_when_existing_is_empty_object() {
+        // `{}` é truthy em JS (diferente de Python!) → preserva.
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "{}").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert!(cfg.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn init_preserves_when_existing_is_empty_array() {
+        // `[]` é truthy em JS → preserva (sim, `![]` é false em JS).
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join(CONFIG_FILE), "[]").unwrap();
+        let cfg = init_project_config(tmp.path(), "novo", FIXED_ISO).unwrap();
+        assert!(cfg.as_array().unwrap().is_empty());
     }
 
     #[test]

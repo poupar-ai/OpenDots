@@ -1,0 +1,14 @@
+[package]
+name = "adapter-fs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+core-ports = { path = "../core-ports" }
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

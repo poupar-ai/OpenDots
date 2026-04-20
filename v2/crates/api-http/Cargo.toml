@@ -1,0 +1,44 @@
+[package]
+name = "api-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# Servidor HTTP do project-mem. Paridade com `plugin/ui/server.cjs` (3.665 linhas).
+# Lib pura (handlers + state + routing) + bin thin (bind + listen).
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pmem-http"
+path = "src/bin/http.rs"
+
+[dependencies]
+core-paths = { path = "../core-paths" }
+core-ports = { path = "../core-ports" }
+domain-architect = { path = "../domain-architect" }
+domain-best-practices = { path = "../domain-best-practices" }
+domain-bus = { path = "../domain-bus" }
+domain-destructive = { path = "../domain-destructive" }
+domain-humans = { path = "../domain-humans" }
+domain-ide-adapters = { path = "../domain-ide-adapters" }
+domain-pipelines = { path = "../domain-pipelines" }
+domain-seed = { path = "../domain-seed" }
+domain-skills-install = { path = "../domain-skills-install" }
+adapter-vault-file = { path = "../adapter-vault-file" }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+bytes = { workspace = true }
+mime_guess = { workspace = true }
+if-addrs = "0.13"
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }

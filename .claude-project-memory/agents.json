@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "manager": "manager",
+  "oracle": "oracle",
+  "agents": {
+    "tst": {
+      "type": "specialist",
+      "emoji": "•",
+      "gender": "other",
+      "model": "sonnet-4.6",
+      "role": "",
+      "context_file": "agents/tst.md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "mcps": [],
+      "can_talk_to": [
+        "manager"
+      ],
+      "scope": {
+        "bash_allow": []
+      }
+    }
+  }
+}

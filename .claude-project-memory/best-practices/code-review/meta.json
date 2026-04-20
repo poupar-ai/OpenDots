@@ -1,0 +1,11 @@
+{
+  "id": "code-review",
+  "name": "Revisão de código",
+  "scope": "engineering",
+  "tags": [
+    "review",
+    "quality",
+    "security"
+  ],
+  "when_to_use": "Para agentes que revisam PRs, apontam anti-padrões, caçam falhas\nde segurança e validam testes."
+}

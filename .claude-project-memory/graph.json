@@ -1,7 +1,7 @@
 {
   "version": 2,
   "rebuilt_at": null,
-  "updated_at": "2026-04-20T00:49:47.237Z",
+  "updated_at": "2026-04-20T16:59:12.498Z",
   "nodes": {
     "command:cd /home/tiago/pessoal/project-mem/ui-next/src &&": {
       "kind": "command",
@@ -36,8 +36,8 @@
     "command:cd /home/tiago/pessoal/project-mem/v2 &&": {
       "kind": "command",
       "label": "cd /home/tiago/pessoal/project-mem/v2 && cargo",
-      "count": 13,
-      "last_seen": "2026-04-19T20:57:51.761Z"
+      "count": 14,
+      "last_seen": "2026-04-20T03:17:33.705Z"
     },
     "file:v2/rust-toolchain.toml": {
       "kind": "file",
@@ -48,8 +48,8 @@
     "file:v2/Cargo.toml": {
       "kind": "file",
       "label": "v2/Cargo.toml",
-      "count": 27,
-      "last_seen": "2026-04-20T00:42:28.396Z"
+      "count": 28,
+      "last_seen": "2026-04-20T02:52:44.361Z"
     },
     "command:cargo check --workspace": {
       "kind": "command",
@@ -216,14 +216,14 @@
     "command:cargo build -p": {
       "kind": "command",
       "label": "cargo build -p core-paths",
-      "count": 40,
-      "last_seen": "2026-04-20T00:49:47.234Z"
+      "count": 56,
+      "last_seen": "2026-04-20T11:29:23.914Z"
     },
     "command:cargo test -p": {
       "kind": "command",
       "label": "cargo test -p core-paths",
-      "count": 193,
-      "last_seen": "2026-04-20T00:46:59.161Z"
+      "count": 221,
+      "last_seen": "2026-04-20T11:30:20.835Z"
     },
     "command:cargo test 2>&1": {
       "kind": "command",
@@ -312,8 +312,8 @@
     "command:cargo clippy -p": {
       "kind": "command",
       "label": "cargo clippy -p core-paths",
-      "count": 64,
-      "last_seen": "2026-04-20T00:14:16.851Z"
+      "count": 65,
+      "last_seen": "2026-04-20T03:32:16.306Z"
     },
     "command:cargo fmt --all": {
       "kind": "command",
@@ -1098,8 +1098,8 @@
     "file:docs/migration_progress.md": {
       "kind": "file",
       "label": "docs/migration_progress.md",
-      "count": 49,
-      "last_seen": "2026-04-20T00:27:39.711Z"
+      "count": 54,
+      "last_seen": "2026-04-20T02:31:24.987Z"
     },
     "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/domain-graph/src/lib.rs": {
       "kind": "command",
@@ -1248,8 +1248,8 @@
     "human:jose": {
       "kind": "human",
       "label": "jose",
-      "count": 1,
-      "last_seen": "2026-04-19T14:40:38.580Z"
+      "count": 7,
+      "last_seen": "2026-04-20T16:58:59.672Z"
     },
     "file:v2/crates/domain-seed/tests/parity.rs": {
       "kind": "file",
@@ -1416,8 +1416,8 @@
     "command:grep -n \"pub": {
       "kind": "command",
       "label": "grep -n \"pub fn",
-      "count": 7,
-      "last_seen": "2026-04-20T00:18:56.865Z"
+      "count": 13,
+      "last_seen": "2026-04-20T03:30:24.925Z"
     },
     "file:v2/crates/adapter-vault-file/src/lib.rs": {
       "kind": "file",
@@ -1710,8 +1710,8 @@
     "command:wc -l /home/tiago/pessoal/project-mem/plugin/ui/server.cjs": {
       "kind": "command",
       "label": "wc -l /home/tiago/pessoal/project-mem/plugin/ui/server.cjs",
-      "count": 1,
-      "last_seen": "2026-04-19T22:34:35.349Z"
+      "count": 2,
+      "last_seen": "2026-04-20T02:27:55.127Z"
     },
     "command:wc -l /home/tiago/pessoal/project-mem/plugin/ui/index.html": {
       "kind": "command",
@@ -1728,14 +1728,14 @@
     "file:v2/crates/api-http/Cargo.toml": {
       "kind": "file",
       "label": "v2/crates/api-http/Cargo.toml",
-      "count": 14,
-      "last_seen": "2026-04-20T00:48:02.677Z"
+      "count": 19,
+      "last_seen": "2026-04-20T03:31:19.015Z"
     },
     "file:v2/crates/api-http/src/lib.rs": {
       "kind": "file",
       "label": "v2/crates/api-http/src/lib.rs",
-      "count": 21,
-      "last_seen": "2026-04-20T00:49:38.380Z"
+      "count": 32,
+      "last_seen": "2026-04-20T03:32:00.554Z"
     },
     "file:v2/crates/api-http/src/bin/http.rs": {
       "kind": "file",
@@ -1980,8 +1980,8 @@
     "command:grep -n \"^pub": {
       "kind": "command",
       "label": "grep -n \"^pub fn\\|^pub",
-      "count": 3,
-      "last_seen": "2026-04-20T00:24:30.066Z"
+      "count": 4,
+      "last_seen": "2026-04-20T02:52:03.450Z"
     },
     "command:grep -n \"api/pipelines\"": {
       "kind": "command",
@@ -2094,14 +2094,284 @@
     "file:v2/crates/domain-humans/src/lib.rs": {
       "kind": "file",
       "label": "v2/crates/domain-humans/src/lib.rs",
-      "count": 1,
-      "last_seen": "2026-04-20T00:44:45.717Z"
+      "count": 3,
+      "last_seen": "2026-04-20T00:54:56.714Z"
     },
     "file:v2/crates/api-http/src/humans_routes.rs": {
       "kind": "file",
       "label": "v2/crates/api-http/src/humans_routes.rs",
+      "count": 5,
+      "last_seen": "2026-04-20T02:17:17.148Z"
+    },
+    "file:v2/crates/api-http/tests/parity_humans.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_humans.rs",
+      "count": 2,
+      "last_seen": "2026-04-20T02:17:46.806Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/src/agents_routes.rs",
+      "count": 5,
+      "last_seen": "2026-04-20T03:03:14.191Z"
+    },
+    "command:grep -n \"handleAgentCreate\\|handleMcpsList\\|handleAgentDelete\\|handleAgentMcps\\|handleAgentAutonomy\\|handleAgentModel\\|handleAgentScope\\|handleAgentVault\\|handleAgentContext\\|handleDocSave\"": {
+      "kind": "command",
+      "label": "grep -n \"handleAgentCreate\\|handleMcpsList\\|handleAgentDelete\\|handleAgentMcps\\|handleAgentAutonomy\\|handleAgentModel\\|handleAgentScope\\|handleAgentVault\\|handleAgentContext\\|handleDocSave\" /home/tiag",
+      "count": 1,
+      "last_seen": "2026-04-20T02:28:03.973Z"
+    },
+    "command:grep -rn \"AGENT_TYPES\\s*=\"": {
+      "kind": "command",
+      "label": "grep -rn \"AGENT_TYPES\\s*=\" /home/tiago/pessoal/project-mem/plugin/lib/agents/",
+      "count": 1,
+      "last_seen": "2026-04-20T02:28:27.618Z"
+    },
+    "command:grep -rn \"AGENT_TYPES\"": {
+      "kind": "command",
+      "label": "grep -rn \"AGENT_TYPES\" /home/tiago/pessoal/project-mem/plugin/",
+      "count": 1,
+      "last_seen": "2026-04-20T02:28:30.538Z"
+    },
+    "file:v2/crates/api-http/tests/parity_agents.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_agents.rs",
+      "count": 2,
+      "last_seen": "2026-04-20T02:30:26.828Z"
+    },
+    "command:grep -n \"function": {
+      "kind": "command",
+      "label": "grep -n \"function handleChat\\|function",
       "count": 3,
-      "last_seen": "2026-04-20T00:49:29.688Z"
+      "last_seen": "2026-04-20T16:52:18.865Z"
+    },
+    "command:grep -rn \"router\\.\"": {
+      "kind": "command",
+      "label": "grep -rn \"router\\.\" /home/tiago/pessoal/project-mem/v2/crates/domain-bus/src/",
+      "count": 1,
+      "last_seen": "2026-04-20T02:51:46.275Z"
+    },
+    "command:grep -rn \"suggestTargets\\|fn": {
+      "kind": "command",
+      "label": "grep -rn \"suggestTargets\\|fn route\\|fn",
+      "count": 1,
+      "last_seen": "2026-04-20T02:51:50.987Z"
+    },
+    "command:grep -rln \"suggest_targets\\|suggestTargets\"": {
+      "kind": "command",
+      "label": "grep -rln \"suggest_targets\\|suggestTargets\" /home/tiago/pessoal/project-mem/v2/crates/",
+      "count": 1,
+      "last_seen": "2026-04-20T02:51:53.797Z"
+    },
+    "command:grep -rln \"router.cjs\\|fn": {
+      "kind": "command",
+      "label": "grep -rln \"router.cjs\\|fn route\\b\"",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:09.272Z"
+    },
+    "command:grep -n \"load_graph\\|pub": {
+      "kind": "command",
+      "label": "grep -n \"load_graph\\|pub fn",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:33.667Z"
+    },
+    "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src": {
+      "kind": "command",
+      "label": "mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:47.653Z"
+    },
+    "file:v2/crates/domain-router/Cargo.toml": {
+      "kind": "file",
+      "label": "v2/crates/domain-router/Cargo.toml",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:53.112Z"
+    },
+    "file:v2/crates/domain-router/src/lib.rs": {
+      "kind": "file",
+      "label": "v2/crates/domain-router/src/lib.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T02:53:53.759Z"
+    },
+    "file:v2/crates/domain-router/tests/parity.rs": {
+      "kind": "file",
+      "label": "v2/crates/domain-router/tests/parity.rs",
+      "count": 2,
+      "last_seen": "2026-04-20T02:56:37.665Z"
+    },
+    "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs": {
+      "kind": "command",
+      "label": "wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T02:57:48.452Z"
+    },
+    "file:v2/crates/api-http/src/chat_routes.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/src/chat_routes.rs",
+      "count": 7,
+      "last_seen": "2026-04-20T03:17:51.380Z"
+    },
+    "file:v2/crates/api-http/tests/parity_route_chat.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_route_chat.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T02:59:30.091Z"
+    },
+    "file:v2/crates/api-http/src/handoff_routes.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/src/handoff_routes.rs",
+      "count": 6,
+      "last_seen": "2026-04-20T03:15:28.103Z"
+    },
+    "file:v2/crates/api-http/tests/parity_handoff.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_handoff.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T03:07:14.638Z"
+    },
+    "command:git log --oneline": {
+      "kind": "command",
+      "label": "git log --oneline crates/api-http/tests/parity_agents.rs",
+      "count": 3,
+      "last_seen": "2026-04-20T03:14:33.426Z"
+    },
+    "command:git stash &&": {
+      "kind": "command",
+      "label": "git stash && cargo",
+      "count": 1,
+      "last_seen": "2026-04-20T03:14:49.037Z"
+    },
+    "file:v2/crates/api-http/tests/parity_chat_stream.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_chat_stream.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T03:18:46.338Z"
+    },
+    "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/domain-agents/src/*.rs": {
+      "kind": "command",
+      "label": "wc -l /home/tiago/pessoal/project-mem/v2/crates/domain-agents/src/*.rs /home/tiago/pessoal/project-mem/v2/crates/api-http/src/*.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T03:21:57.781Z"
+    },
+    "command:grep -n \"resolve_cli_model\\|load_mini_context\\|pub": {
+      "kind": "command",
+      "label": "grep -n \"resolve_cli_model\\|load_mini_context\\|pub fn",
+      "count": 1,
+      "last_seen": "2026-04-20T03:22:01.430Z"
+    },
+    "command:grep -n \"pub\\|enqueueAutoTurn\\|acquire\\|release\"": {
+      "kind": "command",
+      "label": "grep -n \"pub\\|enqueueAutoTurn\\|acquire\\|release\" /home/tiago/pessoal/project-mem/v2/crates/core-queue/src/lib.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T03:22:12.970Z"
+    },
+    "command:grep -n \"pub.*": {
+      "kind": "command",
+      "label": "grep -n \"pub.* append_agent_log\\|fn",
+      "count": 1,
+      "last_seen": "2026-04-20T03:22:38.723Z"
+    },
+    "command:grep -n \"get_secrets\\|pub": {
+      "kind": "command",
+      "label": "grep -n \"get_secrets\\|pub fn\\|pub",
+      "count": 1,
+      "last_seen": "2026-04-20T03:22:55.663Z"
+    },
+    "command:grep -n \"get_secrets\\|fn": {
+      "kind": "command",
+      "label": "grep -n \"get_secrets\\|fn .*secrets\\|trait",
+      "count": 1,
+      "last_seen": "2026-04-20T03:22:59.691Z"
+    },
+    "command:grep -n \"tokio\\|process\"": {
+      "kind": "command",
+      "label": "grep -n \"tokio\\|process\" /home/tiago/pessoal/project-mem/v2/Cargo.toml",
+      "count": 1,
+      "last_seen": "2026-04-20T03:23:28.647Z"
+    },
+    "command:grep -n \"F4-05f\"": {
+      "kind": "command",
+      "label": "grep -n \"F4-05f\" /home/tiago/pessoal/project-mem/docs/migration_progress.md",
+      "count": 1,
+      "last_seen": "2026-04-20T03:23:36.134Z"
+    },
+    "command:grep -n \"fn": {
+      "kind": "command",
+      "label": "grep -n \"fn new\\|fn",
+      "count": 1,
+      "last_seen": "2026-04-20T03:23:43.279Z"
+    },
+    "file:v2/crates/api-http/src/chat_send_routes.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/src/chat_send_routes.rs",
+      "count": 7,
+      "last_seen": "2026-04-20T11:30:03.022Z"
+    },
+    "command:grep -n \"get_secrets_for_agent\\|fn": {
+      "kind": "command",
+      "label": "grep -n \"get_secrets_for_agent\\|fn status\\|pub",
+      "count": 1,
+      "last_seen": "2026-04-20T03:30:34.642Z"
+    },
+    "command:grep -n \"domain-sigilo\\|domain-integrity\\|domain-humans\"": {
+      "kind": "command",
+      "label": "grep -n \"domain-sigilo\\|domain-integrity\\|domain-humans\" /home/tiago/pessoal/project-mem/v2/crates/api-http/Cargo.toml",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:12.796Z"
+    },
+    "command:grep -A1 \"^tokio": {
+      "kind": "command",
+      "label": "grep -A1 \"^tokio \"",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:22.920Z"
+    },
+    "command:grep -n \"destructive\\|block_reason\\|protection_engine\\|destructive_intent\"": {
+      "kind": "command",
+      "label": "grep -n \"destructive\\|block_reason\\|protection_engine\\|destructive_intent\" /home/tiago/pessoal/project-mem/v2/crates/api-http/tests/parity_handoff.rs",
+      "count": 1,
+      "last_seen": "2026-04-20T03:32:46.980Z"
+    },
+    "command:grep -n \"handleChatSend\\|destructive_intent\\|blocked:": {
+      "kind": "command",
+      "label": "grep -n \"handleChatSend\\|destructive_intent\\|blocked: true\"",
+      "count": 1,
+      "last_seen": "2026-04-20T03:32:55.715Z"
+    },
+    "file:v2/crates/api-http/tests/parity_chat_send.rs": {
+      "kind": "file",
+      "label": "v2/crates/api-http/tests/parity_chat_send.rs",
+      "count": 4,
+      "last_seen": "2026-04-20T11:30:14.584Z"
+    },
+    "command:grep -n \"api/chat\"": {
+      "kind": "command",
+      "label": "grep -n \"api/chat\" /home/tiago/pessoal/project-mem/plugin/ui/server.cjs",
+      "count": 1,
+      "last_seen": "2026-04-20T11:29:50.688Z"
+    },
+    "command:grep -n \"claude-project-memory\\|memDir\\|resolveProject\\|CLAUDE_CWD\"": {
+      "kind": "command",
+      "label": "grep -n \"claude-project-memory\\|memDir\\|resolveProject\\|CLAUDE_CWD\" /home/tiago/pessoal/project-mem/plugin/ui/server.cjs",
+      "count": 1,
+      "last_seen": "2026-04-20T16:51:43.005Z"
+    },
+    "command:find /home/tiago/pessoal/project-mem/plugin -name": {
+      "kind": "command",
+      "label": "find /home/tiago/pessoal/project-mem/plugin -name \"destructive*\"",
+      "count": 1,
+      "last_seen": "2026-04-20T16:52:09.319Z"
+    },
+    "agent:manager": {
+      "kind": "agent",
+      "label": "manager",
+      "count": 16,
+      "last_seen": "2026-04-20T16:59:12.492Z"
+    },
+    "agent:product_owner": {
+      "kind": "agent",
+      "label": "product_owner",
+      "count": 3,
+      "last_seen": "2026-04-20T16:58:04.476Z"
     }
   },
   "edges": {
@@ -5630,8 +5900,8 @@
       "from": "command:cargo test -p",
       "to": "file:docs/migration_progress.md",
       "rel": "then_edited",
-      "count": 3,
-      "last_seen": "2026-04-19T22:42:19.694Z"
+      "count": 5,
+      "last_seen": "2026-04-20T02:30:56.293Z"
     },
     "file:docs/migration_progress.md→command:grep -nE \"build_injection_block|buildInjectionBlock\"→followed_by": {
       "from": "file:docs/migration_progress.md",
@@ -6113,8 +6383,8 @@
       "from": "file:v2/crates/api-http/src/lib.rs",
       "to": "command:cargo build -p",
       "rel": "followed_by",
-      "count": 2,
-      "last_seen": "2026-04-20T00:49:44.115Z"
+      "count": 5,
+      "last_seen": "2026-04-20T03:32:07.820Z"
     },
     "command:cargo build -p→file:v2/crates/api-http/src/destructive_routes.rs→then_edited": {
       "from": "command:cargo build -p",
@@ -6400,8 +6670,8 @@
       "from": "command:cargo test -p",
       "to": "file:v2/crates/api-http/Cargo.toml",
       "rel": "then_edited",
-      "count": 1,
-      "last_seen": "2026-04-20T00:48:02.677Z"
+      "count": 3,
+      "last_seen": "2026-04-20T03:02:25.307Z"
     },
     "file:v2/crates/api-http/Cargo.toml→file:v2/crates/api-http/src/humans_routes.rs→co_edited": {
       "from": "file:v2/crates/api-http/Cargo.toml",
@@ -6430,6 +6700,468 @@
       "rel": "co_edited",
       "count": 1,
       "last_seen": "2026-04-20T00:49:35.257Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/tests/parity_humans.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/tests/parity_humans.rs",
+      "rel": "then_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T02:17:46.806Z"
+    },
+    "file:v2/crates/api-http/tests/parity_humans.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_humans.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T00:51:21.645Z"
+    },
+    "file:docs/migration_progress.md→file:v2/crates/domain-humans/src/lib.rs→co_edited": {
+      "from": "file:docs/migration_progress.md",
+      "to": "file:v2/crates/domain-humans/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T00:54:20.260Z"
+    },
+    "file:v2/crates/domain-humans/src/lib.rs→file:docs/migration_progress.md→co_edited": {
+      "from": "file:v2/crates/domain-humans/src/lib.rs",
+      "to": "file:docs/migration_progress.md",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T00:54:20.260Z"
+    },
+    "file:v2/crates/domain-humans/src/lib.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/domain-humans/src/lib.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T00:54:59.919Z"
+    },
+    "command:cargo test -p→file:v2/crates/api-http/src/humans_routes.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/api-http/src/humans_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T00:55:16.534Z"
+    },
+    "file:v2/crates/api-http/src/humans_routes.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/api-http/src/humans_routes.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:17:22.854Z"
+    },
+    "file:v2/crates/api-http/tests/parity_humans.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_humans.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:17:57.255Z"
+    },
+    "file:v2/crates/api-http/Cargo.toml→file:v2/crates/api-http/src/agents_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/Cargo.toml",
+      "to": "file:v2/crates/api-http/src/agents_routes.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T02:57:45.124Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs→file:v2/crates/api-http/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/api-http/src/agents_routes.rs",
+      "to": "file:v2/crates/api-http/Cargo.toml",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T02:57:45.124Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs→file:v2/crates/api-http/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/agents_routes.rs",
+      "to": "file:v2/crates/api-http/src/lib.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T03:03:33.164Z"
+    },
+    "file:v2/crates/api-http/src/lib.rs→file:v2/crates/api-http/src/agents_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/lib.rs",
+      "to": "file:v2/crates/api-http/src/agents_routes.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T03:03:33.164Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/src/agents_routes.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/src/agents_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:27:20.800Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/api-http/src/agents_routes.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:27:26.669Z"
+    },
+    "command:grep -rn \"AGENT_TYPES\"→file:v2/crates/api-http/tests/parity_agents.rs→then_edited": {
+      "from": "command:grep -rn \"AGENT_TYPES\"",
+      "to": "file:v2/crates/api-http/tests/parity_agents.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:30:13.407Z"
+    },
+    "file:v2/crates/api-http/tests/parity_agents.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_agents.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 2,
+      "last_seen": "2026-04-20T02:30:30.461Z"
+    },
+    "command:cargo test -p→file:v2/crates/api-http/tests/parity_agents.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/api-http/tests/parity_agents.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:30:26.828Z"
+    },
+    "file:docs/migration_progress.md→command:grep -n \"function→followed_by": {
+      "from": "file:docs/migration_progress.md",
+      "to": "command:grep -n \"function",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:31:56.486Z"
+    },
+    "command:grep -n \"load_graph\\|pub→file:v2/Cargo.toml→then_edited": {
+      "from": "command:grep -n \"load_graph\\|pub",
+      "to": "file:v2/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:44.361Z"
+    },
+    "file:v2/Cargo.toml→command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src→followed_by": {
+      "from": "file:v2/Cargo.toml",
+      "to": "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:47.653Z"
+    },
+    "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src→file:v2/crates/domain-router/Cargo.toml→then_edited": {
+      "from": "command:mkdir -p /home/tiago/pessoal/project-mem/v2/crates/domain-router/src",
+      "to": "file:v2/crates/domain-router/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:52:53.112Z"
+    },
+    "file:v2/crates/domain-router/Cargo.toml→file:v2/crates/domain-router/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/domain-router/Cargo.toml",
+      "to": "file:v2/crates/domain-router/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:53:53.759Z"
+    },
+    "file:v2/crates/domain-router/src/lib.rs→file:v2/crates/domain-router/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/domain-router/src/lib.rs",
+      "to": "file:v2/crates/domain-router/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:53:53.759Z"
+    },
+    "file:v2/crates/domain-router/src/lib.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/domain-router/src/lib.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:53:58.275Z"
+    },
+    "command:cargo test -p→file:v2/crates/domain-router/tests/parity.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/domain-router/tests/parity.rs",
+      "rel": "then_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T02:56:37.665Z"
+    },
+    "file:v2/crates/domain-router/tests/parity.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/domain-router/tests/parity.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:56:33.668Z"
+    },
+    "file:v2/crates/domain-router/tests/parity.rs→file:v2/crates/api-http/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/domain-router/tests/parity.rs",
+      "to": "file:v2/crates/api-http/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:57:27.718Z"
+    },
+    "file:v2/crates/api-http/Cargo.toml→file:v2/crates/domain-router/tests/parity.rs→co_edited": {
+      "from": "file:v2/crates/api-http/Cargo.toml",
+      "to": "file:v2/crates/domain-router/tests/parity.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:57:27.718Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs→command:wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs→followed_by": {
+      "from": "file:v2/crates/api-http/src/agents_routes.rs",
+      "to": "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:57:48.452Z"
+    },
+    "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs→file:v2/crates/api-http/src/agents_routes.rs→then_edited": {
+      "from": "command:wc -l /home/tiago/pessoal/project-mem/v2/crates/api-http/src/agents_routes.rs",
+      "to": "file:v2/crates/api-http/src/agents_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:58:01.088Z"
+    },
+    "file:v2/crates/api-http/src/agents_routes.rs→file:v2/crates/api-http/src/chat_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/agents_routes.rs",
+      "to": "file:v2/crates/api-http/src/chat_routes.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T03:03:14.191Z"
+    },
+    "file:v2/crates/api-http/src/chat_routes.rs→file:v2/crates/api-http/src/agents_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/chat_routes.rs",
+      "to": "file:v2/crates/api-http/src/agents_routes.rs",
+      "rel": "co_edited",
+      "count": 2,
+      "last_seen": "2026-04-20T03:03:14.191Z"
+    },
+    "file:v2/crates/api-http/src/chat_routes.rs→file:v2/crates/api-http/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/chat_routes.rs",
+      "to": "file:v2/crates/api-http/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:58:15.638Z"
+    },
+    "file:v2/crates/api-http/src/lib.rs→file:v2/crates/api-http/src/chat_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/lib.rs",
+      "to": "file:v2/crates/api-http/src/chat_routes.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:58:15.638Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/tests/parity_route_chat.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/tests/parity_route_chat.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T02:59:30.091Z"
+    },
+    "file:v2/crates/api-http/tests/parity_route_chat.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_route_chat.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T02:59:36.589Z"
+    },
+    "file:v2/crates/api-http/Cargo.toml→file:v2/crates/api-http/src/chat_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/Cargo.toml",
+      "to": "file:v2/crates/api-http/src/chat_routes.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:02:58.211Z"
+    },
+    "file:v2/crates/api-http/src/chat_routes.rs→file:v2/crates/api-http/Cargo.toml→co_edited": {
+      "from": "file:v2/crates/api-http/src/chat_routes.rs",
+      "to": "file:v2/crates/api-http/Cargo.toml",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:02:58.211Z"
+    },
+    "file:v2/crates/api-http/src/lib.rs→file:v2/crates/api-http/src/handoff_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/lib.rs",
+      "to": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:05:23.528Z"
+    },
+    "file:v2/crates/api-http/src/handoff_routes.rs→file:v2/crates/api-http/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "to": "file:v2/crates/api-http/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:05:23.528Z"
+    },
+    "file:v2/crates/api-http/src/handoff_routes.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 4,
+      "last_seen": "2026-04-20T03:15:24.853Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/src/handoff_routes.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "rel": "then_edited",
+      "count": 3,
+      "last_seen": "2026-04-20T03:15:28.103Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/tests/parity_handoff.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/tests/parity_handoff.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:07:14.638Z"
+    },
+    "file:v2/crates/api-http/tests/parity_handoff.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_handoff.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T03:07:21.452Z"
+    },
+    "command:git stash &&→file:v2/crates/api-http/src/handoff_routes.rs→then_edited": {
+      "from": "command:git stash &&",
+      "to": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:15:13.227Z"
+    },
+    "file:v2/crates/api-http/src/handoff_routes.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/src/handoff_routes.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T03:15:46.894Z"
+    },
+    "command:cd /home/tiago/pessoal/project-mem/v2 &&→file:v2/crates/api-http/src/chat_routes.rs→then_edited": {
+      "from": "command:cd /home/tiago/pessoal/project-mem/v2 &&",
+      "to": "file:v2/crates/api-http/src/chat_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:17:36.952Z"
+    },
+    "file:v2/crates/api-http/src/chat_routes.rs→command:cargo build -p→followed_by": {
+      "from": "file:v2/crates/api-http/src/chat_routes.rs",
+      "to": "command:cargo build -p",
+      "rel": "followed_by",
+      "count": 2,
+      "last_seen": "2026-04-20T03:17:56.671Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/src/chat_routes.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/src/chat_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:17:47.660Z"
+    },
+    "command:cargo build -p→file:v2/crates/api-http/tests/parity_chat_stream.rs→then_edited": {
+      "from": "command:cargo build -p",
+      "to": "file:v2/crates/api-http/tests/parity_chat_stream.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:18:46.338Z"
+    },
+    "file:v2/crates/api-http/tests/parity_chat_stream.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_chat_stream.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T03:18:56.815Z"
+    },
+    "command:grep -n \"fn→file:v2/crates/api-http/src/chat_send_routes.rs→then_edited": {
+      "from": "command:grep -n \"fn",
+      "to": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:28:12.539Z"
+    },
+    "file:v2/crates/api-http/src/chat_send_routes.rs→command:grep -n \"pub→followed_by": {
+      "from": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "to": "command:grep -n \"pub",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T03:30:03.485Z"
+    },
+    "command:grep -n \"domain-sigilo\\|domain-integrity\\|domain-humans\"→file:v2/crates/api-http/Cargo.toml→then_edited": {
+      "from": "command:grep -n \"domain-sigilo\\|domain-integrity\\|domain-humans\"",
+      "to": "file:v2/crates/api-http/Cargo.toml",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:19.015Z"
+    },
+    "file:v2/crates/api-http/Cargo.toml→command:grep -A1 \"^tokio→followed_by": {
+      "from": "file:v2/crates/api-http/Cargo.toml",
+      "to": "command:grep -A1 \"^tokio",
+      "rel": "followed_by",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:22.920Z"
+    },
+    "command:grep -A1 \"^tokio→file:v2/crates/api-http/src/chat_send_routes.rs→then_edited": {
+      "from": "command:grep -A1 \"^tokio",
+      "to": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:30.736Z"
+    },
+    "file:v2/crates/api-http/src/chat_send_routes.rs→file:v2/crates/api-http/src/lib.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "to": "file:v2/crates/api-http/src/lib.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:52.714Z"
+    },
+    "file:v2/crates/api-http/src/lib.rs→file:v2/crates/api-http/src/chat_send_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/lib.rs",
+      "to": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:31:52.714Z"
+    },
+    "command:grep -n \"handleChatSend\\|destructive_intent\\|blocked:→file:v2/crates/api-http/tests/parity_chat_send.rs→then_edited": {
+      "from": "command:grep -n \"handleChatSend\\|destructive_intent\\|blocked:",
+      "to": "file:v2/crates/api-http/tests/parity_chat_send.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T03:33:57.502Z"
+    },
+    "file:v2/crates/api-http/tests/parity_chat_send.rs→command:cargo test -p→followed_by": {
+      "from": "file:v2/crates/api-http/tests/parity_chat_send.rs",
+      "to": "command:cargo test -p",
+      "rel": "followed_by",
+      "count": 3,
+      "last_seen": "2026-04-20T11:30:20.835Z"
+    },
+    "command:cargo test -p→file:v2/crates/api-http/tests/parity_chat_send.rs→then_edited": {
+      "from": "command:cargo test -p",
+      "to": "file:v2/crates/api-http/tests/parity_chat_send.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T11:29:40.042Z"
+    },
+    "command:grep -n \"api/chat\"→file:v2/crates/api-http/src/chat_send_routes.rs→then_edited": {
+      "from": "command:grep -n \"api/chat\"",
+      "to": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "rel": "then_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T11:29:59.254Z"
+    },
+    "file:v2/crates/api-http/src/chat_send_routes.rs→file:v2/crates/api-http/tests/parity_chat_send.rs→co_edited": {
+      "from": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "to": "file:v2/crates/api-http/tests/parity_chat_send.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T11:30:06.061Z"
+    },
+    "file:v2/crates/api-http/tests/parity_chat_send.rs→file:v2/crates/api-http/src/chat_send_routes.rs→co_edited": {
+      "from": "file:v2/crates/api-http/tests/parity_chat_send.rs",
+      "to": "file:v2/crates/api-http/src/chat_send_routes.rs",
+      "rel": "co_edited",
+      "count": 1,
+      "last_seen": "2026-04-20T11:30:06.061Z"
+    },
+    "human:jose→agent:manager→talks_to": {
+      "from": "human:jose",
+      "to": "agent:manager",
+      "rel": "talks_to",
+      "count": 5,
+      "last_seen": "2026-04-20T16:58:59.672Z"
+    },
+    "human:jose→agent:product_owner→talks_to": {
+      "from": "human:jose",
+      "to": "agent:product_owner",
+      "rel": "talks_to",
+      "count": 1,
+      "last_seen": "2026-04-20T16:57:54.783Z"
     }
   }
 }

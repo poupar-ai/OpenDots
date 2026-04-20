@@ -1,0 +1,19 @@
+[package]
+name = "domain-router"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# Porta Rust de `plugin/scripts/router.cjs`. Roteador determinístico de
+# handoff entre agentes — ranking de candidatos dentro de `can_talk_to`.
+
+[dependencies]
+domain-agents = { path = "../domain-agents" }
+domain-graph = { path = "../domain-graph" }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+regex = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

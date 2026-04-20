@@ -7,8 +7,12 @@
 //! **F4-05c (atual)**: destructive + seeds + best-practices + pipelines +
 //! architect + skills + ides.
 
+pub mod agents_routes;
 pub mod best_practices_routes;
+pub mod chat_routes;
+pub mod chat_send_routes;
 pub mod destructive_routes;
+pub mod handoff_routes;
 pub mod humans_routes;
 pub mod misc_routes;
 pub mod pipelines_routes;
@@ -30,6 +34,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use core_ports::VaultStore;
+use core_queue::{AgentQueue, AgentQueueConfig};
 use domain_bus::{
     compact_old_files, get_config, get_message, get_state, list_day_files, set_config, Clock,
     CompactOpts, GetStateOpts, SystemClock, DEFAULT_RETENTION, MAX_RETENTION, MIN_RETENTION,
@@ -156,6 +161,7 @@ pub struct AppState {
     pub dist_dir: Option<PathBuf>,
     pub vault: Arc<dyn VaultStore>,
     pub unlock_guard: Arc<UnlockGuard>,
+    pub auto_queue: Arc<AgentQueue>,
 }
 
 impl AppState {
@@ -171,6 +177,13 @@ impl AppState {
         let cfg = load_network_config(&mem_dir);
         let bind_host = resolve_bind_host(&cfg);
         let unlock_guard = Arc::new(UnlockGuard::load(&mem_dir));
+        // Runner placeholder: spawn Claude será wired em F4-05f-5. Por ora,
+        // o runner é no-op — a fila ainda rastreia enqueue/rate-limit, mas
+        // nenhum turn processa de fato.
+        let runner: core_queue::Runner = std::sync::Arc::new(|_to, _from, _msg, _traces| {
+            Box::pin(async move {}) as core_queue::BoxFut
+        });
+        let auto_queue = AgentQueue::new(AgentQueueConfig::new(runner));
         Self {
             mem_dir,
             project_root,
@@ -183,6 +196,7 @@ impl AppState {
             dist_dir,
             vault,
             unlock_guard,
+            auto_queue,
         }
     }
 
@@ -210,6 +224,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(pipelines_routes::pipelines_router())
         .merge(misc_routes::misc_router())
         .merge(humans_routes::humans_router())
+        .merge(agents_routes::agents_router())
+        .merge(chat_routes::chat_router())
+        .merge(chat_send_routes::chat_send_router())
+        .merge(handoff_routes::handoff_router())
         .fallback(serve_static)
         .with_state(state)
 }

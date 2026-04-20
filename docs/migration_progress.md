@@ -76,8 +76,9 @@ Nada novo até terminar paridade do existente.
 | F4-05a | scaffold + static + `/api/network-config` + `/api/bus/*` (state/trace/config/compact) | ✅ |
 | F4-05b | Vault endpoints (20 rotas `/api/vault/*`) + guards (lockout, rate-limit) | ✅ |
 | F4-05c | Destructive + seeds + best-practices + pipelines + architect + skills + ides | ✅ |
-| F4-05d | Humans (CRUD + chat + heartbeat) + human-handoff + shadow turns | ⏳ |
-| F4-05e | Agents CRUD + per-agent PATCH (model, autonomy, scope, vault, context, mcps, doc) | ⏳ |
+| F4-05d-1 | Humans CRUD + heartbeat (6 rotas `/api/humans/*`) | ✅ |
+| F4-05d-2 | Human chat read-only (`/api/humans/:id/chats`, `/api/human-chat/history`) | ✅ |
+| F4-05e | Agents CRUD + per-agent PATCH (model, autonomy, scope, vault, context, mcps, doc) | ✅ |
 | F4-05f | Chat: `/api/chat/*` (send, history, stream SSE, improve) + spawn Claude + queue drain | ⏳ |
 | F4-05g | Wiring: main, bus onRetry/onTimeout, scheduleNudge, runCompaction cron | ⏳ |
 
@@ -91,12 +92,102 @@ e `api-http` são os grandes.
 
 ## Item em curso
 
-_`api-http` (F4-05) em andamento — F4-05a + F4-05b + F4-05c prontas.
-Próxima: F4-05d (humans CRUD + chat + heartbeat)._
+_`api-http` (F4-05) em andamento — F4-05a + F4-05b + F4-05c + F4-05d-1
++ F4-05d-2 + F4-05e prontas.
+Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
 
 ---
 
 ## Histórico recente
+
+### ✅ `api-http` F4-05e (agents CRUD + per-agent endpoints) — 2026-04-19
+- **Tests verdes**: 32 parity tests (cross-language contra `node
+  server.cjs`) + 3 unit tests (`is_valid_doc_name`, `sanitize_string_array`).
+- **12 rotas** portadas de `plugin/ui/server.cjs`:
+  - `POST   /api/agents`                    — cria agente (ok 200)
+  - `DELETE /api/agents/:name`              — 404 unknown, 405 `handoff`,
+    400 manager/oracle
+  - `PATCH  /api/agents/:name/model`        — model + propagate_seed
+    (origin via `_meta.agent_origin`)
+  - `PATCH  /api/agents/:name/autonomy`     — {level, call_human_when}
+    + propagate_seed
+  - `PUT    /api/agents/:name/scope`        — tools + scope.bash_allow
+    + audit log `scope_updated`
+  - `PUT    /api/agents/:name/vault`        — secrets (ACL) + audit log
+    `vault_access_updated`
+  - `PUT    /api/agents/:name/context`      — `.md` mini-contexto
+  - `PUT    /api/agents/:name/mcps`         — sanitize + save manifest
+  - `GET    /api/mcps`                      — global+project+referenced+all
+    (dedup BTreeSet + ordem preservada)
+  - `PUT    /api/docs/:doc`                 — allowlist SOUL/PROJECT/…
+  - `GET    /api/agents/log?agent=X`        — tail agent_logs.jsonl
+  - `GET    /api/agents/work?agent=X`       — observations.jsonl filtrado,
+    slice last N, reversed
+- **Arquitetura**:
+  - Módulo novo `agents_routes.rs` (~780 linhas) + merge no
+    `build_router`.
+  - `append_agent_log` local inlinea `appendAgentLog` do `.cjs`
+    (JSONL + `domain_graph::on_agent_log_event`).
+  - Deps adicionadas em `Cargo.toml`: `domain-agents`, `domain-graph`.
+  - `GraphSystemClock.now_iso()` via trait `domain_graph::Clock`.
+- **Decisões**:
+  - `create` retorna 200 (não 201) para paridade direta com `.cjs:1833`.
+  - `mcps` array sempre presente no config (mesmo vazio), paridade com
+    `.cjs:1829` que força `config.mcps = []`.
+  - `doc_save`: rota `/api/docs/:doc` (sem regex), handler valida
+    `^[A-Z_]+\.md$` e allowlist — paridade com regex na rota `.cjs:3020`.
+  - `autonomy` embrulha `{level, call_human_when}` no payload antes de
+    `update_autonomy` (paridade com `.cjs:1651`).
+  - `propagate_seed=true` sem origin → 400 com `updated` no body.
+  - `work`: `agent: null` quando filtro ausente (paridade `agent || null`).
+- **Findings novos**: nenhum — lógica do `.cjs` mapeou limpo.
+- **Paridade v2**: confirmada byte-a-byte em 32 cenários.
+
+### ✅ `api-http` F4-05d-2 (human chat read-only) — 2026-04-19
+- **2 rotas** portadas:
+  - `GET /api/humans/:id/chats`            — summary de agent_chats +
+    human_chats por id
+  - `GET /api/human-chat/history?me=&with=` — histórico humano↔humano
+- Parity tests integrados ao `parity_humans.rs` (chats_summary_*,
+  human_chat_history_*) — 4 casos cobertos.
+- Leituras puras via `domain_humans::{summarize_human_chats,
+  read_human_chat}` — sem side effects.
+
+### ✅ `api-http` F4-05d-1 (humans CRUD + heartbeat) — 2026-04-19
+- **Crate nova** `domain-humans` criada do zero — lógica estava inline
+  em `plugin/ui/server.cjs`. Contém: Clock trait + SystemClock/
+  FixedClock, `slug_human` (NFD + diacritics + kebab + cap40 UTF-16),
+  5 funções sanitize (location/gender/skin/position/ui_prefs),
+  load/save tolerantes, CRUD + heartbeat + append-only log.
+- **Tests verdes**: 16 unit tests em `domain-humans` + 19 parity
+  tests `parity_humans.rs` (cross-language contra node `server.cjs`).
+- **6 rotas** portadas:
+  - `GET    /api/humans`                — lista + default_id
+  - `POST   /api/humans`                — cria (201)
+  - `GET    /api/humans/:id`            — summary
+  - `PUT    /api/humans/:id`            — update parcial
+  - `DELETE /api/humans/:id`            — remove + reset default_id
+  - `POST   /api/humans/:id/heartbeat`  — touch last_seen_at
+- **Arquitetura**:
+  - Módulo novo `humans_routes.rs` + merge no `build_router`.
+  - `domain-humans::Clock` é trait domain-specific (diferente de
+    `domain_bus::Clock`). Handlers instanciam `HumansSystemClock`
+    local por chamada (mesmo padrão de pipelines/architect).
+  - Response wrapper: `create_human/update_human/touch_human`
+    retornam Value bruto; handler aplica `human_summary(&h, now_ms)`
+    antes de responder.
+  - Update usa `body_obj.get(key).is_some()` pra decidir noop
+    (paridade `body[f] === undefined` do `.cjs`).
+- **Decisões**:
+  - Deixei fora: chat humano↔humano (`human_chats/`) e shadow-turns
+    (Claude spawn) — movidos para F4-05d-2 e F4-05f.
+  - `heartbeat` responde `is_online: true` sempre (paridade direta
+    com `.cjs` que não consulta clock após touch).
+  - `delete`: se `default_id == id`, zera pro primeiro key restante
+    ou `null` se vazio (paridade com `Object.keys()[0]`).
+- **Fora de escopo**: 2 rotas extras do server.cjs (`GET /humans/:id/
+  chats` e `GET /human-chat/history`) viram F4-05d-2; `/api/human-
+  handoff` junta com F4-05f (precisa de spawn Claude).
 
 ### ✅ `api-http` F4-05c (destructive + seeds + bp + pipelines + architect + skills + ides) — 2026-04-19
 - **Tests verdes** no crate `api-http`: 7 unit destructive + 9 parity

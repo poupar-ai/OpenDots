@@ -17,13 +17,19 @@ path = "src/bin/http.rs"
 [dependencies]
 core-paths = { path = "../core-paths" }
 core-ports = { path = "../core-ports" }
+core-queue = { path = "../core-queue" }
+domain-agents = { path = "../domain-agents" }
 domain-architect = { path = "../domain-architect" }
 domain-best-practices = { path = "../domain-best-practices" }
 domain-bus = { path = "../domain-bus" }
 domain-destructive = { path = "../domain-destructive" }
+domain-graph = { path = "../domain-graph" }
 domain-humans = { path = "../domain-humans" }
 domain-ide-adapters = { path = "../domain-ide-adapters" }
+domain-integrity = { path = "../domain-integrity" }
+domain-sigilo = { path = "../domain-sigilo" }
 domain-pipelines = { path = "../domain-pipelines" }
+domain-router = { path = "../domain-router" }
 domain-seed = { path = "../domain-seed" }
 domain-skills-install = { path = "../domain-skills-install" }
 adapter-vault-file = { path = "../adapter-vault-file" }
@@ -35,6 +41,9 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 bytes = { workspace = true }
 mime_guess = { workspace = true }
+regex = { workspace = true }
+tokio-stream = "0.1"
+futures-util = "0.3"
 if-addrs = "0.13"
 base64 = "0.22"
 

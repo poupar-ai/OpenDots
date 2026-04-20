@@ -1,0 +1,11 @@
+{
+  "id": "async-concurrency",
+  "name": "Concorrência assíncrona",
+  "scope": "engineering",
+  "tags": [
+    "async",
+    "performance",
+    "backend"
+  ],
+  "when_to_use": "Para agentes que escrevem código Python async/await, workers,\nfilas SQS, locks distribuídos, idempotency."
+}

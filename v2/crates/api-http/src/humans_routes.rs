@@ -1,26 +1,29 @@
-//! Rotas `/api/humans/*` — paridade com `server.cjs:3028-3044`.
+//! Rotas `/api/humans/*` — paridade com `server.cjs:3028-3053`.
 //!
-//! 6 rotas:
+//! 8 rotas (6 CRUD + heartbeat em F4-05d-1, + 2 read-only chat em F4-05d-2):
 //! - `GET    /api/humans`                — lista + default_id
 //! - `POST   /api/humans`                — cria humano novo (201)
 //! - `GET    /api/humans/:id`            — summary
 //! - `PUT    /api/humans/:id`            — update parcial
 //! - `DELETE /api/humans/:id`            — remove
 //! - `POST   /api/humans/:id/heartbeat`  — marca last_seen_at = now
+//! - `GET    /api/humans/:id/chats`      — resumo de chats (agents + humans)
+//! - `GET    /api/human-chat/history`    — histórico me<->with
 //!
-//! Shadow-turn e chat humano→humano ficam em F4-05d-2/F4-05f.
+//! Shadow-turn + handoff (escrita) ficam em F4-05f (precisa spawn Claude).
 
 use axum::body::Bytes;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use domain_humans::{
     create_human, delete_human, get_human_summary, human_summary, list_humans, load_humans,
-    touch_human, update_human, Clock as HumansClock, CreateInput, Error as HumansError,
-    SystemClock as HumansSystemClock, UpdateInput,
+    read_human_chat, summarize_human_chats, touch_human, update_human, Clock as HumansClock,
+    CreateInput, Error as HumansError, SystemClock as HumansSystemClock, UpdateInput,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{json_error, json_response, AppState};
@@ -33,6 +36,8 @@ pub fn humans_router() -> Router<AppState> {
             get(get_handler).put(update_handler).delete(delete_handler),
         )
         .route("/api/humans/:id/heartbeat", post(heartbeat_handler))
+        .route("/api/humans/:id/chats", get(chats_summary_handler))
+        .route("/api/human-chat/history", get(human_chat_history_handler))
 }
 
 async fn list_handler(State(st): State<AppState>) -> Response {
@@ -174,5 +179,41 @@ async fn heartbeat_handler(State(st): State<AppState>, Path(id): Path<String>) -
         Ok(None) => json_error(StatusCode::NOT_FOUND, "not found"),
         Err(e) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
     }
+}
+
+async fn chats_summary_handler(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+) -> Response {
+    // `.cjs` não valida existência do humano — só varre files por id.
+    let v = summarize_human_chats(&st.mem_dir, &id);
+    json_response(StatusCode::OK, v)
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatHistoryQuery {
+    me: Option<String>,
+    #[serde(rename = "with")]
+    with_id: Option<String>,
+}
+
+async fn human_chat_history_handler(
+    State(st): State<AppState>,
+    Query(q): Query<ChatHistoryQuery>,
+) -> Response {
+    let me = q.me.as_deref().filter(|s| !s.is_empty());
+    let with_id = q.with_id.as_deref().filter(|s| !s.is_empty());
+    let (Some(me), Some(with_id)) = (me, with_id) else {
+        return json_error(StatusCode::BAD_REQUEST, "need me & with");
+    };
+    let messages = read_human_chat(&st.mem_dir, me, with_id);
+    json_response(
+        StatusCode::OK,
+        json!({
+            "me": me,
+            "with": with_id,
+            "messages": messages,
+        }),
+    )
 }
 

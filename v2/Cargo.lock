@@ -168,21 +168,30 @@ dependencies = [
  "bytes",
  "core-paths",
  "core-ports",
+ "core-queue",
+ "domain-agents",
  "domain-architect",
  "domain-best-practices",
  "domain-bus",
  "domain-destructive",
+ "domain-graph",
  "domain-humans",
  "domain-ide-adapters",
+ "domain-integrity",
  "domain-pipelines",
+ "domain-router",
  "domain-seed",
+ "domain-sigilo",
  "domain-skills-install",
+ "futures-util",
  "if-addrs",
  "mime_guess",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tower",
  "tower-http",
 ]
@@ -612,6 +621,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "domain-router"
+version = "0.1.0"
+dependencies = [
+ "domain-agents",
+ "domain-graph",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "domain-seed"
 version = "0.1.0"
 dependencies = [
@@ -735,6 +756,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e3450815272ef58cec6d564423f6e755e25379b217b0bc688e295ba24df6b1d"
 
 [[package]]
+name = "futures-macro"
+version = "0.3.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "futures-task"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -747,6 +779,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "389ca41296e6190b48053de0321d02a77f32f8a5d2461dd38762c0593805c6d6"
 dependencies = [
  "futures-core",
+ "futures-macro",
  "futures-task",
  "pin-project-lite",
  "slab",
@@ -1570,6 +1603,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

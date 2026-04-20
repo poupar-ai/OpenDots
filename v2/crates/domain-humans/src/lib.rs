@@ -862,6 +862,212 @@ pub fn get_human_summary(mem_dir: &Path, id: &str, now_ms: i64) -> Option<Value>
     Some(human_summary(h, now_ms))
 }
 
+// ── Chat helpers ─────────────────────────────────────────────────────────
+
+/// Paridade com `humanChatsDir = path.join(memDir, 'human_chats')`.
+pub fn human_chats_dir(mem_dir: &Path) -> PathBuf {
+    mem_dir.join("human_chats")
+}
+
+/// Paridade com `chatDir = path.join(memDir, 'agent_chats')`.
+pub fn agent_chats_dir(mem_dir: &Path) -> PathBuf {
+    mem_dir.join("agent_chats")
+}
+
+/// Paridade com `humanPairKey(a,b) = [a,b].sort().join('__')`.
+pub fn human_pair_key(a: &str, b: &str) -> String {
+    let mut pair = [a.to_string(), b.to_string()];
+    pair.sort();
+    format!("{}__{}", pair[0], pair[1])
+}
+
+/// Paridade com `humanChatPath`.
+pub fn human_chat_path(mem_dir: &Path, a: &str, b: &str) -> PathBuf {
+    human_chats_dir(mem_dir).join(format!("{}.jsonl", human_pair_key(a, b)))
+}
+
+/// Paridade com `readHumanChat`. Retorna vetor (vazio se arquivo não existe).
+/// Linhas JSON inválidas são silenciosamente ignoradas.
+pub fn read_human_chat(mem_dir: &Path, a: &str, b: &str) -> Vec<Value> {
+    let path = human_chat_path(mem_dir, a, b);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    raw.split('\n')
+        .filter(|l| !l.is_empty())
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .collect()
+}
+
+/// Append-only em human_chats (usado por handoff — F4-05f). Silencia erros.
+pub fn append_human_chat(mem_dir: &Path, a: &str, b: &str, entry: &Value) {
+    use std::io::Write;
+    let dir = human_chats_dir(mem_dir);
+    if fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = human_chat_path(mem_dir, a, b);
+    let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) else {
+        return;
+    };
+    let Ok(mut line) = serde_json::to_string(entry) else {
+        return;
+    };
+    line.push('\n');
+    let _ = f.write_all(line.as_bytes());
+}
+
+/// Paridade com `handleHumanChatsSummary`. Scan de `agent_chats/*.jsonl` e
+/// `human_chats/*.jsonl` filtrando pelo humano `hid`. Retorna
+/// `{ human_id, agent_chats: [...], human_chats: [...] }`.
+pub fn summarize_human_chats(mem_dir: &Path, hid: &str) -> Value {
+    let agent_chats = scan_agent_chats(mem_dir, hid);
+    let human_chats = scan_human_chats(mem_dir, hid);
+    json!({
+        "human_id": hid,
+        "agent_chats": agent_chats,
+        "human_chats": human_chats,
+    })
+}
+
+fn scan_agent_chats(mem_dir: &Path, hid: &str) -> Vec<Value> {
+    let dir = agent_chats_dir(mem_dir);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Value> = Vec::new();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if !name.ends_with(".jsonl") {
+            continue;
+        }
+        let agent_name = name.trim_end_matches(".jsonl").to_string();
+        let Ok(raw) = fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let mut count: i64 = 0;
+        let mut last_ts: Option<String> = None;
+        let mut last_preview = String::new();
+        let mut last_role: Option<String> = None;
+        for line in raw.split('\n').filter(|l| !l.is_empty()) {
+            let Ok(e) = serde_json::from_str::<Value>(line) else {
+                continue;
+            };
+            let role = e.get("role").and_then(Value::as_str);
+            if role == Some("user")
+                && e.get("human_id").and_then(Value::as_str) != Some(hid)
+            {
+                continue;
+            }
+            if role == Some("agent") && count == 0 {
+                continue;
+            }
+            count += 1;
+            if let Some(ts) = e.get("ts").and_then(Value::as_str) {
+                last_ts = Some(ts.to_string());
+            }
+            let content = e
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            last_preview = slice_utf16(content, 140);
+            last_role = role.map(str::to_string);
+        }
+        if count > 0 {
+            out.push(json!({
+                "agent": agent_name,
+                "count": count,
+                "last_ts": last_ts.map(Value::String).unwrap_or(Value::Null),
+                "last_preview": last_preview,
+                "last_role": last_role.map(Value::String).unwrap_or(Value::Null),
+            }));
+        }
+    }
+    // Ordena desc por last_ts (paridade `b.last_ts.localeCompare(a.last_ts)`).
+    out.sort_by(|a, b| {
+        let la = a.get("last_ts").and_then(Value::as_str).unwrap_or("");
+        let lb = b.get("last_ts").and_then(Value::as_str).unwrap_or("");
+        lb.cmp(la)
+    });
+    out
+}
+
+fn scan_human_chats(mem_dir: &Path, hid: &str) -> Vec<Value> {
+    let dir = human_chats_dir(mem_dir);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    // `.cjs` carrega todos os profiles pra resolver peer_name.
+    let data = load_humans(mem_dir);
+    let empty_map = Map::new();
+    let profiles = data
+        .get("humans")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty_map);
+    let name_of = |id: &str| -> String {
+        profiles
+            .get(id)
+            .and_then(|p| p.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or(id)
+            .to_string()
+    };
+
+    let mut out: Vec<Value> = Vec::new();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if !name.ends_with(".jsonl") {
+            continue;
+        }
+        let stem = name.trim_end_matches(".jsonl");
+        let pair: Vec<&str> = stem.split("__").collect();
+        if pair.len() != 2 || !pair.contains(&hid) {
+            continue;
+        }
+        let peer_id = if pair[0] == hid { pair[1] } else { pair[0] };
+        let Ok(raw) = fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let mut count: i64 = 0;
+        let mut last_ts: Option<String> = None;
+        let mut last_preview = String::new();
+        let mut last_from: Option<String> = None;
+        for line in raw.split('\n').filter(|l| !l.is_empty()) {
+            let Ok(e) = serde_json::from_str::<Value>(line) else {
+                continue;
+            };
+            count += 1;
+            if let Some(ts) = e.get("ts").and_then(Value::as_str) {
+                last_ts = Some(ts.to_string());
+            }
+            let content = e.get("content").and_then(Value::as_str).unwrap_or("");
+            last_preview = slice_utf16(content, 140);
+            last_from = e
+                .get("from")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+        if count > 0 {
+            out.push(json!({
+                "peer_id": peer_id,
+                "peer_name": name_of(peer_id),
+                "count": count,
+                "last_ts": last_ts.map(Value::String).unwrap_or(Value::Null),
+                "last_preview": last_preview,
+                "last_from_me": last_from.as_deref() == Some(hid),
+            }));
+        }
+    }
+    out.sort_by(|a, b| {
+        let la = a.get("last_ts").and_then(Value::as_str).unwrap_or("");
+        let lb = b.get("last_ts").and_then(Value::as_str).unwrap_or("");
+        lb.cmp(la)
+    });
+    out
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1065,5 +1271,129 @@ mod tests {
         let h_off = json!({ "last_seen_at": offline_iso });
         assert!(human_is_online(&h_on, now));
         assert!(!human_is_online(&h_off, now));
+    }
+
+    #[test]
+    fn human_pair_key_sorts() {
+        assert_eq!(human_pair_key("bob", "alice"), "alice__bob");
+        assert_eq!(human_pair_key("alice", "bob"), "alice__bob");
+        assert_eq!(human_pair_key("zed", "zed"), "zed__zed");
+    }
+
+    #[test]
+    fn read_human_chat_missing_file_returns_empty() {
+        let d = tempdir().unwrap();
+        let v = read_human_chat(d.path(), "alice", "bob");
+        assert_eq!(v, Vec::<Value>::new());
+    }
+
+    #[test]
+    fn append_then_read_human_chat_roundtrip() {
+        let d = tempdir().unwrap();
+        append_human_chat(
+            d.path(),
+            "alice",
+            "bob",
+            &json!({ "ts": "2026-04-19T00:00:00.000Z", "from": "alice", "content": "hi" }),
+        );
+        append_human_chat(
+            d.path(),
+            "bob",
+            "alice",
+            &json!({ "ts": "2026-04-19T00:00:01.000Z", "from": "bob", "content": "hey" }),
+        );
+        // Ambas chamadas gravam no mesmo arquivo (pair key é ordenada).
+        let msgs = read_human_chat(d.path(), "alice", "bob");
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0]["from"], "alice");
+        assert_eq!(msgs[1]["from"], "bob");
+        // Skip linha inválida no meio.
+        let p = human_chat_path(d.path(), "alice", "bob");
+        let mut raw = fs::read_to_string(&p).unwrap();
+        raw.push_str("not-json\n");
+        fs::write(&p, raw).unwrap();
+        let msgs = read_human_chat(d.path(), "alice", "bob");
+        assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn summarize_empty_dirs() {
+        let d = tempdir().unwrap();
+        let v = summarize_human_chats(d.path(), "tiago");
+        assert_eq!(v["human_id"], "tiago");
+        assert_eq!(v["agent_chats"], json!([]));
+        assert_eq!(v["human_chats"], json!([]));
+    }
+
+    #[test]
+    fn summarize_human_chats_filters_by_hid() {
+        let d = tempdir().unwrap();
+        // Cria perfis pra nome resolution.
+        let c = fixed();
+        for name in ["Alice", "Bob", "Eve"] {
+            create_human(
+                d.path(),
+                &CreateInput { name, ..Default::default() },
+                &c,
+            )
+            .unwrap();
+        }
+        // alice↔bob 2 mensagens.
+        append_human_chat(
+            d.path(),
+            "alice",
+            "bob",
+            &json!({ "ts": "2026-04-19T00:00:00.000Z", "from": "alice", "content": "hi bob" }),
+        );
+        append_human_chat(
+            d.path(),
+            "alice",
+            "bob",
+            &json!({ "ts": "2026-04-19T00:00:05.000Z", "from": "bob", "content": "hi alice" }),
+        );
+        // bob↔eve 1 mensagem (não deve aparecer pra alice).
+        append_human_chat(
+            d.path(),
+            "bob",
+            "eve",
+            &json!({ "ts": "2026-04-19T00:00:10.000Z", "from": "eve", "content": "yo" }),
+        );
+        let v = summarize_human_chats(d.path(), "alice");
+        let hc = v["human_chats"].as_array().unwrap();
+        assert_eq!(hc.len(), 1);
+        assert_eq!(hc[0]["peer_id"], "bob");
+        assert_eq!(hc[0]["peer_name"], "Bob");
+        assert_eq!(hc[0]["count"], 2);
+        assert_eq!(hc[0]["last_from_me"], false); // last was from bob
+    }
+
+    #[test]
+    fn summarize_agent_chats_skips_leading_agent_messages() {
+        let d = tempdir().unwrap();
+        let dir = agent_chats_dir(d.path());
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("foo.jsonl");
+        let mut raw = String::new();
+        // agent msg antes de qualquer user → ignorado.
+        raw.push_str(r#"{"role":"agent","ts":"a","content":"ignored"}"#);
+        raw.push('\n');
+        // user do outro humano → ignorado.
+        raw.push_str(r#"{"role":"user","human_id":"other","ts":"b","content":"other"}"#);
+        raw.push('\n');
+        // user do hid → conta.
+        raw.push_str(r#"{"role":"user","human_id":"me","ts":"c","content":"hi"}"#);
+        raw.push('\n');
+        // agent depois → conta.
+        raw.push_str(r#"{"role":"agent","ts":"d","content":"reply"}"#);
+        raw.push('\n');
+        fs::write(&p, raw).unwrap();
+        let v = summarize_human_chats(d.path(), "me");
+        let ac = v["agent_chats"].as_array().unwrap();
+        assert_eq!(ac.len(), 1);
+        assert_eq!(ac[0]["agent"], "foo");
+        assert_eq!(ac[0]["count"], 2);
+        assert_eq!(ac[0]["last_ts"], "d");
+        assert_eq!(ac[0]["last_role"], "agent");
+        assert_eq!(ac[0]["last_preview"], "reply");
     }
 }

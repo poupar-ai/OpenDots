@@ -24,6 +24,7 @@ members = [
     "crates/domain-integrity",
     "crates/domain-nudge",
     "crates/domain-pipelines",
+    "crates/domain-router",
     "crates/domain-seed",
     "crates/domain-session",
     "crates/domain-sigilo",

@@ -1,19 +1,6 @@
 {
   "description": "Persistent per-project memory for Claude Code — stores context, session history and observations as plain JSONL files inside the repository.",
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/startup.cjs\"",
-            "timeout": 5,
-            "statusMessage": "project-mem iniciando..."
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [

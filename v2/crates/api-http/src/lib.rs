@@ -7,6 +7,7 @@
 //! **F4-05c (atual)**: destructive + seeds + best-practices + pipelines +
 //! architect + skills + ides.
 
+pub mod agent_runner;
 pub mod agents_routes;
 pub mod best_practices_routes;
 pub mod chat_routes;
@@ -178,12 +179,13 @@ impl AppState {
         let cfg = load_network_config(&mem_dir);
         let bind_host = resolve_bind_host(&cfg);
         let unlock_guard = Arc::new(UnlockGuard::load(&mem_dir));
-        // Runner placeholder: spawn Claude será wired em F4-05f-5. Por ora,
-        // o runner é no-op — a fila ainda rastreia enqueue/rate-limit, mas
-        // nenhum turn processa de fato.
-        let runner: core_queue::Runner = std::sync::Arc::new(|_to, _from, _msg, _traces| {
-            Box::pin(async move {}) as core_queue::BoxFut
-        });
+        let runner = agent_runner::build_runner(
+            mem_dir.clone(),
+            project_root.clone(),
+            plugin_dir.clone(),
+            port,
+            Arc::clone(&vault),
+        );
         let auto_queue = AgentQueue::new(AgentQueueConfig::new(runner));
         Self {
             mem_dir,

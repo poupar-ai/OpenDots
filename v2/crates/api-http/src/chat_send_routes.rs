@@ -40,6 +40,7 @@ use tokio::process::Command as TokioCommand;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+use core_ports::VaultStore;
 use domain_humans::{Clock as HumansClockTrait, SystemClock as HumansSystemClock};
 
 use crate::agents_routes::append_agent_log;
@@ -181,7 +182,8 @@ pub(crate) fn build_disallowed_tools() -> Vec<String> {
 /// vault via `VaultStore::get_secrets_for_agent`. Silencia erro retornando
 /// `{}` (mesmo comportamento do `.cjs`).
 pub(crate) fn build_agent_env(
-    state: &AppState,
+    mem_dir: &Path,
+    vault: &Arc<dyn VaultStore>,
     agent: &str,
     agent_cfg: &Value,
 ) -> HashMap<String, String> {
@@ -198,7 +200,7 @@ pub(crate) fn build_agent_env(
     if names.is_empty() {
         return HashMap::new();
     }
-    match state.vault.get_secrets_for_agent(&state.mem_dir, &names) {
+    match vault.get_secrets_for_agent(mem_dir, &names) {
         Ok(map) => {
             let injected: HashMap<String, String> =
                 map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
@@ -207,12 +209,12 @@ pub(crate) fn build_agent_env(
                 .filter(|n| !injected.contains_key(n.as_str()))
                 .collect();
             if !missing.is_empty() {
-                let (needs_migration, initialized) = match state.vault.status(&state.mem_dir) {
+                let (needs_migration, initialized) = match vault.status(mem_dir) {
                     Ok(s) => (s.needs_migration, s.initialized),
                     Err(_) => (false, false),
                 };
                 append_agent_log(
-                    &state.mem_dir,
+                    mem_dir,
                     agent,
                     &json!({
                         "ts": HumansSystemClock.now_iso(),
@@ -855,7 +857,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
         .env("CLAUDE_PROJECT_MEM_SUBAGENT", "1")
         .env("CLAUDE_PROJECT_MEM_AGENT", agent)
         .kill_on_drop(true);
-    for (k, v) in build_agent_env(&st, agent, &agent_cfg) {
+    for (k, v) in build_agent_env(&st.mem_dir, &st.vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }
 

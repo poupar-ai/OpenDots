@@ -11,6 +11,7 @@ pub mod agents_routes;
 pub mod best_practices_routes;
 pub mod chat_routes;
 pub mod chat_send_routes;
+pub mod data_route;
 pub mod destructive_routes;
 pub mod handoff_routes;
 pub mod humans_routes;
@@ -228,6 +229,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(chat_routes::chat_router())
         .merge(chat_send_routes::chat_send_router())
         .merge(handoff_routes::handoff_router())
+        .merge(data_route::data_router())
         .fallback(serve_static)
         .with_state(state)
 }

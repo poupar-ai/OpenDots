@@ -381,6 +381,14 @@ export class AgentCanvas {
       }
     }
 
+    // Se algum humano está em location que ainda não tem sala no office
+    // (ex.: projeto novo sem agentes nesse dept), refaz o layout. Sem isso,
+    // o loop abaixo descartaria o humano via `hasRoom(loc)` e nada apareceria.
+    const needsRelayout = humans.some(
+      (h) => h.location && !this.office.hasRoom(h.location),
+    );
+    if (needsRelayout) this.relayout();
+
     // agrupa humanos por sala/departamento
     const byRoom = new Map<string, HumanProfile[]>();
     for (const h of humans) {

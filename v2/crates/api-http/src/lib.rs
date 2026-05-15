@@ -235,6 +235,18 @@ pub fn build_router(state: AppState) -> Router {
 // ── Static serving ──────────────────────────────────────────────────────────
 
 async fn serve_index(State(st): State<AppState>) -> Response {
+    // Prefere a UI moderna em `ui-next/dist/` quando disponível, igual
+    // ao `serve_static` faz pros outros paths. Sem isso, a rota `/`
+    // ficava amarrada no `INDEX_HTML` embedded (legacy), que chama
+    // endpoints removidos (`/api/data` etc).
+    if let Some(dist) = st.dist_dir.as_deref() {
+        let candidate = dist.join("index.html");
+        if let Ok(canon) = candidate.canonicalize() {
+            if canon.starts_with(dist) && canon.is_file() {
+                return serve_file(&canon);
+            }
+        }
+    }
     html_response(&st.html)
 }
 

@@ -19,3 +19,8 @@ ui-next/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# cluster/seed — pidfiles e network config local
+.seed-*.pid
+.seed-*.port
+.claude-project-memory/network.json

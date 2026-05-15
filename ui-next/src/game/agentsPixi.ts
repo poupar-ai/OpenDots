@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
 import type { AgentCfg, AgentType, AgentsData } from '@/lib/types';
-import type { HumanProfile } from '@/lib/humans';
+import type { HumanLocation, HumanProfile } from '@/lib/humans';
 import { updateHuman } from '@/lib/humans';
 import { AgentSprite } from './sprites/AgentSprite';
 import { HumanSprite } from './sprites/HumanSprite';
@@ -641,11 +641,19 @@ export class AgentCanvas {
     names: string[],
     agents: Record<string, AgentCfg>,
   ): Record<string, [number, number]> {
-    // agrupa agentes em departamentos (ordem canônica)
+    // agrupa agentes em departamentos (ordem canônica). Um dept entra na
+    // cena se tiver agente OU se tiver humano alocado lá (location === id).
+    // Sem o branch dos humanos, um projeto novo (sem agentes) renderiza um
+    // mundo vazio quando o usuário escolhe `location` no onboarding.
+    const humanLocs = new Set<string>(
+      this.lastHumans
+        .map((h) => h.location)
+        .filter((l): l is HumanLocation => !!l),
+    );
     const depts: DepartmentInput[] = [];
     for (const spec of DEPARTMENTS) {
       const members = names.filter((n) => spec.match(n, agents[n]));
-      if (!members.length) continue;
+      if (!members.length && !humanLocs.has(spec.id)) continue;
       // manager sempre primeiro dentro do core; depois, ordem por nome
       members.sort((a, b) => {
         if (a === 'manager') return -1;

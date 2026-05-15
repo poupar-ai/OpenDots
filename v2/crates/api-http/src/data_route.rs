@@ -151,16 +151,157 @@ fn build_agents(st: &AppState) -> Value {
     let inv = count_invocations(&st.mem_dir);
     let counts = inv.get("counts").cloned().unwrap_or_else(|| json!({}));
     let recent = inv.get("recent").cloned().unwrap_or_else(|| json!({}));
+    let logs = agent_log_summary(&st.mem_dir);
 
     json!({
         "manifest": manifest,
         "contexts": Value::Object(contexts),
         "counts":   counts,
         "recent":   recent,
-        // `logs` é opcional no shape (AgentLogSummary). Mantém objeto vazio
-        // — porte do `agentLogSummary()` legacy pode entrar em outro PR.
-        "logs":     json!({}),
+        "logs":     logs,
     })
+}
+
+/// Paridade com `agentLogSummary()` em `plugin/ui/server.cjs:1151`.
+/// Para cada `agent_logs/<name>.jsonl`, conta `request|response|error`
+/// e devolve o resumo no shape `AgentLogSummary`.
+fn agent_log_summary(mem_dir: &Path) -> Value {
+    let log_dir = mem_dir.join("agent_logs");
+    let mut out = Map::new();
+    let Ok(entries) = std::fs::read_dir(&log_dir) else {
+        return Value::Object(out);
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(fname) = file_name.to_str() else {
+            continue;
+        };
+        let Some(agent) = fname.strip_suffix(".jsonl") else {
+            continue;
+        };
+        let log_entries = read_jsonl(&entry.path()).unwrap_or_default();
+        let mut errors: u64 = 0;
+        let mut requests: u64 = 0;
+        let mut responses: u64 = 0;
+        let mut last_error_at: Option<String> = None;
+        let mut last_error_msg: Option<String> = None;
+        let mut last_duration_ms: Option<Value> = None;
+        let mut last_event_type: Option<&'static str> = None;
+        for e in &log_entries {
+            let ty = e.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            match ty {
+                "request" => {
+                    requests += 1;
+                    last_event_type = Some("request");
+                }
+                "response" => {
+                    responses += 1;
+                    last_duration_ms = e.get("duration_ms").cloned();
+                    last_event_type = Some("response");
+                }
+                "error" => {
+                    errors += 1;
+                    last_error_at = e
+                        .get("ts")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    last_error_msg = error_message(e);
+                    last_duration_ms = e.get("duration_ms").cloned();
+                    last_event_type = Some("error");
+                }
+                _ => {}
+            }
+        }
+        let hint = if errors > 0 {
+            classify_error_hint(last_error_msg.as_deref(), agent)
+        } else {
+            None
+        };
+        let mut summary = Map::new();
+        summary.insert("total".into(), json!(log_entries.len()));
+        summary.insert("requests".into(), json!(requests));
+        summary.insert("responses".into(), json!(responses));
+        summary.insert("errors".into(), json!(errors));
+        summary.insert(
+            "lastErrorAt".into(),
+            last_error_at.map(Value::String).unwrap_or(Value::Null),
+        );
+        summary.insert(
+            "lastErrorMsg".into(),
+            last_error_msg.map(Value::String).unwrap_or(Value::Null),
+        );
+        summary.insert(
+            "lastErrorHint".into(),
+            hint.map(Value::String).unwrap_or(Value::Null),
+        );
+        summary.insert(
+            "lastDurationMs".into(),
+            last_duration_ms.unwrap_or(Value::Null),
+        );
+        summary.insert(
+            "lastEventType".into(),
+            last_event_type.map(|s| json!(s)).unwrap_or(Value::Null),
+        );
+        out.insert(agent.to_string(), Value::Object(summary));
+    }
+    Value::Object(out)
+}
+
+/// `stderr || message || "exit ${code}"` (paridade com server.cjs:1168).
+fn error_message(e: &Value) -> Option<String> {
+    if let Some(s) = e.get("stderr").and_then(|v| v.as_str()) {
+        if !s.is_empty() {
+            return Some(s.to_string());
+        }
+    }
+    if let Some(s) = e.get("message").and_then(|v| v.as_str()) {
+        if !s.is_empty() {
+            return Some(s.to_string());
+        }
+    }
+    e.get("code").map(|c| format!("exit {c}"))
+}
+
+/// Paridade com `classifyErrorHint(msg, agent)` em server.cjs:1123.
+fn classify_error_hint(msg: Option<&str>, agent: &str) -> Option<String> {
+    let m = msg?;
+    let low = m.to_lowercase();
+    if low.contains("permission denied") || low.contains("eacces") {
+        return Some(
+            "Libere o caminho em .claude/settings.json ou aprove o prompt de permissão."
+                .to_string(),
+        );
+    }
+    if low.contains("enoent") || low.contains("no such file") {
+        if low.contains("agent_chats") {
+            return Some(format!(
+                "Canal {agent}.jsonl não existe — reinicie o servidor pra pré-criar."
+            ));
+        }
+        return Some("Arquivo ou diretório não encontrado — confira o caminho.".to_string());
+    }
+    if low.contains("spawn") && (low.contains("enoent") || low.contains("claude")) {
+        return Some("Claude Code CLI não encontrado no PATH.".to_string());
+    }
+    // `^exit \d+$` no trim
+    let trimmed = m.trim();
+    if trimmed.starts_with("exit ")
+        && trimmed[5..].chars().all(|c| c.is_ascii_digit())
+        && trimmed.len() > 5
+    {
+        return Some(format!("Ver log completo em agent_logs/{agent}.jsonl."));
+    }
+    if low.contains("timeout") {
+        return Some(
+            "Tempo esgotado — modelo ou rede demorou demais para responder.".to_string(),
+        );
+    }
+    if low.contains("rate limit") || low.contains("429") {
+        return Some(
+            "Rate limit atingido — aguarde alguns minutos antes de retry.".to_string(),
+        );
+    }
+    Some(format!("Ver log completo em agent_logs/{agent}.jsonl."))
 }
 
 fn code_index_summary(code_index: &Option<Value>) -> Value {

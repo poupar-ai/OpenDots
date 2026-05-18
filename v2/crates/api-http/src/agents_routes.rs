@@ -50,8 +50,24 @@ pub fn agents_router() -> Router<AppState> {
         .route("/api/agents/:name/vault", put(vault_handler))
         .route("/api/agents/:name/context", put(context_handler))
         .route("/api/agents/:name/mcps", put(mcps_handler))
+        .route("/api/agents/:name/status", get(status_handler))
         .route("/api/mcps", get(mcps_list_handler))
         .route("/api/docs/:doc", put(doc_save_handler))
+}
+
+/// `GET /api/agents/:name/status` — usado pelo chat web pra mostrar
+/// "pensando..." quando o usuário reabre o chat enquanto o agente ainda
+/// está processando em background (tokio::spawn no chat_send_handler
+/// sobrevive ao disconnect do SSE).
+async fn status_handler(
+    State(st): State<AppState>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Response {
+    let processing = st.auto_queue.is_processing(&name);
+    json_response(
+        axum::http::StatusCode::OK,
+        json!({ "agent": name, "processing": processing }),
+    )
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

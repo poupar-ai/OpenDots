@@ -29,6 +29,27 @@ export function useChat(agent: string | null, humanId: string | null = null) {
     setErr(null);
     historyLenRef.current = 0;
     if (!agent) return;
+    // Backend tokio::spawn sobrevive ao disconnect do SSE, então o agente
+    // pode estar respondendo em background quando o user reabre o chat.
+    // Mostra "pensando" até a resposta chegar pelo polling do SSE.
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/status`);
+        if (!alive || !r.ok) return;
+        const j = await r.json();
+        if (j.processing) {
+          setStream({
+            role: 'agent',
+            content: '',
+            ts: new Date().toISOString(),
+            streaming: true,
+            phase: 'thinking',
+          });
+        }
+      } catch {}
+    })();
+    return () => { alive = false; };
   }, [agent]);
 
   // Semi-streaming: abre SSE em /api/chat/stream enquanto o chat estiver idle.
@@ -52,6 +73,11 @@ export function useChat(agent: string | null, humanId: string | null = null) {
           if (idx < cur.length) return cur; // já temos
           return [...cur, msg];
         });
+        // Se chegou resposta do agente (via polling do backend), o
+        // "pensando" mostrado ao reabrir o chat já cumpriu o papel — limpa.
+        if (msg && msg.role === 'agent') {
+          setStream(null);
+        }
       } catch {}
     });
 

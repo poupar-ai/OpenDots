@@ -378,6 +378,18 @@ impl AgentQueue {
             .unwrap_or(false)
     }
 
+    /// Retorna true se o agente está atualmente processando um turn
+    /// (foi adquirido via `acquire` ou pelo drain automático e ainda
+    /// não soltou). Usado pelo endpoint de status pra que a UI saiba
+    /// quando mostrar "pensando..." mesmo após reabrir o chat.
+    pub fn is_processing(&self, to_agent: &str) -> bool {
+        if to_agent.is_empty() {
+            return false;
+        }
+        let st = self.state.lock().unwrap();
+        st.running.contains(to_agent)
+    }
+
     /// Reserva um agente bloqueando o drain automático. Usado pelo chat
     /// humano com streaming no `.cjs` (`acquire` antes de responder,
     /// `release` depois). No-op se `to_agent` vazio.

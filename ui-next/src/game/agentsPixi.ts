@@ -633,7 +633,12 @@ export class AgentCanvas {
   }
 
   private relayout() {
-    if (!this.nodes.size) return;
+    // Sem early-return em `nodes.size === 0`: projetos novos (humano
+    // criado antes de qualquer agente) precisam de relayout pra que
+    // `layout()` chame `setDepartments` com as salas inferidas das
+    // `location` dos humanos. Sem isso, o Office fica vazio e o
+    // `updateHumans` descarta o humano (hasRoom(loc) === false) — avatar
+    // não renderiza.
     const names = [...this.nodes.keys()];
     const cfgs: Record<string, AgentCfg> = {};
     for (const [n, node] of this.nodes) cfgs[n] = node.cfg;

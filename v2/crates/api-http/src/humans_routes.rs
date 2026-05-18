@@ -22,6 +22,7 @@ use domain_humans::{
     create_human, delete_human, get_human_summary, human_summary, list_humans, load_humans,
     read_human_chat, summarize_human_chats, touch_human, update_human, Clock as HumansClock,
     CreateInput, Error as HumansError, SystemClock as HumansSystemClock, UpdateInput,
+    HUMAN_LOCATIONS,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -59,6 +60,25 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
     let Some(name) = name else {
         return json_error(StatusCode::BAD_REQUEST, "need name");
     };
+
+    // `location` é obrigatória: sem ela o humano fica fora de qualquer
+    // departamento e o avatar não renderiza no canvas (não tem sala onde
+    // ficar). Backend rejeita pra cobrir o caso de criação via API direta;
+    // o form sempre manda uma das HUMAN_LOCATIONS pelo default.
+    let location_str = v
+        .get("location")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let Some(location_str) = location_str else {
+        return json_error(StatusCode::BAD_REQUEST, "location é obrigatória");
+    };
+    if !HUMAN_LOCATIONS.contains(&location_str) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            &format!("location inválida. Use: {}", HUMAN_LOCATIONS.join(", ")),
+        );
+    }
 
     let description = v.get("description").and_then(Value::as_str);
     let important = v.get("important").and_then(Value::as_str);

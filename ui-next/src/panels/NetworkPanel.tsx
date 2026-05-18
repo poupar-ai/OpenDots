@@ -55,12 +55,18 @@ interface ScopeConfig {
   source: 'scope.json' | 'default';
 }
 
+interface ScopeSuggestions {
+  parent: string | null;
+  siblings: string[];
+}
+
 export function NetworkPanel({ onClose }: Props) {
   const [cfg, setCfg] = useState<NetworkConfig | null>(null);
   const [mode, setMode] = useState<BindMode>('localhost');
   const [customHost, setCustomHost] = useState('');
   const [scope, setScope] = useState<ScopeConfig | null>(null);
   const [projectRoot, setProjectRoot] = useState('');
+  const [suggestions, setSuggestions] = useState<ScopeSuggestions | null>(null);
   const [savingScope, setSavingScope] = useState(false);
   const [scopeMsg, setScopeMsg] = useState<string | null>(null);
   const [scopeErr, setScopeErr] = useState<string | null>(null);
@@ -73,18 +79,21 @@ export function NetworkPanel({ onClose }: Props) {
     let alive = true;
     (async () => {
       try {
-        const [rNet, rScope] = await Promise.all([
+        const [rNet, rScope, rSugg] = await Promise.all([
           fetch('/api/network-config'),
           fetch('/api/scope'),
+          fetch('/api/scope/suggestions'),
         ]);
         const j = await rNet.json();
         const s = await rScope.json();
+        const sg = await rSugg.json();
         if (!alive) return;
         setCfg(j);
         setMode(j.bind);
         setCustomHost(j.customHost || '');
         setScope(s);
         setProjectRoot(s.project_root || '');
+        setSuggestions(sg);
       } catch (e: any) {
         if (alive) setErr(e?.message || 'falha ao carregar');
       } finally {
@@ -172,7 +181,7 @@ export function NetworkPanel({ onClose }: Props) {
               <Group gap="xs">
                 <FolderOpen size={14} />
                 <Text size="sm" fw={600}>
-                  Escopo do agente
+                  Pasta do projeto (project_root)
                 </Text>
                 <Badge size="xs" color={scope.source === 'scope.json' ? 'primary' : 'gray'}>
                   {scope.source}
@@ -180,10 +189,46 @@ export function NetworkPanel({ onClose }: Props) {
               </Group>
               <Box mt="xs">
                 <Text size="xs" muted>
-                  Pasta que o agente recebe como cwd (Read/Grep/Glob operam a partir
-                  daqui). A memória continua em <Code>{scope.mem_dir}</Code>.
+                  Pasta que o agente recebe como cwd ao ser invocado (Read/Grep/Glob
+                  operam a partir daqui). A memória continua em{' '}
+                  <Code>{scope.mem_dir}</Code>.
                 </Text>
               </Box>
+              {suggestions && (suggestions.parent || suggestions.siblings.length > 0) && (
+                <Box mt="xs">
+                  <Text size="xs" muted>
+                    sugestões (clique pra usar):
+                  </Text>
+                  <Box mt={4}>
+                    <Group gap="xs">
+                      {suggestions.parent && (
+                        <Button
+                          size="compact-xs"
+                          variant="default"
+                          color="gray"
+                          onClick={() => setProjectRoot(suggestions.parent!)}
+                        >
+                          {suggestions.parent}{' '}
+                          <Text component="span" size="xs" muted>
+                            (workspace)
+                          </Text>
+                        </Button>
+                      )}
+                      {suggestions.siblings.map((s) => (
+                        <Button
+                          key={s}
+                          size="compact-xs"
+                          variant="default"
+                          color="gray"
+                          onClick={() => setProjectRoot(s)}
+                        >
+                          {s.split('/').pop()}
+                        </Button>
+                      ))}
+                    </Group>
+                  </Box>
+                </Box>
+              )}
               <Box mt="xs">
                 <Group gap="xs" align="flex-end">
                   <TextInput

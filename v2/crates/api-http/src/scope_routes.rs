@@ -19,7 +19,9 @@ use std::path::PathBuf;
 use crate::{json_error, json_response, AppState};
 
 pub fn scope_router() -> Router<AppState> {
-    Router::new().route("/api/scope", get(get_scope).put(put_scope))
+    Router::new()
+        .route("/api/scope", get(get_scope).put(put_scope))
+        .route("/api/scope/suggestions", get(get_suggestions))
 }
 
 async fn get_scope(State(st): State<AppState>) -> Response {
@@ -31,6 +33,46 @@ async fn get_scope(State(st): State<AppState>) -> Response {
             "project_root": st.project_root.to_string_lossy(),
             "mem_dir":      st.mem_dir.to_string_lossy(),
             "source":       source,
+        }),
+    )
+}
+
+/// `GET /api/scope/suggestions` — pasta-pai do clone + pastas-irmãs.
+/// Usado pela UI pra quick-pick (chips clicáveis) — usuário não precisa
+/// digitar paths comuns à mão. `parent` = candidato natural quando o
+/// plugin é instalado num workspace; `siblings` = projetos vizinhos
+/// (cada um pode ser project_root individualmente).
+async fn get_suggestions(State(st): State<AppState>) -> Response {
+    // mem_dir = <plugin_clone>/.claude-project-memory
+    let plugin_clone = st.mem_dir.parent();
+    let workspace = plugin_clone.and_then(|p| p.parent());
+
+    let parent = workspace.map(|p| p.to_string_lossy().to_string());
+
+    let siblings: Vec<String> = workspace
+        .and_then(|ws| std::fs::read_dir(ws).ok())
+        .map(|entries| {
+            let mut out: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                .filter(|e| {
+                    let name = e.file_name();
+                    let s = name.to_string_lossy();
+                    // Pula hidden (.git, .cache, etc.) e o próprio clone.
+                    !s.starts_with('.') && Some(e.path().as_path()) != plugin_clone
+                })
+                .map(|e| e.path().to_string_lossy().to_string())
+                .collect();
+            out.sort();
+            out
+        })
+        .unwrap_or_default();
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "parent": parent,
+            "siblings": siblings,
         }),
     )
 }

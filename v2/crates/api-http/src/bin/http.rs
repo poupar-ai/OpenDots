@@ -8,7 +8,7 @@
 //!   + fallback pra `ui-next/dist/` se existir
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -29,23 +29,29 @@ async fn main() -> ExitCode {
         .map(PathBuf::from)
         .or_else(|_| std::env::var("PWD").map(PathBuf::from))
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    // `default_project_root` é derivado do cwd (git toplevel ou cwd cru).
-    // Ele *sempre* define o `mem_dir` — assim a memória mora junto do
-    // binário/clone, não importa o escopo configurado.
-    let default_project_root = find_project_root(&cwd);
-    // `PROJECT_MEM_DIR` (env) ainda funciona como override hard se alguém
-    // quiser apontar pra um cofre alternativo. Caso normal: derivado do
-    // default_project_root.
+    // `mem_dir_base` define ONDE a memória mora — sempre derivado do cwd
+    // (git toplevel ou cwd cru), pra que `.claude-project-memory/` fique
+    // sempre junto do binário. Não usar `project_root` aqui: quando o
+    // project_root aponta pro pai (workspace), a memória fica perdida no
+    // pai e some quando o usuário troca o escopo.
+    let mem_dir_base = find_project_root(&cwd);
     let mem_dir = std::env::var("PROJECT_MEM_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| default_project_root.join(MEM_DIR_NAME));
+        .unwrap_or_else(|_| mem_dir_base.join(MEM_DIR_NAME));
     // `project_root` (escopo do agente — cwd que ele recebe ao ser spawnado)
     // tem 3 fontes em ordem de prioridade:
     //   1. `<mem_dir>/scope.json::project_root` — configurável pela UI.
-    //   2. ENV `CLAUDE_CWD`/`PWD` (via `cwd`) — comportamento legado.
-    //   3. `default_project_root` (find_project_root do cwd) — fallback.
-    // (1) > (2)+(3) porque a UI é a forma do usuário dizer explicitamente
-    // "rode o agente apontando pra cá", sem mexer em env.
+    //   2. Smart default: se `cwd` é clone do plugin (tem `.claude-plugin/`),
+    //      usa `cwd.parent()` — o clone é só armazenamento, o "projeto" de
+    //      verdade é o workspace onde ele foi colocado.
+    //   3. Fallback: `mem_dir_base` (cwd cru).
+    // O smart default cobre a instalação típica (seed clona em
+    // `<workspace>/claude-project-memory/`) sem exigir scope.json.
+    let default_project_root = if cwd.join(".claude-plugin").is_dir() {
+        cwd.parent().map(Path::to_path_buf).unwrap_or_else(|| mem_dir_base.clone())
+    } else {
+        mem_dir_base.clone()
+    };
     let project_root = read_scope_project_root(&mem_dir).unwrap_or(default_project_root);
 
     // `DIST_DIR` = `<plugin_dir>/../../ui-next/dist`. Aqui não temos

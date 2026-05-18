@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use adapter_vault_file::FileVaultStore;
 use api_http::{build_router, socket_addr_for, AppState, DEFAULT_PORT};
-use core_paths::{find_project_root, MEM_DIR_NAME};
+use core_paths::{find_project_root, read_scope_project_root, MEM_DIR_NAME};
 
 const INDEX_HTML: &str = include_str!("../../../../../plugin/ui/index.html");
 
@@ -29,15 +29,24 @@ async fn main() -> ExitCode {
         .map(PathBuf::from)
         .or_else(|_| std::env::var("PWD").map(PathBuf::from))
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let project_root = find_project_root(&cwd);
-    // `PROJECT_MEM_DIR` desacopla a memória do project_root — útil quando
-    // o plugin está instalado num subdir mas o escopo do agente é o pai
-    // (caso típico do seed: clone em `<base>/claude-project-memory`,
-    // CLAUDE_CWD aponta pra `<base>` pra o oracle enxergar os outros
-    // projetos, mas a memória continua no clone).
+    // `default_project_root` é derivado do cwd (git toplevel ou cwd cru).
+    // Ele *sempre* define o `mem_dir` — assim a memória mora junto do
+    // binário/clone, não importa o escopo configurado.
+    let default_project_root = find_project_root(&cwd);
+    // `PROJECT_MEM_DIR` (env) ainda funciona como override hard se alguém
+    // quiser apontar pra um cofre alternativo. Caso normal: derivado do
+    // default_project_root.
     let mem_dir = std::env::var("PROJECT_MEM_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| project_root.join(MEM_DIR_NAME));
+        .unwrap_or_else(|_| default_project_root.join(MEM_DIR_NAME));
+    // `project_root` (escopo do agente — cwd que ele recebe ao ser spawnado)
+    // tem 3 fontes em ordem de prioridade:
+    //   1. `<mem_dir>/scope.json::project_root` — configurável pela UI.
+    //   2. ENV `CLAUDE_CWD`/`PWD` (via `cwd`) — comportamento legado.
+    //   3. `default_project_root` (find_project_root do cwd) — fallback.
+    // (1) > (2)+(3) porque a UI é a forma do usuário dizer explicitamente
+    // "rode o agente apontando pra cá", sem mexer em env.
+    let project_root = read_scope_project_root(&mem_dir).unwrap_or(default_project_root);
 
     // `DIST_DIR` = `<plugin_dir>/../../ui-next/dist`. Aqui não temos
     // `__dirname`; tentamos resolver via `CARGO_MANIFEST_DIR` em build

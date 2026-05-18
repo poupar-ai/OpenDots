@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Network, Save, AlertTriangle, Copy, Check } from 'lucide-react';
+import { X, Network, Save, AlertTriangle, Copy, Check, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -22,10 +22,21 @@ interface NetworkConfig {
   lanIps: LanIp[];
 }
 
+interface ScopeConfig {
+  project_root: string;
+  mem_dir: string;
+  source: 'scope.json' | 'default';
+}
+
 export function NetworkPanel({ onClose }: Props) {
   const [cfg, setCfg] = useState<NetworkConfig | null>(null);
   const [mode, setMode] = useState<BindMode>('localhost');
   const [customHost, setCustomHost] = useState('');
+  const [scope, setScope] = useState<ScopeConfig | null>(null);
+  const [projectRoot, setProjectRoot] = useState('');
+  const [savingScope, setSavingScope] = useState(false);
+  const [scopeMsg, setScopeMsg] = useState<string | null>(null);
+  const [scopeErr, setScopeErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -36,12 +47,18 @@ export function NetworkPanel({ onClose }: Props) {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch('/api/network-config');
-        const j = await r.json();
+        const [rNet, rScope] = await Promise.all([
+          fetch('/api/network-config'),
+          fetch('/api/scope'),
+        ]);
+        const j = await rNet.json();
+        const s = await rScope.json();
         if (!alive) return;
         setCfg(j);
         setMode(j.bind);
         setCustomHost(j.customHost || '');
+        setScope(s);
+        setProjectRoot(s.project_root || '');
       } catch (e: any) {
         if (alive) setErr(e?.message || 'falha ao carregar');
       } finally {
@@ -50,6 +67,27 @@ export function NetworkPanel({ onClose }: Props) {
     })();
     return () => { alive = false; };
   }, []);
+
+  const saveScope = async () => {
+    setSavingScope(true);
+    setScopeErr(null);
+    setScopeMsg(null);
+    try {
+      const r = await fetch('/api/scope', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_root: projectRoot.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setScopeMsg('Escopo salvo. Reinicie o servidor pra aplicar.');
+      setScope({ ...(scope as ScopeConfig), project_root: j.project_root, source: 'scope.json' });
+    } catch (e: any) {
+      setScopeErr(e?.message || 'falha ao salvar');
+    } finally {
+      setSavingScope(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -104,6 +142,55 @@ export function NetworkPanel({ onClose }: Props) {
           <div className="p-4 text-xs text-muted-foreground">carregando…</div>
         ) : (
           <div className="space-y-4 overflow-y-auto p-4 text-xs">
+            {scope && (
+              <div className="rounded-md border bg-slate-50 p-3">
+                <div className="mb-1 flex items-center gap-1.5 font-medium text-slate-700">
+                  <FolderOpen className="h-3.5 w-3.5 text-sky-600" />
+                  Escopo do agente (project_root)
+                </div>
+                <div className="mb-2 text-slate-600">
+                  Pasta que o agente recebe como cwd ao ser invocado. Tools como
+                  Read/Grep/Glob operam a partir daqui. A memória continua em
+                  <code className="ml-1 rounded bg-white px-1 py-0.5 text-xs">{scope.mem_dir}</code>.
+                </div>
+                <div className="flex gap-1.5">
+                  <Input
+                    value={projectRoot}
+                    onChange={(e) => setProjectRoot(e.target.value)}
+                    placeholder="ex.: /home/zion/dev/paag"
+                    className="h-8 flex-1 text-xs"
+                    spellCheck={false}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={saveScope}
+                    disabled={
+                      savingScope
+                      || !projectRoot.trim()
+                      || projectRoot.trim() === scope.project_root
+                    }
+                  >
+                    <Save className="h-3.5 w-3.5" /> {savingScope ? 'salvando…' : 'salvar'}
+                  </Button>
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  fonte atual: <code className="rounded bg-white px-1 py-0.5">{scope.source}</code>
+                  {' · '}
+                  ativo: <code className="rounded bg-white px-1 py-0.5">{scope.project_root}</code>
+                </div>
+                {scopeErr && (
+                  <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+                    {scopeErr}
+                  </div>
+                )}
+                {scopeMsg && (
+                  <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                    {scopeMsg}
+                  </div>
+                )}
+              </div>
+            )}
+
             {cfg && (
               <div className="rounded-md border bg-slate-50 p-3">
                 <div className="mb-1 font-medium text-slate-700">Ativo agora</div>

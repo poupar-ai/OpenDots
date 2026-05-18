@@ -18,6 +18,7 @@ pub mod handoff_routes;
 pub mod humans_routes;
 pub mod misc_routes;
 pub mod pipelines_routes;
+pub mod scope_routes;
 pub mod seeds_routes;
 pub mod unlock_guard;
 pub mod vault_routes;
@@ -226,6 +227,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(best_practices_routes::best_practices_router())
         .merge(pipelines_routes::pipelines_router())
         .merge(misc_routes::misc_router())
+        .merge(scope_routes::scope_router())
         .merge(humans_routes::humans_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())

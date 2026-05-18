@@ -240,6 +240,41 @@ pub fn tmp_dir(mem_dir: &Path) -> PathBuf {
     path_join(mem_dir, "tmp")
 }
 
+// ─── scope.json: project_root configurável pela UI ──────────────────────────
+//
+// `scope.json` mora dentro do `mem_dir` e contém `{"project_root": "..."}`.
+// Permite ao usuário (via UI) apontar o escopo do agente pra qualquer pasta
+// (ex.: o pai do clone do plugin, pra enxergar projetos vizinhos) sem que o
+// caller (ex.: seed) tenha que setar env. A memória continua no mem_dir.
+
+/// Caminho do `<mem_dir>/scope.json`.
+pub fn scope_path(mem_dir: &Path) -> PathBuf {
+    path_join(mem_dir, "scope.json")
+}
+
+/// Lê `<mem_dir>/scope.json:project_root`. Retorna None se o arquivo
+/// não existe, é JSON inválido, falta a chave, ou o valor é vazio —
+/// caller cai pro default (project_root derivado de cwd).
+pub fn read_scope_project_root(mem_dir: &Path) -> Option<PathBuf> {
+    let content = std::fs::read_to_string(scope_path(mem_dir)).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let pr = v.get("project_root")?.as_str()?;
+    if pr.trim().is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(pr))
+}
+
+/// Grava `{"project_root": "<path>"}` em `<mem_dir>/scope.json`. Cria
+/// `mem_dir` se não existir. Indent 2 sem trailing newline (paridade com
+/// `save_network_config` e demais JSONs do projeto).
+pub fn write_scope_project_root(mem_dir: &Path, project_root: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(mem_dir)?;
+    let body = serde_json::json!({ "project_root": project_root.to_string_lossy() });
+    let s = serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into());
+    std::fs::write(scope_path(mem_dir), s)
+}
+
 // ─── ensure_* helpers (criação idempotente) ─────────────────────────────────
 
 /// Erros de I/O ao criar diretórios. Fino wrapper em `std::io::Error`

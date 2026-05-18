@@ -30,7 +30,14 @@ async fn main() -> ExitCode {
         .or_else(|_| std::env::var("PWD").map(PathBuf::from))
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let project_root = find_project_root(&cwd);
-    let mem_dir = project_root.join(MEM_DIR_NAME);
+    // `PROJECT_MEM_DIR` desacopla a memória do project_root — útil quando
+    // o plugin está instalado num subdir mas o escopo do agente é o pai
+    // (caso típico do seed: clone em `<base>/claude-project-memory`,
+    // CLAUDE_CWD aponta pra `<base>` pra o oracle enxergar os outros
+    // projetos, mas a memória continua no clone).
+    let mem_dir = std::env::var("PROJECT_MEM_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| project_root.join(MEM_DIR_NAME));
 
     // `DIST_DIR` = `<plugin_dir>/../../ui-next/dist`. Aqui não temos
     // `__dirname`; tentamos resolver via `CARGO_MANIFEST_DIR` em build

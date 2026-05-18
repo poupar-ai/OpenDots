@@ -7,18 +7,20 @@ import {
   Button,
   Card,
   Code,
+  colorVar,
   CopyButton,
   Divider,
   Group,
   Modal,
   Paper,
   Radio,
+  RadioGroup,
   Stack,
   Text,
   TextInput,
   Title,
   Tooltip,
-} from '@mantine/core';
+} from '@/ui';
 import {
   AlertTriangle,
   Check,
@@ -152,7 +154,7 @@ export function NetworkPanel({ onClose }: Props) {
           <NetworkIcon size={18} strokeWidth={2} />
           <Box>
             <Title order={5}>Rede &amp; escopo</Title>
-            <Text size="xs" c="dimmed">
+            <Text size="xs" muted>
               Configuração do servidor — bind, porta, escopo do agente.
             </Text>
           </Box>
@@ -160,142 +162,152 @@ export function NetworkPanel({ onClose }: Props) {
       }
     >
       {loading ? (
-        <Text size="sm" c="dimmed">
+        <Text size="sm" muted>
           carregando…
         </Text>
       ) : (
         <Stack gap="md">
           {scope && (
-            <Paper withBorder p="md" radius="md">
-              <Group gap="xs" mb={4}>
+            <Paper withBorder padding="md">
+              <Group gap="xs">
                 <FolderOpen size={14} />
-                <Text fw={600} size="sm">
+                <Text size="sm" fw={600}>
                   Escopo do agente
                 </Text>
-                <Badge size="xs" variant="light" color={scope.source === 'scope.json' ? 'indigo' : 'gray'}>
+                <Badge size="xs" color={scope.source === 'scope.json' ? 'primary' : 'gray'}>
                   {scope.source}
                 </Badge>
               </Group>
-              <Text size="xs" c="dimmed" mb="xs">
-                Pasta que o agente recebe como cwd (Read/Grep/Glob operam a partir
-                daqui). A memória continua em <Code>{scope.mem_dir}</Code>.
-              </Text>
-              <Group gap="xs" align="flex-end">
-                <TextInput
-                  flex={1}
-                  value={projectRoot}
-                  onChange={(e) => setProjectRoot(e.currentTarget.value)}
-                  placeholder="ex.: /home/zion/dev/paag"
-                  spellCheck={false}
-                />
-                <Button
-                  leftSection={<Save size={14} />}
-                  loading={savingScope}
-                  disabled={!projectRoot.trim() || projectRoot.trim() === scope.project_root}
-                  onClick={saveScope}
-                >
-                  salvar
-                </Button>
-              </Group>
-              <Text size="xs" c="dimmed" mt={4}>
-                ativo: <Code>{scope.project_root}</Code>
-              </Text>
+              <Box mt="xs">
+                <Text size="xs" muted>
+                  Pasta que o agente recebe como cwd (Read/Grep/Glob operam a partir
+                  daqui). A memória continua em <Code>{scope.mem_dir}</Code>.
+                </Text>
+              </Box>
+              <Box mt="xs">
+                <Group gap="xs" align="flex-end">
+                  <TextInput
+                    flex={1}
+                    value={projectRoot}
+                    onChange={setProjectRoot}
+                    placeholder="ex.: /home/zion/dev/paag"
+                    spellCheck={false}
+                  />
+                  <Button
+                    leftIcon={<Save size={14} />}
+                    loading={savingScope}
+                    disabled={
+                      !projectRoot.trim() || projectRoot.trim() === scope.project_root
+                    }
+                    onClick={saveScope}
+                  >
+                    salvar
+                  </Button>
+                </Group>
+              </Box>
+              <Box mt={4}>
+                <Text size="xs" muted>
+                  ativo: <Code>{scope.project_root}</Code>
+                </Text>
+              </Box>
               {scopeErr && (
-                <Alert mt="xs" color="red" variant="light" radius="sm">
-                  {scopeErr}
-                </Alert>
+                <Box mt="xs">
+                  <Alert color="danger">{scopeErr}</Alert>
+                </Box>
               )}
               {scopeMsg && (
-                <Alert mt="xs" color="teal" variant="light" radius="sm">
-                  {scopeMsg}
-                </Alert>
+                <Box mt="xs">
+                  <Alert color="success">{scopeMsg}</Alert>
+                </Box>
               )}
             </Paper>
           )}
 
           {cfg && (
-            <Paper withBorder p="md" radius="md">
-              <Text fw={600} size="sm" mb={4}>
+            <Paper withBorder padding="md">
+              <Text size="sm" fw={600}>
                 Ativo agora
               </Text>
-              <Text size="xs" c="dimmed" mb="xs">
-                bind <Code>{cfg.activeHost}</Code> · porta <Code>{cfg.port}</Code>
-              </Text>
-              <Stack gap={4}>
-                <UrlRow url={`http://localhost:${cfg.port}`} />
-                {cfg.lanIps.length > 0 ? (
-                  cfg.lanIps.map((ip) => (
-                    <UrlRow
-                      key={ip.address}
-                      url={`http://${ip.address}:${cfg.port}`}
-                      label={ip.iface}
-                    />
-                  ))
-                ) : (
-                  <Text size="xs" c="dimmed">
-                    nenhum IP de LAN detectado
-                  </Text>
-                )}
-              </Stack>
+              <Box mt={4}>
+                <Text size="xs" muted>
+                  bind <Code>{cfg.activeHost}</Code> · porta <Code>{cfg.port}</Code>
+                </Text>
+              </Box>
+              <Box mt="xs">
+                <Stack gap="xs">
+                  <UrlRow url={`http://localhost:${cfg.port}`} />
+                  {cfg.lanIps.length > 0 ? (
+                    cfg.lanIps.map((ip) => (
+                      <UrlRow
+                        key={ip.address}
+                        url={`http://${ip.address}:${cfg.port}`}
+                        label={ip.iface}
+                      />
+                    ))
+                  ) : (
+                    <Text size="xs" muted>
+                      nenhum IP de LAN detectado
+                    </Text>
+                  )}
+                </Stack>
+              </Box>
             </Paper>
           )}
 
           <Box>
-            <Text fw={600} size="sm" mb="xs">
+            <Text size="sm" fw={600}>
               Modo de bind
             </Text>
-            <Radio.Group
-              value={mode}
-              onChange={(v) => setMode(v as BindMode)}
-              name="bindMode"
-            >
-              <Stack gap="xs">
-                <BindCard
-                  value="localhost"
-                  active={mode === 'localhost'}
-                  title="Localhost (127.0.0.1)"
-                  desc="Default. Só acessível deste computador. Mais seguro."
-                />
-                <BindCard
-                  value="lan"
-                  active={mode === 'lan'}
-                  title="LAN (0.0.0.0)"
-                  desc="Exposto em todas as interfaces de rede."
-                  warning
-                />
-                <BindCard
-                  value="custom"
-                  active={mode === 'custom'}
-                  title="IP específico"
-                  desc="Exposto só no IP/host informado."
-                  warning
-                />
-              </Stack>
-            </Radio.Group>
+            <Box mt="xs">
+              <RadioGroup value={mode} onChange={(v) => setMode(v as BindMode)} name="bindMode">
+                <Stack gap="xs">
+                  <BindCard
+                    value="localhost"
+                    active={mode === 'localhost'}
+                    title="Localhost (127.0.0.1)"
+                    desc="Default. Só acessível deste computador. Mais seguro."
+                  />
+                  <BindCard
+                    value="lan"
+                    active={mode === 'lan'}
+                    title="LAN (0.0.0.0)"
+                    desc="Exposto em todas as interfaces de rede."
+                    warning
+                  />
+                  <BindCard
+                    value="custom"
+                    active={mode === 'custom'}
+                    title="IP específico"
+                    desc="Exposto só no IP/host informado."
+                    warning
+                  />
+                </Stack>
+              </RadioGroup>
+            </Box>
 
             {mode === 'custom' && (
               <Box mt="xs" pl="lg">
                 <TextInput
                   value={customHost}
-                  onChange={(e) => setCustomHost(e.currentTarget.value)}
+                  onChange={setCustomHost}
                   placeholder="ex.: 192.168.0.42"
                 />
                 {cfg && cfg.lanIps.length > 0 && (
-                  <Group gap={6} mt={6}>
-                    {cfg.lanIps.map((ip) => (
-                      <Button
-                        key={ip.address}
-                        size="compact-xs"
-                        variant="default"
-                        onClick={() => setCustomHost(ip.address)}
-                      >
-                        {ip.address}{' '}
-                        <Text component="span" size="xs" c="dimmed" ml={4}>
-                          ({ip.iface})
-                        </Text>
-                      </Button>
-                    ))}
-                  </Group>
+                  <Box mt={6}>
+                    <Group gap="xs">
+                      {cfg.lanIps.map((ip) => (
+                        <Button
+                          key={ip.address}
+                          size="compact-xs"
+                          variant="default"
+                          color="gray"
+                          onClick={() => setCustomHost(ip.address)}
+                        >
+                          {ip.address} ({ip.iface})
+                        </Button>
+                      ))}
+                    </Group>
+                  </Box>
                 )}
               </Box>
             )}
@@ -304,8 +316,7 @@ export function NetworkPanel({ onClose }: Props) {
           {(mode === 'lan' || mode === 'custom') && (
             <Alert
               icon={<AlertTriangle size={16} />}
-              color="yellow"
-              variant="light"
+              color="warning"
               title="Aviso de segurança"
             >
               Expor o servidor na rede permite que outras máquinas acessem a memória do
@@ -313,27 +324,19 @@ export function NetworkPanel({ onClose }: Props) {
             </Alert>
           )}
 
-          {err && (
-            <Alert color="red" variant="light">
-              {err}
-            </Alert>
-          )}
-          {savedMsg && (
-            <Alert color="teal" variant="light">
-              {savedMsg}
-            </Alert>
-          )}
+          {err && <Alert color="danger">{err}</Alert>}
+          {savedMsg && <Alert color="success">{savedMsg}</Alert>}
 
           <Divider />
 
           <Group justify="space-between">
-            <Text size="xs" c="dimmed">
+            <Text size="xs" muted>
               {pendingChange
                 ? 'alterações pendentes — salve e reinicie o servidor'
                 : 'sem alterações'}
             </Text>
             <Button
-              leftSection={<Save size={14} />}
+              leftIcon={<Save size={14} />}
               loading={saving}
               disabled={!pendingChange || (mode === 'custom' && !customHost.trim())}
               onClick={save}
@@ -349,19 +352,19 @@ export function NetworkPanel({ onClose }: Props) {
 
 function UrlRow({ url, label }: { url: string; label?: string }) {
   return (
-    <Group justify="space-between" gap="xs" px="xs" py={4} bg="white" wrap="nowrap">
+    <Group justify="space-between" gap="xs" wrap="nowrap">
       <Code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{url}</Code>
-      <Group gap={6} wrap="nowrap">
+      <Group gap="xs" wrap="nowrap">
         {label && (
-          <Text size="xs" c="dimmed">
+          <Text size="xs" muted>
             {label}
           </Text>
         )}
-        <CopyButton value={url} timeout={1500}>
+        <CopyButton value={url}>
           {({ copied, copy }) => (
-            <Tooltip label={copied ? 'copiado' : 'copiar'} withArrow>
-              <ActionIcon variant="subtle" color="gray" onClick={copy} size="sm">
-                {copied ? <Check size={14} color="var(--mantine-color-teal-6)" /> : <Copy size={14} />}
+            <Tooltip label={copied ? 'copiado' : 'copiar'}>
+              <ActionIcon onClick={copy} label="copiar URL">
+                {copied ? <Check size={14} /> : <Copy size={14} />}
               </ActionIcon>
             </Tooltip>
           )}
@@ -388,28 +391,19 @@ function BindCard({
     <Card
       withBorder
       padding="sm"
-      radius="md"
       style={{
         cursor: 'pointer',
-        borderColor: active
-          ? warning
-            ? 'var(--mantine-color-yellow-5)'
-            : 'var(--mantine-color-indigo-5)'
-          : undefined,
-        backgroundColor: active
-          ? warning
-            ? 'var(--mantine-color-yellow-0)'
-            : 'var(--mantine-color-indigo-0)'
-          : undefined,
+        borderColor: active ? colorVar(warning ? 'warning' : 'primary', 5) : undefined,
+        backgroundColor: active ? colorVar(warning ? 'warning' : 'primary', 0) : undefined,
       }}
     >
       <Group align="flex-start" gap="xs" wrap="nowrap">
         <Radio value={value} />
         <Box>
-          <Text fw={500} size="sm">
+          <Text size="sm" fw={500}>
             {title}
           </Text>
-          <Text size="xs" c="dimmed">
+          <Text size="xs" muted>
             {desc}
           </Text>
         </Box>

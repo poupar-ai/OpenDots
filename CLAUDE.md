@@ -41,6 +41,15 @@ scripts/
 - **Todos os scripts são Node.js CJS** — não use ESM, não use `import`.
 - **Zero dependências externas** — se precisar de algo, implemente ou use módulos built-in do Node.js.
 
+## UI (ui-next) — arquitetura hexagonal
+
+- **Panels SEMPRE importam de `@/ui`**, nunca de `@mantine/core` direto. `@/ui` é a porta única; o adapter atual é `src/ui/adapter-mantine/`.
+- **Novo componente / novo panel?** Usa `@/ui`. Se faltar algum primitivo, adiciona o wrapper em `adapter-mantine/`, re-exporta em `adapter-mantine/index.ts`, e usa.
+- **Editando um arquivo que ainda usa Tailwind ou `@/components/ui/*`?** Migra ele pra `@/ui` no mesmo commit. Assim a migração avança organicamente — em vez de uma "fase 3" gigante, cada toque vira progresso.
+- **Cores/tamanhos** são semânticos: `color="primary|success|warning|danger|info|gray"`, `size="xs|sm|md|lg"`. Nada de `color="indigo"` no panel — isso é detalhe do Mantine, vive no adapter.
+- **Precisa de cor inline (border/bg)?** Usa `colorVar(color, shade)` de `@/ui`. Evita `var(--mantine-color-*)` solto.
+- **Trocar de lib UI no futuro**: cria `src/ui/adapter-<nome>/` espelhando a mesma API pública, troca a linha de re-export em `src/ui/index.ts`, ajusta `MantineProvider` em `main.tsx`. Panels não mudam.
+
 ## Como testar manualmente
 
 ```bash

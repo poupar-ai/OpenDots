@@ -1,7 +1,32 @@
 import { useEffect, useState } from 'react';
-import { X, Network, Save, AlertTriangle, Copy, Check, FolderOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Code,
+  CopyButton,
+  Divider,
+  Group,
+  Modal,
+  Paper,
+  Radio,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from '@mantine/core';
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  FolderOpen,
+  Network as NetworkIcon,
+  Save,
+} from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -41,7 +66,6 @@ export function NetworkPanel({ onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -65,7 +89,9 @@ export function NetworkPanel({ onClose }: Props) {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const saveScope = async () => {
@@ -111,268 +137,283 @@ export function NetworkPanel({ onClose }: Props) {
     }
   };
 
-  const copy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(url);
-      setTimeout(() => setCopied(null), 1500);
-    } catch {}
-  };
-
-  const pendingChange = cfg
-    && (mode !== cfg.bind
-      || (mode === 'custom' && customHost.trim() !== (cfg.customHost || '')));
+  const pendingChange =
+    cfg &&
+    (mode !== cfg.bind ||
+      (mode === 'custom' && customHost.trim() !== (cfg.customHost || '')));
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Network className="h-4 w-4 text-sky-600" /> Rede — bind do servidor
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Default: localhost (só este computador). Mudar pra LAN expõe a UI na rede — inclusive cofre de secrets.
-            </p>
-          </div>
-          <Button size="icon" variant="ghost" onClick={onClose}><X className="h-4 w-4" /></Button>
-        </header>
+    <Modal
+      opened
+      onClose={onClose}
+      size="lg"
+      title={
+        <Group gap="xs">
+          <NetworkIcon size={18} strokeWidth={2} />
+          <Box>
+            <Title order={5}>Rede &amp; escopo</Title>
+            <Text size="xs" c="dimmed">
+              Configuração do servidor — bind, porta, escopo do agente.
+            </Text>
+          </Box>
+        </Group>
+      }
+    >
+      {loading ? (
+        <Text size="sm" c="dimmed">
+          carregando…
+        </Text>
+      ) : (
+        <Stack gap="md">
+          {scope && (
+            <Paper withBorder p="md" radius="md">
+              <Group gap="xs" mb={4}>
+                <FolderOpen size={14} />
+                <Text fw={600} size="sm">
+                  Escopo do agente
+                </Text>
+                <Badge size="xs" variant="light" color={scope.source === 'scope.json' ? 'indigo' : 'gray'}>
+                  {scope.source}
+                </Badge>
+              </Group>
+              <Text size="xs" c="dimmed" mb="xs">
+                Pasta que o agente recebe como cwd (Read/Grep/Glob operam a partir
+                daqui). A memória continua em <Code>{scope.mem_dir}</Code>.
+              </Text>
+              <Group gap="xs" align="flex-end">
+                <TextInput
+                  flex={1}
+                  value={projectRoot}
+                  onChange={(e) => setProjectRoot(e.currentTarget.value)}
+                  placeholder="ex.: /home/zion/dev/paag"
+                  spellCheck={false}
+                />
+                <Button
+                  leftSection={<Save size={14} />}
+                  loading={savingScope}
+                  disabled={!projectRoot.trim() || projectRoot.trim() === scope.project_root}
+                  onClick={saveScope}
+                >
+                  salvar
+                </Button>
+              </Group>
+              <Text size="xs" c="dimmed" mt={4}>
+                ativo: <Code>{scope.project_root}</Code>
+              </Text>
+              {scopeErr && (
+                <Alert mt="xs" color="red" variant="light" radius="sm">
+                  {scopeErr}
+                </Alert>
+              )}
+              {scopeMsg && (
+                <Alert mt="xs" color="teal" variant="light" radius="sm">
+                  {scopeMsg}
+                </Alert>
+              )}
+            </Paper>
+          )}
 
-        {loading ? (
-          <div className="p-4 text-xs text-muted-foreground">carregando…</div>
-        ) : (
-          <div className="space-y-4 overflow-y-auto p-4 text-xs">
-            {scope && (
-              <div className="rounded-md border bg-slate-50 p-3">
-                <div className="mb-1 flex items-center gap-1.5 font-medium text-slate-700">
-                  <FolderOpen className="h-3.5 w-3.5 text-sky-600" />
-                  Escopo do agente (project_root)
-                </div>
-                <div className="mb-2 text-slate-600">
-                  Pasta que o agente recebe como cwd ao ser invocado. Tools como
-                  Read/Grep/Glob operam a partir daqui. A memória continua em
-                  <code className="ml-1 rounded bg-white px-1 py-0.5 text-xs">{scope.mem_dir}</code>.
-                </div>
-                <div className="flex gap-1.5">
-                  <Input
-                    value={projectRoot}
-                    onChange={(e) => setProjectRoot(e.target.value)}
-                    placeholder="ex.: /home/zion/dev/paag"
-                    className="h-8 flex-1 text-xs"
-                    spellCheck={false}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={saveScope}
-                    disabled={
-                      savingScope
-                      || !projectRoot.trim()
-                      || projectRoot.trim() === scope.project_root
-                    }
-                  >
-                    <Save className="h-3.5 w-3.5" /> {savingScope ? 'salvando…' : 'salvar'}
-                  </Button>
-                </div>
-                <div className="mt-1 text-muted-foreground">
-                  fonte atual: <code className="rounded bg-white px-1 py-0.5">{scope.source}</code>
-                  {' · '}
-                  ativo: <code className="rounded bg-white px-1 py-0.5">{scope.project_root}</code>
-                </div>
-                {scopeErr && (
-                  <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
-                    {scopeErr}
-                  </div>
-                )}
-                {scopeMsg && (
-                  <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
-                    {scopeMsg}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {cfg && (
-              <div className="rounded-md border bg-slate-50 p-3">
-                <div className="mb-1 font-medium text-slate-700">Ativo agora</div>
-                <div className="text-slate-600">
-                  bind <code className="rounded bg-white px-1 py-0.5">{cfg.activeHost}</code>
-                  {' · '}
-                  porta <code className="rounded bg-white px-1 py-0.5">{cfg.port}</code>
-                </div>
-                <div className="mt-2 space-y-1">
-                  <UrlRow url={`http://localhost:${cfg.port}`} copied={copied} onCopy={copy} />
-                  {cfg.lanIps.length > 0 && cfg.lanIps.map((ip) => (
+          {cfg && (
+            <Paper withBorder p="md" radius="md">
+              <Text fw={600} size="sm" mb={4}>
+                Ativo agora
+              </Text>
+              <Text size="xs" c="dimmed" mb="xs">
+                bind <Code>{cfg.activeHost}</Code> · porta <Code>{cfg.port}</Code>
+              </Text>
+              <Stack gap={4}>
+                <UrlRow url={`http://localhost:${cfg.port}`} />
+                {cfg.lanIps.length > 0 ? (
+                  cfg.lanIps.map((ip) => (
                     <UrlRow
                       key={ip.address}
                       url={`http://${ip.address}:${cfg.port}`}
                       label={ip.iface}
-                      copied={copied}
-                      onCopy={copy}
                     />
-                  ))}
-                  {cfg.lanIps.length === 0 && (
-                    <div className="text-muted-foreground">nenhum IP de LAN detectado</div>
-                  )}
-                </div>
-              </div>
+                  ))
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    nenhum IP de LAN detectado
+                  </Text>
+                )}
+              </Stack>
+            </Paper>
+          )}
+
+          <Box>
+            <Text fw={600} size="sm" mb="xs">
+              Modo de bind
+            </Text>
+            <Radio.Group
+              value={mode}
+              onChange={(v) => setMode(v as BindMode)}
+              name="bindMode"
+            >
+              <Stack gap="xs">
+                <BindCard
+                  value="localhost"
+                  active={mode === 'localhost'}
+                  title="Localhost (127.0.0.1)"
+                  desc="Default. Só acessível deste computador. Mais seguro."
+                />
+                <BindCard
+                  value="lan"
+                  active={mode === 'lan'}
+                  title="LAN (0.0.0.0)"
+                  desc="Exposto em todas as interfaces de rede."
+                  warning
+                />
+                <BindCard
+                  value="custom"
+                  active={mode === 'custom'}
+                  title="IP específico"
+                  desc="Exposto só no IP/host informado."
+                  warning
+                />
+              </Stack>
+            </Radio.Group>
+
+            {mode === 'custom' && (
+              <Box mt="xs" pl="lg">
+                <TextInput
+                  value={customHost}
+                  onChange={(e) => setCustomHost(e.currentTarget.value)}
+                  placeholder="ex.: 192.168.0.42"
+                />
+                {cfg && cfg.lanIps.length > 0 && (
+                  <Group gap={6} mt={6}>
+                    {cfg.lanIps.map((ip) => (
+                      <Button
+                        key={ip.address}
+                        size="compact-xs"
+                        variant="default"
+                        onClick={() => setCustomHost(ip.address)}
+                      >
+                        {ip.address}{' '}
+                        <Text component="span" size="xs" c="dimmed" ml={4}>
+                          ({ip.iface})
+                        </Text>
+                      </Button>
+                    ))}
+                  </Group>
+                )}
+              </Box>
             )}
+          </Box>
 
-            <fieldset className="space-y-2">
-              <legend className="mb-1 font-medium text-slate-700">Modo de bind</legend>
+          {(mode === 'lan' || mode === 'custom') && (
+            <Alert
+              icon={<AlertTriangle size={16} />}
+              color="yellow"
+              variant="light"
+              title="Aviso de segurança"
+            >
+              Expor o servidor na rede permite que outras máquinas acessem a memória do
+              projeto e o cofre de secrets. Use apenas em redes confiáveis.
+            </Alert>
+          )}
 
-              <BindOption
-                active={mode === 'localhost'}
-                onSelect={() => setMode('localhost')}
-                title="Localhost (127.0.0.1)"
-                desc="Default. Só acessível deste computador. Mais seguro."
-              />
-              <BindOption
-                active={mode === 'lan'}
-                onSelect={() => setMode('lan')}
-                title="LAN (0.0.0.0)"
-                desc="Exposto em todas as interfaces de rede. Qualquer máquina da LAN consegue abrir."
-                warning
-              />
-              <BindOption
-                active={mode === 'custom'}
-                onSelect={() => setMode('custom')}
-                title="IP específico"
-                desc="Exposto só no IP/host informado."
-                warning
-              />
+          {err && (
+            <Alert color="red" variant="light">
+              {err}
+            </Alert>
+          )}
+          {savedMsg && (
+            <Alert color="teal" variant="light">
+              {savedMsg}
+            </Alert>
+          )}
 
-              {mode === 'custom' && (
-                <div className="ml-6 pt-1">
-                  <Input
-                    value={customHost}
-                    onChange={(e) => setCustomHost(e.target.value)}
-                    placeholder="ex.: 192.168.0.42"
-                    className="h-8 text-xs"
-                  />
-                  {cfg && cfg.lanIps.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {cfg.lanIps.map((ip) => (
-                        <button
-                          key={ip.address}
-                          type="button"
-                          onClick={() => setCustomHost(ip.address)}
-                          className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs hover:bg-slate-50"
-                        >
-                          {ip.address} <span className="text-muted-foreground">({ip.iface})</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </fieldset>
+          <Divider />
 
-            {(mode === 'lan' || mode === 'custom') && (
-              <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-amber-800">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <div>
-                  <div className="font-medium">Aviso de segurança</div>
-                  <div className="mt-0.5 leading-snug">
-                    Expor o servidor na rede permite que outras máquinas acessem a memória do projeto e o cofre de secrets. Use apenas em redes confiáveis.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {err && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-red-700">
-                {err}
-              </div>
-            )}
-            {savedMsg && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-emerald-700">
-                {savedMsg}
-              </div>
-            )}
-          </div>
-        )}
-
-        <footer className="flex items-center justify-between border-t px-4 py-3">
-          <div className="text-xs text-muted-foreground">
-            {pendingChange ? 'alterações pendentes — salve e reinicie o servidor' : 'sem alterações'}
-          </div>
-          <Button
-            size="sm"
-            className="gap-1.5"
-            disabled={saving || !pendingChange || (mode === 'custom' && !customHost.trim())}
-            onClick={save}
-          >
-            <Save className="h-3.5 w-3.5" /> {saving ? 'salvando…' : 'salvar'}
-          </Button>
-        </footer>
-      </div>
-    </div>
+          <Group justify="space-between">
+            <Text size="xs" c="dimmed">
+              {pendingChange
+                ? 'alterações pendentes — salve e reinicie o servidor'
+                : 'sem alterações'}
+            </Text>
+            <Button
+              leftSection={<Save size={14} />}
+              loading={saving}
+              disabled={!pendingChange || (mode === 'custom' && !customHost.trim())}
+              onClick={save}
+            >
+              salvar
+            </Button>
+          </Group>
+        </Stack>
+      )}
+    </Modal>
   );
 }
 
-function UrlRow({
-  url,
-  label,
-  copied,
-  onCopy,
-}: {
-  url: string;
-  label?: string;
-  copied: string | null;
-  onCopy: (u: string) => void;
-}) {
-  const isCopied = copied === url;
+function UrlRow({ url, label }: { url: string; label?: string }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1">
-      <code className="truncate text-xs">{url}</code>
-      <div className="flex items-center gap-2">
-        {label && <span className="text-xs text-muted-foreground">{label}</span>}
-        <button
-          type="button"
-          onClick={() => onCopy(url)}
-          className="text-slate-500 hover:text-slate-900"
-          title="copiar"
-        >
-          {isCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-      </div>
-    </div>
+    <Group justify="space-between" gap="xs" px="xs" py={4} bg="white" wrap="nowrap">
+      <Code style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{url}</Code>
+      <Group gap={6} wrap="nowrap">
+        {label && (
+          <Text size="xs" c="dimmed">
+            {label}
+          </Text>
+        )}
+        <CopyButton value={url} timeout={1500}>
+          {({ copied, copy }) => (
+            <Tooltip label={copied ? 'copiado' : 'copiar'} withArrow>
+              <ActionIcon variant="subtle" color="gray" onClick={copy} size="sm">
+                {copied ? <Check size={14} color="var(--mantine-color-teal-6)" /> : <Copy size={14} />}
+              </ActionIcon>
+            </Tooltip>
+          )}
+        </CopyButton>
+      </Group>
+    </Group>
   );
 }
 
-function BindOption({
+function BindCard({
+  value,
   active,
-  onSelect,
   title,
   desc,
   warning,
 }: {
+  value: string;
   active: boolean;
-  onSelect: () => void;
   title: string;
   desc: string;
   warning?: boolean;
 }) {
   return (
-    <label
-      className={`flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition ${
-        active
+    <Card
+      withBorder
+      padding="sm"
+      radius="md"
+      style={{
+        cursor: 'pointer',
+        borderColor: active
           ? warning
-            ? 'border-amber-400 bg-amber-50'
-            : 'border-indigo-500 bg-indigo-50'
-          : 'border-slate-200 bg-white hover:bg-slate-50'
-      }`}
+            ? 'var(--mantine-color-yellow-5)'
+            : 'var(--mantine-color-indigo-5)'
+          : undefined,
+        backgroundColor: active
+          ? warning
+            ? 'var(--mantine-color-yellow-0)'
+            : 'var(--mantine-color-indigo-0)'
+          : undefined,
+      }}
     >
-      <input
-        type="radio"
-        checked={active}
-        onChange={onSelect}
-        className="mt-0.5"
-      />
-      <div>
-        <div className="font-medium text-slate-800">{title}</div>
-        <div className="text-xs text-muted-foreground">{desc}</div>
-      </div>
-    </label>
+      <Group align="flex-start" gap="xs" wrap="nowrap">
+        <Radio value={value} />
+        <Box>
+          <Text fw={500} size="sm">
+            {title}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {desc}
+          </Text>
+        </Box>
+      </Group>
+    </Card>
   );
 }

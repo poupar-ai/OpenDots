@@ -173,17 +173,103 @@ pub fn privkey_secret_name(agent: &str) -> String {
     format!("AGENT_{normalized}_PRIVKEY")
 }
 
-/// Lê a privada do agente do vault, monta JWT pronto pra spawn. None
-/// se vault locked, secret ausente, ou hex inválido — caller decide se
-/// continua sem token (modo untrusted) ou aborta. TTL: 10 minutos.
+/// Path do arquivo da privada de um agente no filesystem (fora do vault).
+/// Armazenado raw (32 bytes), perms 0600. Identidade do agente é
+/// machine-local — não precisa de master password pra ser usada.
+pub fn agent_priv_path(mem_dir: &std::path::Path, agent: &str) -> std::path::PathBuf {
+    let normalized = privkey_secret_name(agent); // já normaliza pra A-Z0-9_
+    mem_dir.join("agent_keys").join(format!("{normalized}.priv"))
+}
+
+/// Garante que o agente tem keypair acessível e retorna a privada (32 bytes).
+///
+/// Auto-provisioning: se a chave ainda não existe (ex.: agente foi
+/// instalado por seed pack sem keypair), gera Ed25519 fresco, salva a
+/// privada em `<mem_dir>/agent_keys/<NAME>.priv` (chmod 0600 em Unix) e
+/// escreve a pública no `agents.json` no campo `pubkey` (hex). Isso
+/// elimina a dependência de vault unlocked pra handoff entre agentes —
+/// o vault continua existindo pra **secrets do usuário**, mas
+/// identidade de agente é tratada como recurso da máquina, não segredo.
+fn ensure_agent_keypair(mem_dir: &std::path::Path, agent: &str) -> Option<[u8; 32]> {
+    let priv_path = agent_priv_path(mem_dir, agent);
+    if let Ok(bytes) = std::fs::read(&priv_path) {
+        if bytes.len() == 32 {
+            let mut out = [0u8; 32];
+            out.copy_from_slice(&bytes);
+            return Some(out);
+        }
+        // Arquivo corrompido — gera de novo abaixo
+    }
+    // Gera novo par
+    let (priv_b, pub_b) = generate_keypair();
+
+    // Persiste priv no fs (mkdir + write + chmod). Falhas aqui significam
+    // que mint não vai funcionar — propaga None pro caller fallback.
+    if let Some(parent) = priv_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::write(&priv_path, priv_b).is_err() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&priv_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    // Escreve pubkey no agents.json. Idempotente — se já tinha algo,
+    // sobrescreve. Importante pro handoff middleware verificar JWT.
+    if let Some(mut manifest) = domain_agents::load_manifest(mem_dir) {
+        if let Some(agents) = manifest
+            .get_mut("agents")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            if let Some(entry) = agents.get_mut(agent).and_then(serde_json::Value::as_object_mut) {
+                entry.insert(
+                    "pubkey".to_string(),
+                    serde_json::Value::String(bytes_to_hex(&pub_b)),
+                );
+                let _ = domain_agents::save_manifest(mem_dir, &manifest);
+            }
+        }
+    }
+    Some(priv_b)
+}
+
+/// Carrega (ou gera) a privada do agente e monta um JWT de 10min pronto
+/// pra ser injetado em `PROJECT_MEM_AGENT_TOKEN` do spawn.
+///
+/// Vault continua aceitando privada legada (compat) — agentes criados
+/// antes desta mudança têm a chave lá. Ordem de lookup:
+///   1. Filesystem (`agent_priv_path`) — caminho novo, sem unlock
+///   2. Vault (legacy) — se filesystem vazio e vault unlocked
+///   3. Auto-gera no filesystem — quando nada existe
 pub fn mint_token_for(
     agent: &str,
     vault: &std::sync::Arc<dyn core_ports::VaultStore>,
     mem_dir: &std::path::Path,
 ) -> Option<String> {
+    // 1) Filesystem — caminho novo, sem dependência de vault unlocked
+    let priv_path = agent_priv_path(mem_dir, agent);
+    if let Ok(bytes) = std::fs::read(&priv_path) {
+        if bytes.len() == 32 {
+            let mut priv_bytes = [0u8; 32];
+            priv_bytes.copy_from_slice(&bytes);
+            return Some(sign_jwt(&priv_bytes, agent, 600));
+        }
+    }
+
+    // 2) Vault — compat com agentes criados antes do fs-store. Tenta só
+    //    se o vault está unlocked (silently falha senão).
     let secret_name = privkey_secret_name(agent);
-    let hex = vault.get_secret(mem_dir, &secret_name).ok()??;
-    let priv_bytes = hex_to_bytes(&hex).ok()?;
+    if let Ok(Some(hex)) = vault.get_secret(mem_dir, &secret_name) {
+        if let Ok(priv_bytes) = hex_to_bytes(&hex) {
+            return Some(sign_jwt(&priv_bytes, agent, 600));
+        }
+    }
+
+    // 3) Nada → auto-provisiona no filesystem
+    let priv_bytes = ensure_agent_keypair(mem_dir, agent)?;
     Some(sign_jwt(&priv_bytes, agent, 600))
 }
 

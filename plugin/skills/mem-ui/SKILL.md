@@ -1,3 +1,8 @@
+---
+name: mem-ui
+description: Sobe a interface web local pra visualizar a memória do projeto.
+---
+
 # /mem-ui — Interface web do project-man
 
 Sobe a interface web local para visualizar a memória do projeto atual.

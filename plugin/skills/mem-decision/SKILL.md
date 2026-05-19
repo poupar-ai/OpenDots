@@ -1,3 +1,8 @@
+---
+name: mem-decision
+description: Registra uma decisão técnica, arquitetural ou de produto em .claude-project-memory/decisions.jsonl, injetada em sessões futuras.
+---
+
 # /mem-decision — Registrar uma decisão do projeto
 
 Registra uma decisão técnica, arquitetural ou de produto no histórico do projeto. Decisões ficam em `.claude-project-memory/decisions.jsonl` e são injetadas automaticamente em toda sessão futura.

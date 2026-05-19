@@ -1,3 +1,8 @@
+---
+name: mem-search
+description: Busca no histórico de sessões e observações do projeto atual.
+---
+
 # /mem-search — Busca no histórico do projeto
 
 Busca no histórico de sessões e observações do projeto atual.

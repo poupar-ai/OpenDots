@@ -1,3 +1,8 @@
+---
+name: mem-index
+description: Rebuild do code index do projeto — mapa de símbolos reutilizáveis (funções, classes, endpoints, tabelas) com ranking por importância.
+---
+
 # /mem-index — Code index do projeto
 
 Faz rebuild completo do **code index** — o mapa de símbolos reutilizáveis (funções, classes, endpoints, tabelas) do projeto. Estratégia estilo Aider/Cursor/Sourcegraph: extração por linguagem + contagem de referências + ranking por importância.

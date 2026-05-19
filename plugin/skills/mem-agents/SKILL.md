@@ -1,3 +1,8 @@
+---
+name: mem-agents
+description: Declara os papéis de agentes do projeto (manager, oracle, especialistas) e injeta a config no contexto pro Claude Code usar subagents nativos.
+---
+
 # /mem-agents — Registry de agentes do projeto
 
 Declara os papéis de agentes deste projeto (Manager, Oracle, e especialistas). O plugin injeta essa config no contexto pra que o Claude Code use subagents nativos (via Task tool) de forma consistente — com modelo certo, contexto certo e regras de comunicação claras.

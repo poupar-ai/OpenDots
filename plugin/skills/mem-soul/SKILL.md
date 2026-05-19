@@ -1,3 +1,8 @@
+---
+name: mem-soul
+description: Cria ou atualiza .claude-project-memory/SOUL.md — camada de identidade do projeto (valores, filosofia, voz, não-negociáveis).
+---
+
 # /mem-soul — Alma do projeto
 
 Cria ou atualiza `.claude-project-memory/SOUL.md`, que é a **camada de identidade** do projeto — valores, filosofia, voz e não-negociáveis que vão além do que é factual (stack, estrutura, decisões pontuais).

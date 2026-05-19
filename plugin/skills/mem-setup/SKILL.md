@@ -1,3 +1,8 @@
+---
+name: mem-setup
+description: Analisa o projeto em profundidade e cria/atualiza .claude-project-memory/PROJECT.md pra manter consistência em sessões futuras.
+---
+
 # /mem-setup — Onboarding do projeto
 
 Você vai analisar este projeto em profundidade e criar (ou atualizar) o arquivo `.claude-project-memory/PROJECT.md`, que será injetado em toda sessão futura para manter consistência total com os padrões do projeto.

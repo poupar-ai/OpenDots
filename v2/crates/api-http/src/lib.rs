@@ -24,6 +24,8 @@ pub mod pipelines_routes;
 pub mod scope_routes;
 pub mod seeds_routes;
 pub mod tenant;
+pub mod topic_routes;
+pub mod topics;
 pub mod unlock_guard;
 pub mod vault_routes;
 
@@ -278,6 +280,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(misc_routes::misc_router())
         .merge(scope_routes::scope_router())
         .merge(auth_routes::auth_router())
+        .merge(topic_routes::topic_router())
         .merge(humans_routes::humans_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())

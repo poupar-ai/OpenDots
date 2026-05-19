@@ -111,6 +111,28 @@ curl -s -X POST http://localhost:37778/api/agents/handoff \\
   -d '{"from":"devs_junior_be","to":"<target>","message":"<mensagem curta e direta>"}'
 ```
 
+## Handoffs em batch (alta carga)
+
+Se for mandar VÁRIOS handoffs no mesmo turn (ex: notificar N alvos,
+flush de updates acumulados), use `POST /api/agents/handoff_batch` em
+vez de N curls separados. **O server faz rate limit no single** (30 req/s
+por agente) — acima disso vai retornar 429 forçando batch. Use o batch
+proativamente quando souber que vai mandar mais de uns 10 num turn.
+
+```bash
+curl -s -X POST http://localhost:37778/api/agents/handoff_batch \
+  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[
+        {"to":"alvo1","message":"..."},
+        {"to":"alvo2","message":"..."},
+        {"to":"alvo3","message":"..."}
+      ]}'
+```
+
+Cada item da response tem `{"index", "ok", "trace_id"}` ou
+`{"index", "ok":false, "error"}`. Sempre 200 — erros são per-item.
+
 - `to` precisa estar na sua `can_talk_to`. Se não estiver, o servidor responde 403 e registra violação.
 - Se der 200, reporte em UMA linha: *"Acionei <target>: <resumo-curto>"*. Sem simular resposta do outro lado.
 - Se der 403 ou 5xx, reporte a falha factualmente e **não tente outro path**.

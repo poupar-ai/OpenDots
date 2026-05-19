@@ -183,6 +183,11 @@ pub struct AppState {
     /// um sender aqui e aguarda. Hook `on_drain_start` da queue notifica
     /// (envia `()`) quando o trace começa a ser processado.
     pub pending_acks: Arc<Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
+    /// Rate limit do /api/agents/handoff (single). Map `from → janela
+    /// de timestamps`. Acima do limite, response é 429 com hint pra
+    /// usar /handoff_batch. Defesa em código contra agente que ignora
+    /// instrução do prompt — confiança em prompt é brecha conhecida.
+    pub handoff_rate: Arc<Mutex<std::collections::HashMap<String, std::collections::VecDeque<std::time::Instant>>>>,
 }
 
 impl AppState {
@@ -254,6 +259,7 @@ impl AppState {
             auto_queue,
             trace_index,
             pending_acks,
+            handoff_rate: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 

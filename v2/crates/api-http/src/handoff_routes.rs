@@ -320,6 +320,35 @@ async fn handoff_handler(
     let from_owned = claims.agent;
     let from = from_owned.as_str();
 
+    // Rate limit no single handoff (defesa em código — prompt sozinho
+    // não basta). Se from passou de RATE_MAX handoffs em RATE_WINDOW,
+    // retorna 429 hint pro batch. Agentes que ignoram a instrução do
+    // prompt batem nessa parede e são forçados a aglutinar.
+    const RATE_MAX: usize = 30;
+    const RATE_WINDOW_MS: u128 = 1000;
+    {
+        let now = std::time::Instant::now();
+        let mut map = st.handoff_rate.lock().unwrap();
+        let q = map.entry(from.to_string()).or_default();
+        // Expira timestamps fora da janela.
+        while let Some(&ts) = q.front() {
+            if now.duration_since(ts).as_millis() > RATE_WINDOW_MS {
+                q.pop_front();
+            } else {
+                break;
+            }
+        }
+        if q.len() >= RATE_MAX {
+            return json_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                &format!(
+                    "rate limit: {RATE_MAX} handoffs/{RATE_WINDOW_MS}ms por agente. Use POST /api/agents/handoff_batch pra mandar vários numa request."
+                ),
+            );
+        }
+        q.push_back(now);
+    }
+
     // intent validation: if body.intent present and not in set → 400 (order
     // matches node: intent validated BEFORE computing default).
     if let Some(i) = v.get("intent").and_then(Value::as_str) {

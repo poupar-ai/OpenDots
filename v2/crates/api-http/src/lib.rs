@@ -174,6 +174,11 @@ pub struct AppState {
     /// via `build_from_disk`. Callers que emitem eventos no bus devem
     /// chamar `trace_index.record(ev)` em seguida pra manter atualizado.
     pub trace_index: Arc<domain_bus::TraceIndex>,
+    /// Map `trace_id → oneshot sender` pra backpressure síncrono opt-in.
+    /// Quando o handoff é chamado com `wait_ack=true`, server insere
+    /// um sender aqui e aguarda. Hook `on_drain_start` da queue notifica
+    /// (envia `()`) quando o trace começa a ser processado.
+    pub pending_acks: Arc<Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
 }
 
 impl AppState {
@@ -205,12 +210,29 @@ impl AppState {
             Arc::clone(&vault),
             Arc::clone(&trace_index),
         );
+
+        // Backpressure síncrono — quando wait_ack=true no handoff, server
+        // registra um oneshot pelo trace_id; hook abaixo solta o sender
+        // assim que a queue chama o runner pro trace (= "B começou").
+        let pending_acks: Arc<
+            Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<()>>>,
+        > = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let acks_for_hook = Arc::clone(&pending_acks);
+
         // Queue persistente: state_dir = <mem_dir>/queue. Sobrevive
         // restart (pending+running são restaurados; reconcile() depois
         // detecta turns "in-flight" que não saíram porque o processo
         // morreu e devolve pra pending).
         let mut queue_cfg = AgentQueueConfig::new(runner);
         queue_cfg.state_dir = Some(mem_dir.join("queue"));
+        queue_cfg.on_drain_start = Some(Arc::new(move |ev: core_queue::DrainStartEvent| {
+            let mut map = acks_for_hook.lock().unwrap();
+            for tid in &ev.trace_ids {
+                if let Some(tx) = map.remove(tid) {
+                    let _ = tx.send(());
+                }
+            }
+        }));
         let auto_queue = AgentQueue::new(queue_cfg);
 
         Self {
@@ -227,6 +249,7 @@ impl AppState {
             unlock_guard,
             auto_queue,
             trace_index,
+            pending_acks,
         }
     }
 

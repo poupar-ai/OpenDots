@@ -658,10 +658,48 @@ async fn handoff_handler(
         .and_then(Value::as_str)
         .map(core_queue::Priority::parse)
         .unwrap_or(core_queue::Priority::Normal);
+    // Backpressure opt-in: body.wait_ack=true ou wait_ack_timeout_ms
+    // (default 30s). Server registra oneshot pelo trace_id antes do
+    // enqueue, espera o hook on_drain_start sinalizar (= B começou),
+    // ou timeout. Útil pra flows "tipo RPC" onde A precisa saber que
+    // B engatou antes de seguir.
+    let wait_ack = v.get("wait_ack").and_then(Value::as_bool).unwrap_or(false);
+    let wait_timeout_ms = v
+        .get("wait_ack_timeout_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(30_000);
+    let ack_rx: Option<tokio::sync::oneshot::Receiver<()>> = if wait_ack {
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        st.pending_acks.lock().unwrap().insert(trace_id.clone(), tx);
+        Some(rx)
+    } else {
+        None
+    };
     let _ = st.auto_queue.enqueue_with(to, from, message, Some(&trace_id), priority);
 
     // ── Auto-escalação de blocker ───────────────────────────────────────────
     let escalation = try_auto_escalate_blocker(&st, &manifest, from, to, message, &ts);
+
+    // ── Aguarda ack se wait_ack=true ────────────────────────────────────────
+    let ack_status: Value = if let Some(rx) = ack_rx {
+        let timeout = std::time::Duration::from_millis(wait_timeout_ms);
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(())) => Value::String("acked".into()),
+            Ok(Err(_)) => {
+                // Sender foi dropado sem enviar (caso raro: queue config
+                // mudou ou panic no hook). Trace continua na pending.
+                st.pending_acks.lock().unwrap().remove(&trace_id);
+                Value::String("sender_dropped".into())
+            }
+            Err(_) => {
+                // Timeout — limpa o sender pra não vazar memory.
+                st.pending_acks.lock().unwrap().remove(&trace_id);
+                Value::String("timeout".into())
+            }
+        }
+    } else {
+        Value::Null
+    };
 
     // ── Resposta ────────────────────────────────────────────────────────────
     let mut out = Map::new();
@@ -671,6 +709,7 @@ async fn handoff_handler(
     out.insert("intent".into(), Value::String(intent.into()));
     out.insert("trace_id".into(), Value::String(trace_id));
     out.insert("auto_queued".into(), Value::Bool(true));
+    out.insert("ack".into(), ack_status);
     out.insert("auto_resumed".into(), resumed.unwrap_or(Value::Null));
     out.insert(
         "auto_escalated".into(),

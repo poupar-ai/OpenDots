@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Package, Check, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Package, Check, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import {
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  Group,
+  Modal,
+  Paper,
+  Stack,
+  Text,
+  Title,
+  UnstyledButton,
+} from '@/ui';
 import {
   listSeeds,
   applySeed,
@@ -89,175 +102,154 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
   }, [result]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Package className="h-4 w-4" /> Instalar time de agentes
-            </div>
-            <p className="text-xs text-muted-foreground">
-              projeto: <span className="font-mono">{projectRoot || '…'}</span>
-            </p>
-          </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
+    <Modal
+      opened
+      onClose={onClose}
+      size="xl"
+      title={
+        <Group gap="xs">
+          <Package size={18} />
+          <Box>
+            <Title order={5}>Instalar time de agentes</Title>
+            <Text size="xs" muted>
+              projeto: {projectRoot || '…'}
+            </Text>
+          </Box>
+        </Group>
+      }
+    >
+      <Stack gap="md">
+        {loadErr && <Alert color="danger">{loadErr}</Alert>}
 
-        <div className="soft-scroll flex-1 overflow-y-auto px-4 py-3">
-          {loadErr && (
-            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {loadErr}
-            </div>
-          )}
+        {!categories && !loadErr && (
+          <Text size="xs" muted>carregando…</Text>
+        )}
 
-          {!categories && !loadErr && (
-            <p className="py-10 text-center text-xs text-muted-foreground">carregando…</p>
-          )}
+        {categories && categories.length === 0 && (
+          <Text size="xs" muted>Nenhum pack disponível.</Text>
+        )}
 
-          {categories && categories.length === 0 && (
-            <p className="py-10 text-center text-xs text-muted-foreground">
-              Nenhum pack disponível.
-            </p>
-          )}
+        {categories?.map((cat) => (
+          <Stack key={cat.name} gap="xs">
+            <Title order={6}>{cat.label}</Title>
+            {cat.description && (
+              <Text size="xs" muted>{cat.description}</Text>
+            )}
 
-          {categories?.map((cat) => (
-            <section key={cat.name} className="mb-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {cat.label}
-              </h3>
-              {cat.description && (
-                <p className="text-xs text-muted-foreground">{cat.description}</p>
-              )}
-
-              <div className="mt-2 space-y-2">
-                {cat.packs.map((p) => {
-                  const ref = `${cat.name}/${p.name}`;
-                  const expanded = expandedPack === ref;
-                  const sel = getPicked(ref, p.agents);
-                  const all = sel.size === p.agents.length;
-                  return (
-                    <div key={ref} className="rounded-md border">
-                      <button
-                        type="button"
+            <Stack gap="xs">
+              {cat.packs.map((p) => {
+                const ref = `${cat.name}/${p.name}`;
+                const expanded = expandedPack === ref;
+                const sel = getPicked(ref, p.agents);
+                const all = sel.size === p.agents.length;
+                return (
+                  <Paper key={ref} withBorder padding="sm">
+                    <Stack gap="sm">
+                      <UnstyledButton
+                        fullWidth
                         onClick={() => setExpandedPack(expanded ? null : ref)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50"
                       >
-                        <div className="flex items-center gap-2">
-                          {expanded ? (
-                            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                          )}
-                          <span className="text-sm font-semibold">{p.label}</span>
-                          <Badge variant="outline">{p.agents.length} agentes</Badge>
-                        </div>
-                        <span className="font-mono text-xs text-slate-400">{ref}</span>
-                      </button>
+                        <Group justify="space-between" gap="xs">
+                          <Group gap="xs">
+                            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <Text size="sm" fw={600}>{p.label}</Text>
+                            <Badge variant="outline">{p.agents.length} agentes</Badge>
+                          </Group>
+                          <Text size="xs" muted style={{ fontFamily: 'monospace' }}>
+                            {ref}
+                          </Text>
+                        </Group>
+                      </UnstyledButton>
 
                       {expanded && (
-                        <div className="border-t px-3 py-3">
+                        <Stack gap="sm">
                           {p.description && (
-                            <p className="mb-3 text-xs text-slate-600">{p.description}</p>
+                            <Text size="xs" muted>{p.description}</Text>
                           )}
 
-                          <div className="mb-3 flex items-center justify-between">
-                            <span className="text-xs font-semibold text-slate-500">
+                          <Group justify="space-between" gap="xs">
+                            <Text size="xs" fw={600} muted>
                               Selecionados: {sel.size}/{p.agents.length}
-                            </span>
-                            <button
-                              type="button"
-                              className="text-xs text-slate-500 hover:text-slate-900"
+                            </Text>
+                            <Button
+                              variant="subtle"
+                              size="xs"
+                              color="gray"
                               onClick={() => resetPicked(ref, p.agents)}
                             >
                               todos
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                            {p.agents.map((a) => {
-                              const on = sel.has(a);
-                              return (
-                                <label
-                                  key={a}
-                                  className={`flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-xs ${
-                                    on
-                                      ? 'border-primary/40 bg-primary/5 text-slate-900'
-                                      : 'border-slate-200 bg-slate-50 text-slate-500'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={on}
-                                    onChange={() => toggleAgent(ref, a, p.agents)}
-                                    className="h-3 w-3"
-                                  />
-                                  <span className="truncate">{a}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-
-                          <div className="mt-4 flex items-center justify-between gap-2">
-                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                              <input
-                                type="checkbox"
-                                checked={overwrite}
-                                onChange={(e) => setOverwrite(e.target.checked)}
-                                className="h-3 w-3"
-                              />
-                              sobrescrever existentes
-                            </label>
-                            <Button
-                              size="sm"
-                              disabled={sel.size === 0 || applying === ref}
-                              onClick={() => install(ref, p.agents)}
-                              className="gap-1.5"
-                            >
-                              {applying === ref ? 'Instalando…' : (
-                                <>
-                                  <Check className="h-3.5 w-3.5" />
-                                  Instalar {all ? 'todos' : `${sel.size}`}
-                                </>
-                              )}
                             </Button>
-                          </div>
-                        </div>
+                          </Group>
+
+                          <Group gap={6} wrap="wrap">
+                            {p.agents.map((a) => (
+                              <Chip
+                                key={a}
+                                checked={sel.has(a)}
+                                onChange={() => toggleAgent(ref, a, p.agents)}
+                                size="xs"
+                                variant="outline"
+                              >
+                                {a}
+                              </Chip>
+                            ))}
+                          </Group>
+
+                          <Group justify="space-between" gap="xs">
+                            <Checkbox
+                              checked={overwrite}
+                              onChange={setOverwrite}
+                              label="sobrescrever existentes"
+                              size="xs"
+                            />
+                            <Button
+                              size="xs"
+                              disabled={sel.size === 0 || applying === ref}
+                              loading={applying === ref}
+                              leftIcon={<Check size={14} />}
+                              onClick={() => install(ref, p.agents)}
+                            >
+                              Instalar {all ? 'todos' : `${sel.size}`}
+                            </Button>
+                          </Group>
+                        </Stack>
                       )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          </Stack>
+        ))}
 
-          {applyErr && (
-            <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {applyErr}
-            </div>
-          )}
+        {applyErr && (
+          <Alert color="danger" icon={<AlertCircle size={14} />}>
+            {applyErr}
+          </Alert>
+        )}
 
-          {result && (
-            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-              <div className="flex items-center gap-1.5 font-semibold">
-                <Check className="h-3.5 w-3.5" /> {result.ref} instalado — {summary}
-              </div>
+        {result && (
+          <Alert
+            color="success"
+            icon={<Check size={14} />}
+            title={`${result.ref} instalado — ${summary}`}
+          >
+            <Stack gap={4}>
               {result.r.added.length > 0 && (
-                <div className="mt-1">+ {result.r.added.join(', ')}</div>
+                <Text size="xs">+ {result.r.added.join(', ')}</Text>
               )}
               {result.r.replaced.length > 0 && (
-                <div className="mt-1">↻ {result.r.replaced.join(', ')}</div>
+                <Text size="xs">↻ {result.r.replaced.join(', ')}</Text>
               )}
               {result.r.skipped.length > 0 && (
-                <div className="mt-1 text-emerald-700/80">
+                <Text size="xs" muted>
                   = preservados (use "sobrescrever"): {result.r.skipped.join(', ')}
-                </div>
+                </Text>
               )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+            </Stack>
+          </Alert>
+        )}
+      </Stack>
+    </Modal>
   );
 }

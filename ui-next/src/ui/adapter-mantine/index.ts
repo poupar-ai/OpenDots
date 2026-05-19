@@ -43,4 +43,13 @@ export type { ModalProps } from './Modal';
 export { Radio, RadioGroup } from './Radio';
 export type { RadioProps, RadioGroupProps } from './Radio';
 
+export { Checkbox } from './Checkbox';
+export type { CheckboxProps } from './Checkbox';
+
+export { Chip } from './Chip';
+export type { ChipProps } from './Chip';
+
+export { UnstyledButton } from './UnstyledButton';
+export type { UnstyledButtonProps } from './UnstyledButton';
+
 export { colorVar } from './colors';

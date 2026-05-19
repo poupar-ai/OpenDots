@@ -49,6 +49,7 @@ scripts/
 - **Cores/tamanhos** são semânticos: `color="primary|success|warning|danger|info|gray"`, `size="xs|sm|md|lg"`. Nada de `color="indigo"` no panel — isso é detalhe do Mantine, vive no adapter.
 - **Precisa de cor inline (border/bg)?** Usa `colorVar(color, shade)` de `@/ui`. Evita `var(--mantine-color-*)` solto.
 - **Trocar de lib UI no futuro**: cria `src/ui/adapter-<nome>/` espelhando a mesma API pública, troca a linha de re-export em `src/ui/index.ts`, ajusta `MantineProvider` em `main.tsx`. Panels não mudam.
+- **Dúvida sobre API do Mantine?** O MCP `mantine` está registrado em `.mcp.json` (oficial `@mantine/mcp-server`). Consulte ele antes de adivinhar props/comportamento — é a doc autoritativa pra v9.
 
 ## Storage layer (`core-storage`)
 

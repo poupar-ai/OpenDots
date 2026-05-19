@@ -315,10 +315,12 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
     // estiver destrancado, o agente é criado mesmo assim — só não terá
     // assinatura de handoff disponível.
     let (priv_bytes, pub_bytes) = crate::agent_keys::generate_keypair();
-    config.insert(
-        "pubkey".into(),
-        Value::String(crate::agent_keys::bytes_to_hex(&pub_bytes)),
-    );
+    let pubkey_hex = crate::agent_keys::bytes_to_hex(&pub_bytes);
+    // Nota: passar pubkey em `config` aqui NÃO funciona — `add_agent` em
+    // domain-agents reconstrói o agent map só com campos conhecidos
+    // (type, emoji, model, role, context_file, tools, mcps, can_talk_to,
+    // scope). Qualquer campo extra é silenciosamente dropado. Por isso
+    // gravamos pubkey num PATCH separado depois do add_agent.
     let secret_name = crate::agent_keys::privkey_secret_name(&name);
     if let Err(e) = st.vault.set_secret(
         &st.mem_dir,
@@ -335,10 +337,34 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
     }
 
     match add_agent(&st.mem_dir, &name, &Value::Object(config)) {
-        Ok(created) => json_response(
-            StatusCode::OK,
-            json!({ "ok": true, "agent": name, "created": created }),
-        ),
+        Ok(mut created) => {
+            // Patch pubkey direto no manifest — add_agent dropa campos
+            // não-conhecidos no rebuild do agent map. Sem isso, lookup_pubkey
+            // retorna None e handoff falha com "pubkey não encontrada".
+            if let Some(mut manifest) = domain_agents::load_manifest(&st.mem_dir) {
+                let mut patched = false;
+                if let Some(agent_cfg) = manifest
+                    .pointer_mut(&format!("/agents/{name}"))
+                    .and_then(Value::as_object_mut)
+                {
+                    agent_cfg.insert("pubkey".into(), Value::String(pubkey_hex.clone()));
+                    patched = true;
+                }
+                if patched {
+                    if let Err(e) = domain_agents::save_manifest(&st.mem_dir, &manifest) {
+                        eprintln!("warn: falha ao patch pubkey no manifest pra {name}: {e}");
+                    } else if let Some(obj) = created.as_object_mut() {
+                        // Reflete a pubkey na response pro caller saber que
+                        // a identidade está pronta.
+                        obj.insert("pubkey".into(), Value::String(pubkey_hex));
+                    }
+                }
+            }
+            json_response(
+                StatusCode::OK,
+                json!({ "ok": true, "agent": name, "created": created }),
+            )
+        }
         Err(AddAgentError::InvalidName) => {
             json_error(StatusCode::BAD_REQUEST, &AddAgentError::InvalidName.to_string())
         }

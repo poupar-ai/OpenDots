@@ -34,10 +34,12 @@ use crate::chat_routes::{append_chat, ensure_agent_channels};
 use crate::{json_error, json_response, AppState};
 
 pub fn handoff_router() -> Router<AppState> {
-    Router::new().route(
-        "/api/agents/handoff",
-        post(handoff_handler).delete(delete_not_allowed),
-    )
+    Router::new()
+        .route(
+            "/api/agents/handoff",
+            post(handoff_handler).delete(delete_not_allowed),
+        )
+        .route("/api/agents/handoff_batch", post(handoff_batch_handler))
 }
 
 /// Paridade com `server.cjs:2977-2980` — DELETE em `/api/agents/handoff`
@@ -722,4 +724,230 @@ async fn handoff_handler(
         },
     );
     json_response(StatusCode::OK, Value::Object(out))
+}
+
+// ── Batch handler ───────────────────────────────────────────────────────────
+//
+// Fast path pra alta carga: 1 request, N handoffs. Cliente é responsável
+// por agrupar. Cada item passa pela mesma validação que o single handler
+// (JWT autoritativo, can_talk_to, destructive scan), mas SEM features
+// sofisticadas — sem auto-escalation, sem ack wait, sem report-intent
+// resolution. Quem precisa disso usa o handler single.
+//
+// Body:
+//   {
+//     "items": [
+//       {"to": "oracle", "message": "...", "priority"?: "high|normal|low",
+//        "intent"?: "ask|delegate|...", "subject"?: "...", "trace_id"?: "..."},
+//       ...
+//     ]
+//   }
+// Response: 200 com {"items": [{"index": 0, "ok": true, "trace_id": "..."}, ...]}.
+// Sempre 200 — erros individuais ficam em items[i].error. Único 4xx é
+// se JWT/JSON do body é inválido (rejeita o request inteiro).
+
+async fn handoff_batch_handler(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
+    };
+    let items = match v.get("items").and_then(Value::as_array) {
+        Some(arr) if !arr.is_empty() => arr.clone(),
+        _ => return json_error(StatusCode::BAD_REQUEST, "items (array não-vazio) obrigatório"),
+    };
+    if items.len() > 1000 {
+        return json_error(StatusCode::BAD_REQUEST, "max 1000 items por batch");
+    }
+
+    // JWT validado UMA vez. `from` autoritativo aplica a todos os items
+    // (batch é assinado por UM agente — não dá pra um agente fingir batch
+    // de outros).
+    let bearer = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    let Some(token) = bearer else {
+        return json_error(
+            StatusCode::UNAUTHORIZED,
+            "Authorization: Bearer <JWT> obrigatório",
+        );
+    };
+    let mem_dir_for_lookup = st.mem_dir.clone();
+    let claims = match crate::agent_keys::verify_jwt(token, |name| {
+        crate::agent_keys::lookup_pubkey(&mem_dir_for_lookup, name)
+    }) {
+        Ok(c) => c,
+        Err(e) => return json_error(StatusCode::UNAUTHORIZED, &format!("JWT inválido: {e}")),
+    };
+    let from = claims.agent;
+
+    let manifest = match domain_agents::load_manifest(&st.mem_dir) {
+        Some(m) => m,
+        None => return json_error(StatusCode::NOT_FOUND, "manifest não encontrado"),
+    };
+    let from_cfg = match manifest
+        .get("agents")
+        .and_then(|a| a.get(&from))
+        .cloned()
+    {
+        Some(c) => c,
+        None => return json_error(StatusCode::NOT_FOUND, &format!("from '{from}' não existe no manifest")),
+    };
+    let can_talk: Vec<String> = from_cfg
+        .get("can_talk_to")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    ensure_agent_channels(&st.mem_dir, &manifest);
+
+    let mut results: Vec<Value> = Vec::with_capacity(items.len());
+    let mut ok_count: usize = 0;
+
+    for (idx, item) in items.iter().enumerate() {
+        let to = item.get("to").and_then(Value::as_str).unwrap_or("");
+        let message = item.get("message").and_then(Value::as_str).unwrap_or("");
+        if to.is_empty() || message.is_empty() {
+            results.push(json!({"index": idx, "ok": false, "error": "to e message obrigatórios"}));
+            continue;
+        }
+        // Existe?
+        let to_exists = manifest
+            .get("agents")
+            .and_then(|a| a.get(to))
+            .is_some();
+        if !to_exists {
+            results.push(json!({"index": idx, "ok": false, "error": format!("to '{to}' não existe")}));
+            continue;
+        }
+        // can_talk_to?
+        if !can_talk.iter().any(|x| x == to) {
+            append_agent_log(
+                &st.mem_dir,
+                &from,
+                &json!({
+                    "ts": now_iso(),
+                    "type": "violation",
+                    "stage": "handoff_batch_denied",
+                    "target": to,
+                    "batch_index": idx,
+                }),
+            );
+            results.push(json!({"index": idx, "ok": false, "error": format!("'{to}' não está em can_talk_to de '{from}'")}));
+            continue;
+        }
+        // Destrutivo?
+        let det = domain_destructive::detect(&st.mem_dir, message);
+        if det.matched {
+            results.push(json!({
+                "index": idx,
+                "ok": false,
+                "error": "destructive_intent",
+                "hits": det.hits.iter().map(|h| h.to_json()).collect::<Vec<_>>(),
+            }));
+            continue;
+        }
+
+        // Validate intent + priority + trace.
+        let intent = item
+            .get("intent")
+            .and_then(Value::as_str)
+            .filter(|s| VALID_INTENTS.contains(s))
+            .unwrap_or("ask");
+        let priority = item
+            .get("priority")
+            .and_then(Value::as_str)
+            .map(core_queue::Priority::parse)
+            .unwrap_or(core_queue::Priority::Normal);
+        let trace_id = match item.get("trace_id").and_then(Value::as_str) {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => new_trace_id(),
+        };
+        let subject = item
+            .get("subject")
+            .and_then(Value::as_str)
+            .map(|s| s.chars().take(120).collect::<String>());
+
+        let ts = now_iso();
+        // Append chat + 2 logs + emit + enqueue — inline pra evitar
+        // overhead de função.
+        let mut chat_entry = Map::new();
+        chat_entry.insert("ts".into(), Value::String(ts.clone()));
+        chat_entry.insert("role".into(), Value::String("user".into()));
+        chat_entry.insert("content".into(), Value::String(message.to_string()));
+        chat_entry.insert("from".into(), Value::String(from.clone()));
+        chat_entry.insert("intent".into(), Value::String(intent.into()));
+        chat_entry.insert("trace_id".into(), Value::String(trace_id.clone()));
+        if let Some(ref s) = subject {
+            chat_entry.insert("subject".into(), Value::String(s.clone()));
+        }
+        append_chat(&st.mem_dir, to, &Value::Object(chat_entry));
+
+        append_agent_log(
+            &st.mem_dir,
+            &from,
+            &json!({
+                "ts": ts,
+                "type": "handoff_out",
+                "target": to,
+                "chars": message.len(),
+                "intent": intent,
+                "trace_id": trace_id,
+                "batch": true,
+            }),
+        );
+        append_agent_log(
+            &st.mem_dir,
+            to,
+            &json!({
+                "ts": ts,
+                "type": "handoff_in",
+                "source": from,
+                "chars": message.len(),
+                "intent": intent,
+                "trace_id": trace_id,
+                "batch": true,
+            }),
+        );
+
+        if let Some(ev) = domain_bus::emit(
+            &st.mem_dir,
+            &json!({
+                "type": "created",
+                "trace_id": trace_id,
+                "from": from,
+                "to": to,
+                "intent": intent,
+                "message_chars": message.len(),
+                "batch": true,
+            }),
+            &BusClock,
+        ) {
+            st.trace_index.record(&ev);
+        }
+
+        let _ = st.auto_queue.enqueue_with(to, &from, message, Some(&trace_id), priority);
+        results.push(json!({
+            "index": idx,
+            "ok": true,
+            "trace_id": trace_id,
+            "to": to,
+            "intent": intent,
+        }));
+        ok_count += 1;
+    }
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "ok": ok_count == items.len(),
+            "total": items.len(),
+            "succeeded": ok_count,
+            "failed": items.len() - ok_count,
+            "items": results,
+        }),
+    )
 }

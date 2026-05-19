@@ -141,26 +141,28 @@ pub(crate) fn build_allowed_tools(agent_cfg: &Value) -> Vec<String> {
         .unwrap_or_default();
 
     // Auto-injeção pra comunicação entre agentes: se o agente tem
-    // `can_talk_to` não-vazio, ele precisa fazer handoff via curl pra
-    // `/api/agents/handoff` (vide instruções nos *.md de cada agente).
-    // Sem isso o usuário tinha que lembrar de marcar Bash + adicionar
-    // `curl *` na lista de patterns toda vez que criava um agente —
-    // fricção desnecessária pra capacidade fundamental do sistema.
+    // `can_talk_to` não-vazio, ele precisa fazer handoff. Caminho
+    // canônico é `pmem handoff <to> "<msg>"` (wrapper em PATH); curl
+    // direto fica disponível como fallback pra endpoints que não
+    // precisam de `$PROJECT_MEM_AGENT_TOKEN` na linha (sandbox
+    // simple_expansion bloqueia qualquer Bash com `$VAR`).
     // O servidor já valida `can_talk_to` no endpoint de handoff (403
-    // se violar), então o curl largo aqui não amplia o que o agente
-    // pode fazer — só remove o passo manual.
+    // se violar), então os patterns largos aqui não ampliam o que o
+    // agente pode fazer — só removem o passo manual de allowlist.
     let has_can_talk_to = agent_cfg
         .get("can_talk_to")
         .and_then(Value::as_array)
         .map(|a| !a.is_empty())
         .unwrap_or(false);
-    const HANDOFF_PATTERN: &str = "curl *";
+    const HANDOFF_PATTERNS: &[&str] = &["pmem *", "curl *"];
     if has_can_talk_to {
         if !raw_tools.iter().any(|t| t == "Bash") {
             raw_tools.push("Bash".to_string());
         }
-        if !bash_allow.iter().any(|p| p.trim() == HANDOFF_PATTERN) {
-            bash_allow.push(HANDOFF_PATTERN.to_string());
+        for pat in HANDOFF_PATTERNS {
+            if !bash_allow.iter().any(|p| p.trim() == *pat) {
+                bash_allow.push((*pat).to_string());
+            }
         }
     }
 

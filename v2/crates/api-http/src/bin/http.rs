@@ -109,6 +109,21 @@ async fn main() -> ExitCode {
         }
     });
 
+    // Cleanup periódico de subagents finished > 1h. Sem isso o map cresce
+    // indefinidamente em uso pesado.
+    let subagents_for_cleanup = std::sync::Arc::clone(&state.subagents);
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            let removed = subagents_for_cleanup.cleanup_finished(std::time::Duration::from_secs(3600));
+            if removed > 0 {
+                eprintln!("subagent cleanup: {removed} finished removidos");
+            }
+        }
+    });
+
     let app = build_router(state);
 
     // Bind: por default TCP em $bind_host:$port. Env PROJECT_MEM_BIND_UNIX

@@ -26,6 +26,8 @@ pub mod pipelines_routes;
 pub mod scope_routes;
 pub mod search_routes;
 pub mod seeds_routes;
+pub mod subagent;
+pub mod subagent_routes;
 pub mod tenant;
 pub mod topic_routes;
 pub mod topics;
@@ -194,6 +196,11 @@ pub struct AppState {
     /// Pode ser None se o SQLite falhar ao abrir (degrada graciosamente
     /// — search devolve "indisponível", restante funciona).
     pub search: Option<Arc<core_search::SearchIndex>>,
+    /// Manager de subagents efêmeros paralelos. Pai (agente) chama
+    /// /api/agents/subagent/spawn pra dispatch + poll pra resultado.
+    /// Custo de tokens = zero (subagent tem context próprio, não
+    /// inflama o do pai).
+    pub subagents: Arc<subagent::SubagentManager>,
 }
 
 impl AppState {
@@ -274,6 +281,7 @@ impl AppState {
             pending_acks,
             handoff_rate: Arc::new(Mutex::new(std::collections::HashMap::new())),
             search,
+            subagents: Arc::new(subagent::SubagentManager::new()),
         }
     }
 
@@ -306,6 +314,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(db_routes::db_router())
         .merge(dev_routes::dev_router())
         .merge(search_routes::search_router())
+        .merge(subagent_routes::subagent_router())
         .merge(humans_routes::humans_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())

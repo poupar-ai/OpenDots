@@ -131,6 +131,36 @@ curl -s -X POST http://localhost:37778/api/agents/handoff_batch \
 Cada item da response tem `{"index", "ok", "trace_id"}` ou
 `{"index", "ok":false, "error"}`. Sempre 200 — erros são per-item.
 
+## Subagents paralelos (zero-context-cost)
+
+Pra delegar trabalho independente sem inflar SUA janela de contexto,
+use subagents efêmeros. Cada subagent é processo Claude separado com
+prompt+context próprios — você só vê o resultado final.
+
+```bash
+# Spawn um — retorna `subagent_id`, status="running":
+curl -s -X POST http://localhost:37778/api/agents/subagent/spawn \
+  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"resumir o arquivo X em 3 bullets","timeout_secs":120,"tools":["Read"]}'
+
+# Poll status — quando status=done, .result tem o stdout:
+curl -s http://localhost:37778/api/agents/subagent/<subagent_id>
+
+# Batch N em paralelo (máx 20 por batch, 10 em flight por agente):
+curl -s -X POST http://localhost:37778/api/agents/subagent/spawn_batch \
+  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"tasks":[{"prompt":"A","tools":["Read"]},{"prompt":"B","tools":["Read"]}]}'
+
+# Poll agregado do batch — `complete:true` quando todos terminaram:
+curl -s http://localhost:37778/api/agents/subagent/batch/<batch_id>
+```
+
+Quando usar: análise paralela de N arquivos, busca em vários repos,
+geração de hipóteses concorrentes. **Não use** pra fluxo conversacional
+(use handoff).
+
 - `to` precisa estar na sua `can_talk_to`. Se não estiver, o servidor responde 403 e registra violação.
 - Se der 200, reporte em UMA linha: *"Acionei <target>: <resumo-curto>"*. Sem simular resposta do outro lado.
 - Se der 403 ou 5xx, reporte a falha factualmente e **não tente outro path**.

@@ -274,7 +274,15 @@ Atualização automática a cada 10 segundos.
 Para subir manualmente:
 
 ```bash
-node /caminho/para/claude-project-memory/plugin/ui/server.cjs
+cd /caminho/para/claude-project-memory
+PROJECT_MEM_PORT=37778 v2/target/release/pmem-http
+```
+
+Build prévio (se faltar):
+
+```bash
+cargo build --release --manifest-path v2/Cargo.toml -p api-http
+cd ui-next && npm install && npm run build
 ```
 
 ---

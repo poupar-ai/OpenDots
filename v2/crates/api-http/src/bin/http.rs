@@ -1,11 +1,10 @@
 //! `pmem-http` — binário do servidor HTTP.
 //!
-//! Paridade com `plugin/ui/server.cjs`:
 //! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.claude-project-memory`
 //! - Porta: `$PROJECT_MEM_PORT` (default 37778)
 //! - Bind: resolvido via `<memDir>/network.json`
-//! - UI: `include_str!("../../../../plugin/ui/index.html")` (resolvido em build)
-//!   + fallback pra `ui-next/dist/` se existir
+//! - UI: `ui-next/dist/` (build via `cd ui-next && npm run build`).
+//!   Sem dist, `/` retorna 503 com instrução.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -15,8 +14,6 @@ use std::sync::Arc;
 use adapter_vault_file::FileVaultStore;
 use api_http::{build_router, socket_addr_for, AppState, DEFAULT_PORT};
 use core_paths::{find_project_root, read_scope_project_root, MEM_DIR_NAME};
-
-const INDEX_HTML: &str = include_str!("../../../../../plugin/ui/index.html");
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> ExitCode {
@@ -54,10 +51,12 @@ async fn main() -> ExitCode {
     };
     let project_root = read_scope_project_root(&mem_dir).unwrap_or(default_project_root);
 
-    // `DIST_DIR` = `<plugin_dir>/../../ui-next/dist`. Aqui não temos
-    // `__dirname`; tentamos resolver via `CARGO_MANIFEST_DIR` em build
-    // vs runtime. Em runtime default: relativo ao CWD do projeto.
-    let dist_candidate = project_root.join("ui-next").join("dist");
+    // `ui-next/dist` mora **dentro do clone do plugin** (junto do binário),
+    // NÃO no projeto-alvo. Quando o user ajusta `project_root` via UI pra
+    // apontar pro workspace (ex.: `~/dev/paag`), procurar dist lá quebra
+    // (some). Resolvemos via `mem_dir_base` (find_project_root(cwd)) que
+    // é sempre o clone do plugin.
+    let dist_candidate = mem_dir_base.join("ui-next").join("dist");
     let dist_dir = if dist_candidate.join("index.html").exists() {
         Some(dist_candidate)
     } else {
@@ -77,7 +76,6 @@ async fn main() -> ExitCode {
         project_root,
         plugin_dir,
         port,
-        INDEX_HTML.to_string(),
         dist_dir,
         vault,
     );

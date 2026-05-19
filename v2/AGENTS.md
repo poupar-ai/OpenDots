@@ -166,8 +166,9 @@ antes de fechar fase.
   — sempre `canonicalize()` antes de comparar paths.
 - **Terminal quebra** em `child.kill()` se o processo já morreu;
   `.ok()` é intencional.
-- **`plugin/ui/index.html` NÃO migra.** Vai ser embutido no binário
-  Rust via `include_str!` no Fase 7. Só o core muda de linguagem.
+- **Front antigo (`plugin/ui/`) foi REMOVIDO.** UI oficial agora é
+  `ui-next/` (React + Mantine). Servidor Rust serve `ui-next/dist/`
+  estaticamente; sem build, `/` retorna 503 com instrução.
 - **`PathBuf::join` não normaliza** `./`, `//`, `..` — diverge de
   `path.join` do Node. `core-paths` resolve via `normalize_posix` +
   `path_join`. Nunca usar `PathBuf::join` direto em paths que o `.cjs`
@@ -202,7 +203,7 @@ a migração descobriu por acaso. Fluxo:
 - Plano macro: `../docs/migrato_to_rust.md`
 - Achados da migração: `../docs/migration_findings.md`
 - Código-fonte v1 (verdade): `../plugin/scripts/*.cjs`
-- UI v1 (será embutida, não portada): `../plugin/ui/index.html`
+- UI atual: `../ui-next/` (React + Mantine; v1 antiga em `plugin/ui/` foi removida)
 - Repo público do produto comercial: github.com/schedylabs/claude-project-memory
 - Memória persistente relevante: `feedback_port_rust_paridade.md`,
   `reference_project_mem_repo.md`.

@@ -172,7 +172,6 @@ pub struct AppState {
     pub bind_host: String,
     pub network_cfg: Arc<Mutex<NetworkConfig>>,
     pub clock: Arc<dyn Clock + Send + Sync>,
-    pub html: Arc<String>,
     pub dist_dir: Option<PathBuf>,
     pub vault: Arc<dyn VaultStore>,
     pub unlock_guard: Arc<UnlockGuard>,
@@ -209,7 +208,6 @@ impl AppState {
         project_root: PathBuf,
         plugin_dir: PathBuf,
         port: u16,
-        html: String,
         dist_dir: Option<PathBuf>,
         vault: Arc<dyn VaultStore>,
     ) -> Self {
@@ -288,7 +286,6 @@ impl AppState {
             bind_host,
             network_cfg: Arc::new(Mutex::new(cfg)),
             clock: Arc::new(SystemClock),
-            html: Arc::new(html),
             dist_dir,
             vault,
             unlock_guard,
@@ -345,10 +342,9 @@ pub fn build_router(state: AppState) -> Router {
 // ── Static serving ──────────────────────────────────────────────────────────
 
 async fn serve_index(State(st): State<AppState>) -> Response {
-    // Prefere a UI moderna em `ui-next/dist/` quando disponível, igual
-    // ao `serve_static` faz pros outros paths. Sem isso, a rota `/`
-    // ficava amarrada no `INDEX_HTML` embedded (legacy), que chama
-    // endpoints removidos (`/api/data` etc).
+    // O front oficial é `ui-next/dist/`. Sem build, mostramos uma página
+    // mínima com instrução — antes havia fallback pra um `INDEX_HTML`
+    // legado embedded, mas foi removido.
     if let Some(dist) = st.dist_dir.as_deref() {
         let candidate = dist.join("index.html");
         if let Ok(canon) = candidate.canonicalize() {
@@ -357,7 +353,7 @@ async fn serve_index(State(st): State<AppState>) -> Response {
             }
         }
     }
-    html_response(&st.html)
+    missing_dist_response()
 }
 
 async fn serve_static(State(st): State<AppState>, uri: Uri, method: Method) -> Response {
@@ -365,14 +361,9 @@ async fn serve_static(State(st): State<AppState>, uri: Uri, method: Method) -> R
         return not_found();
     }
     let path = uri.path();
-    // Dist (ui-next/dist) tem prioridade quando existe.
     if let Some(dist) = st.dist_dir.as_deref() {
         let clean = path.trim_start_matches('/');
-        let target = if clean.is_empty() {
-            "index.html"
-        } else {
-            clean
-        };
+        let target = if clean.is_empty() { "index.html" } else { clean };
         let target = target.split('?').next().unwrap_or(target);
         let candidate = dist.join(target);
         if let Ok(canon) = candidate.canonicalize() {
@@ -381,9 +372,8 @@ async fn serve_static(State(st): State<AppState>, uri: Uri, method: Method) -> R
             }
         }
     }
-    // Fallback: "/" já é handled; qualquer outra rota → 404.
     if path == "/" {
-        return html_response(&st.html);
+        return missing_dist_response();
     }
     not_found()
 }
@@ -414,14 +404,22 @@ fn serve_file(path: &Path) -> Response {
     (StatusCode::OK, headers, bytes).into_response()
 }
 
-fn html_response(html: &str) -> Response {
+fn missing_dist_response() -> Response {
     let mut headers = HeaderMap::new();
     headers.insert(
         "content-type",
         HeaderValue::from_static("text/html; charset=utf-8"),
     );
     headers.insert("cache-control", HeaderValue::from_static("no-cache"));
-    (StatusCode::OK, headers, html.to_string()).into_response()
+    let body = r#"<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>project-mem</title>
+<style>body{font:14px system-ui;background:#0d1117;color:#e6edf3;padding:48px;max-width:720px;margin:0 auto}
+code{background:#161b22;padding:2px 6px;border-radius:4px}h1{color:#388bfd}</style></head>
+<body><h1>UI não construída</h1>
+<p>O front (<code>ui-next/dist/</code>) não foi encontrado. Execute o build:</p>
+<pre><code>cd ui-next && npm install && npm run build</code></pre>
+<p>Depois recarregue esta página.</p></body></html>"#;
+    (StatusCode::SERVICE_UNAVAILABLE, headers, body.to_string()).into_response()
 }
 
 fn not_found() -> Response {

@@ -13,7 +13,7 @@
 //! Shadow-turn + handoff (escrita) ficam em F4-05f (precisa spawn Claude).
 
 use axum::body::Bytes;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -47,7 +47,10 @@ async fn list_handler(State(st): State<AppState>) -> Response {
     json_response(StatusCode::OK, list)
 }
 
-async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
+async fn create_handler(
+    Extension(tc): Extension<crate::tenant::TenantContext>,
+    body: Bytes,
+) -> Response {
     let v: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
@@ -99,7 +102,7 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
     };
 
     let clock = HumansSystemClock;
-    match create_human(&st.mem_dir, &input, &clock) {
+    match create_human(&tc.mem_dir, &input, &clock) {
         Ok(h) => {
             let summary = human_summary(&h, clock.now_ms());
             json_response(StatusCode::CREATED, json!({ "human": summary }))

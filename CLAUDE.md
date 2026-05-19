@@ -50,6 +50,26 @@ scripts/
 - **Precisa de cor inline (border/bg)?** Usa `colorVar(color, shade)` de `@/ui`. Evita `var(--mantine-color-*)` solto.
 - **Trocar de lib UI no futuro**: cria `src/ui/adapter-<nome>/` espelhando a mesma API pública, troca a linha de re-export em `src/ui/index.ts`, ajusta `MantineProvider` em `main.tsx`. Panels não mudam.
 
+## Backend (api-http) — TenantContext
+
+- **Handlers acessam `mem_dir` via `Extension<TenantContext>`**, nunca `st.mem_dir` direto. Scaffold em `src/tenant.rs` + `src/auth.rs` (middleware). Hoje sempre devolve tenant `default` — comportamento idêntico ao pré-tenant.
+- **Padrão pra novo handler**:
+  ```rust
+  use axum::extract::Extension;
+  use crate::tenant::TenantContext;
+
+  async fn meu_handler(
+      Extension(tc): Extension<TenantContext>,
+      body: Bytes,
+  ) -> Response {
+      // usa tc.mem_dir em vez de st.mem_dir
+      // se também precisar de outras coisas do AppState (project_root, port, etc.):
+      //   State(st): State<AppState>,
+  }
+  ```
+- **Migração de handlers existentes**: feita organicamente — quando tocar um handler que ainda usa `st.mem_dir`, migra ele no mesmo commit. Exemplos já migrados: todo `scope_routes.rs`, `humans_routes::create_handler`.
+- **Por que isso importa**: quando multi-tenancy ativar de verdade, basta editar `resolve_tenant` em `auth.rs` (lookup token → tenant_id em DB). Zero refactor de handler. Sem esse cuidado, cada novo handler com `st.mem_dir` direto vira mais uma futura refatoração arriscada.
+
 ## Como testar manualmente
 
 ```bash

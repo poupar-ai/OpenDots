@@ -9,6 +9,7 @@
 
 pub mod agent_runner;
 pub mod agents_routes;
+pub mod auth;
 pub mod best_practices_routes;
 pub mod chat_routes;
 pub mod chat_send_routes;
@@ -20,6 +21,7 @@ pub mod misc_routes;
 pub mod pipelines_routes;
 pub mod scope_routes;
 pub mod seeds_routes;
+pub mod tenant;
 pub mod unlock_guard;
 pub mod vault_routes;
 
@@ -31,6 +33,7 @@ use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
 use serde::Deserialize;
@@ -235,6 +238,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(handoff_routes::handoff_router())
         .merge(data_route::data_router())
         .fallback(serve_static)
+        .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware))
         .with_state(state)
 }
 

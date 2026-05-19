@@ -238,6 +238,24 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
         config.insert("context".into(), Value::String(ctx.to_string()));
     }
 
+    // Identidade Ed25519: pública vai pro agents.json (campo `pubkey`),
+    // privada vai pro vault como secret `agent.<name>.privkey`. Falha
+    // silenciosa: se o vault não estiver inicializado/destrancado, o
+    // agente é criado mesmo assim — só não terá assinatura de handoff
+    // disponível (cai pro modo legado/untrusted). Mensagem orientativa
+    // fica pra UI mostrar baseada em /api/vault/status.
+    let (priv_bytes, pub_bytes) = crate::agent_keys::generate_keypair();
+    config.insert(
+        "pubkey".into(),
+        Value::String(crate::agent_keys::bytes_to_hex(&pub_bytes)),
+    );
+    let secret_name = format!("agent.{name}.privkey");
+    let _ = st.vault.set_secret(
+        &st.mem_dir,
+        &secret_name,
+        &crate::agent_keys::bytes_to_hex(&priv_bytes),
+    );
+
     match add_agent(&st.mem_dir, &name, &Value::Object(config)) {
         Ok(created) => json_response(
             StatusCode::OK,

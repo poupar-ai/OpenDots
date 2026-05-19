@@ -98,6 +98,7 @@ Quando decidir acionar um agente que **está** na sua `can_talk_to`, use `Bash` 
 
 ```bash
 curl -s -X POST http://localhost:37778/api/agents/handoff \\
+  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \\
   -H 'Content-Type: application/json' \\
   -d '{"from":"email_sender","to":"<target>","message":"<mensagem curta e direta>"}'
 ```

@@ -165,6 +165,12 @@ async fn run_headless_turn(
         .env("CLAUDE_PROJECT_MEM_SUBAGENT", "1")
         .env("CLAUDE_PROJECT_MEM_AGENT", agent)
         .kill_on_drop(true);
+    // Mesmo flow do chat_send_handler — token Ed25519 quando vault
+    // permite. Auto-handoff entre agentes precisa autenticar igual
+    // ao chat originado pelo humano.
+    if let Some(token) = crate::agent_keys::mint_token_for(agent, vault, mem_dir) {
+        cmd.env("PROJECT_MEM_AGENT_TOKEN", token);
+    }
     for (k, v) in build_agent_env(mem_dir, vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }

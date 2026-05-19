@@ -881,6 +881,13 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
         .env("CLAUDE_PROJECT_MEM_SUBAGENT", "1")
         .env("CLAUDE_PROJECT_MEM_AGENT", agent)
         .kill_on_drop(true);
+    // Token JWT por spawn (Fase C — identidade Ed25519). Se o vault
+    // tiver a privada do agente acessível, agente usa em `Authorization:
+    // Bearer` no handoff. Sem token: handoff cai pro modo legado
+    // (untrusted, mas logado) pra não quebrar agentes pré-keypair.
+    if let Some(token) = crate::agent_keys::mint_token_for(agent, &st.vault, &st.mem_dir) {
+        cmd.env("PROJECT_MEM_AGENT_TOKEN", token);
+    }
     for (k, v) in build_agent_env(&st.mem_dir, &st.vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }

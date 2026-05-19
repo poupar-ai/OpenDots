@@ -7,6 +7,7 @@
 //! **F4-05c (atual)**: destructive + seeds + best-practices + pipelines +
 //! architect + skills + ides.
 
+pub mod agent_keys;
 pub mod agent_runner;
 pub mod agents_routes;
 pub mod auth;

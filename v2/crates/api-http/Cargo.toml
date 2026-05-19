@@ -46,6 +46,12 @@ tokio-stream = "0.1"
 futures-util = "0.3"
 if-addrs = "0.13"
 base64 = "0.22"
+thiserror = { workspace = true }
+# Identidade de agentes (Fase C — keypair Ed25519 + JWT por spawn).
+# - ed25519-dalek 2.x faz Ed25519 sign/verify com chaves de 32 bytes.
+# - rand_core/OsRng pra geração de chaves (entropy do SO).
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -77,9 +77,12 @@ Quando decidir acionar um agente que **está** na sua `can_talk_to`, use `Bash` 
 
 ```bash
 curl -s -X POST http://localhost:37778/api/agents/handoff \\
+  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \\
   -H 'Content-Type: application/json' \\
   -d '{"from":"oracle","to":"<target>","message":"<mensagem curta e direta>"}'
 ```
+
+- O token JWT no `Authorization` está no seu env (gerado por spawn, dura 10 min). Sem ele, o servidor aceita mas marca como **untrusted** no log.
 
 - `to` precisa estar na sua `can_talk_to`. Se não estiver, o servidor responde 403 e registra violação.
 - Se der 200, reporte em UMA linha: *"Acionei <target>: <resumo-curto>"*. Sem simular resposta do outro lado.

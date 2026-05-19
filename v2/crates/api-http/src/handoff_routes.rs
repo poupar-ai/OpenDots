@@ -19,7 +19,7 @@ use std::sync::LazyLock;
 
 use axum::body::Bytes;
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use axum::routing::post;
 use axum::Router;
@@ -258,19 +258,60 @@ fn try_auto_escalate_blocker(
 
 // ── Handler principal ───────────────────────────────────────────────────────
 
-async fn handoff_handler(State(st): State<AppState>, body: Bytes) -> Response {
+async fn handoff_handler(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     let v: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
     };
 
-    let from = v.get("from").and_then(Value::as_str).unwrap_or("");
+    let body_from = v.get("from").and_then(Value::as_str).unwrap_or("");
     let to = v.get("to").and_then(Value::as_str).unwrap_or("");
     let message_opt = v.get("message").and_then(Value::as_str);
-    if from.is_empty() || to.is_empty() || message_opt.is_none() {
+    if body_from.is_empty() || to.is_empty() || message_opt.is_none() {
         return json_error(StatusCode::BAD_REQUEST, "need {from, to, message}");
     }
     let message = message_opt.unwrap();
+
+    // Fase C — verificação de identidade via JWT EdDSA.
+    // Bearer presente: valida com pubkey do agent declarado, sobrescreve
+    // `from` com o do claim. Se body.from != claim.agent → 403 (tentou
+    // assinar como X mas declarou Y no body).
+    // Bearer ausente: aceita com `from` do body (compat retro pra agentes
+    // sem keypair), mas marca como untrusted no log.
+    let bearer = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    let mem_dir_for_lookup = st.mem_dir.clone();
+    let (from, untrusted) = match bearer {
+        Some(token) => {
+            match crate::agent_keys::verify_jwt(token, |name| {
+                crate::agent_keys::lookup_pubkey(&mem_dir_for_lookup, name)
+            }) {
+                Ok(claims) => {
+                    if !body_from.is_empty() && body_from != claims.agent {
+                        return json_error(
+                            StatusCode::FORBIDDEN,
+                            "body.from não bate com agent do token JWT",
+                        );
+                    }
+                    (claims.agent, false)
+                }
+                Err(e) => {
+                    return json_error(
+                        StatusCode::UNAUTHORIZED,
+                        &format!("JWT inválido: {e}"),
+                    );
+                }
+            }
+        }
+        None => (body_from.to_string(), true),
+    };
+    let from = from.as_str();
 
     // intent validation: if body.intent present and not in set → 400 (order
     // matches node: intent validated BEFORE computing default).
@@ -502,6 +543,10 @@ async fn handoff_handler(State(st): State<AppState>, body: Bytes) -> Response {
             .clone()
             .map(Value::String)
             .unwrap_or(Value::Null),
+    );
+    log_out.insert(
+        "auth".into(),
+        Value::String(if untrusted { "untrusted".into() } else { "signed".into() }),
     );
     append_agent_log(&st.mem_dir, from, &Value::Object(log_out));
 

@@ -51,6 +51,7 @@ pub fn agents_router() -> Router<AppState> {
         .route("/api/agents/:name/context", put(context_handler))
         .route("/api/agents/:name/mcps", put(mcps_handler))
         .route("/api/agents/:name/status", get(status_handler))
+        .route("/api/agents/:name/rotate_keypair", post(rotate_keypair_handler))
         .route("/api/mcps", get(mcps_list_handler))
         .route("/api/docs/:doc", put(doc_save_handler))
 }
@@ -67,6 +68,75 @@ async fn status_handler(
     json_response(
         axum::http::StatusCode::OK,
         json!({ "agent": name, "processing": processing }),
+    )
+}
+
+/// `POST /api/agents/:name/rotate_keypair` — gera novo par Ed25519,
+/// grava priv no vault (sobrescreve secret existente), atualiza pubkey
+/// no `agents.json`. Casos de uso:
+///   1. Recuperar agentes legacy criados ANTES do fix de privkey_secret_name
+///      (bug histórico: privkey ficou perdida porque nome do secret
+///      falhava regex do vault).
+///   2. Rotação periódica de chave (defesa em profundidade).
+///
+/// Requer vault unlocked. Retorna 412 se vault locked, 404 se agente
+/// não existe, 500 se grava falha.
+async fn rotate_keypair_handler(
+    State(st): State<AppState>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Response {
+    let Some(mut manifest) = domain_agents::load_manifest(&st.mem_dir) else {
+        return json_error(StatusCode::NOT_FOUND, "agents.json não encontrado");
+    };
+    let agents_obj = match manifest
+        .get_mut("agents")
+        .and_then(Value::as_object_mut)
+    {
+        Some(o) => o,
+        None => return json_error(StatusCode::NOT_FOUND, "manifest sem chave 'agents'"),
+    };
+    if !agents_obj.contains_key(&name) {
+        return json_error(StatusCode::NOT_FOUND, &format!("agente '{name}' não existe"));
+    }
+
+    // Gera novo par + grava priv no vault PRIMEIRO. Se falhar, abortamos
+    // sem mexer no manifest — agente continua com a pubkey antiga
+    // (consistência: nunca ficar com pubkey nova + priv antiga, que
+    // quebraria todos os JWTs subsequentes).
+    let (priv_bytes, pub_bytes) = crate::agent_keys::generate_keypair();
+    let secret_name = crate::agent_keys::privkey_secret_name(&name);
+    if let Err(e) = st.vault.set_secret(
+        &st.mem_dir,
+        &secret_name,
+        &crate::agent_keys::bytes_to_hex(&priv_bytes),
+    ) {
+        return json_error(
+            StatusCode::PRECONDITION_FAILED,
+            &format!(
+                "falha ao gravar privkey no vault (vault destrancado? init?): {e}"
+            ),
+        );
+    }
+
+    // Atualiza pubkey no manifest + salva.
+    let agent_cfg = agents_obj.get_mut(&name).and_then(Value::as_object_mut).unwrap();
+    let new_pubkey_hex = crate::agent_keys::bytes_to_hex(&pub_bytes);
+    agent_cfg.insert("pubkey".into(), Value::String(new_pubkey_hex.clone()));
+    if let Err(e) = domain_agents::save_manifest(&st.mem_dir, &manifest) {
+        return json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("priv gravada mas falha ao salvar manifest: {e}"),
+        );
+    }
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "ok": true,
+            "agent": name,
+            "pubkey": new_pubkey_hex,
+            "note": "JWTs antigos do agente ficam inválidos imediatamente. Próximo spawn vai gerar token novo.",
+        }),
     )
 }
 
@@ -250,11 +320,19 @@ async fn create_handler(State(st): State<AppState>, body: Bytes) -> Response {
         Value::String(crate::agent_keys::bytes_to_hex(&pub_bytes)),
     );
     let secret_name = crate::agent_keys::privkey_secret_name(&name);
-    let _ = st.vault.set_secret(
+    if let Err(e) = st.vault.set_secret(
         &st.mem_dir,
         &secret_name,
         &crate::agent_keys::bytes_to_hex(&priv_bytes),
-    );
+    ) {
+        // Não bloqueia criação (agente fica em modo "untrusted" — sem JWT),
+        // mas avisa pra debug futuro. Causas comuns: vault locked, vault
+        // não inicializado, regex de validação rejeitando nome (vide
+        // bug histórico que `privkey_secret_name` resolve).
+        eprintln!(
+            "warn: set_secret falhou pra {secret_name}: {e} — agente {name} sem privkey, handoff vai retornar 401"
+        );
+    }
 
     match add_agent(&st.mem_dir, &name, &Value::Object(config)) {
         Ok(created) => json_response(

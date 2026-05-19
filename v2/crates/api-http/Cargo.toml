@@ -34,6 +34,7 @@ domain-pipelines = { path = "../domain-pipelines" }
 domain-router = { path = "../domain-router" }
 domain-seed = { path = "../domain-seed" }
 domain-skills-install = { path = "../domain-skills-install" }
+domain-training-export = { path = "../domain-training-export" }
 adapter-vault-file = { path = "../adapter-vault-file" }
 axum = { workspace = true }
 tower = { workspace = true }

@@ -31,6 +31,7 @@ members = [
     "crates/domain-session",
     "crates/domain-sigilo",
     "crates/domain-skills-install",
+    "crates/domain-training-export",
     "crates/domain-vault",
 ]
 

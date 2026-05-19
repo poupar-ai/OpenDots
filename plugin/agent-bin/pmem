@@ -85,6 +85,13 @@ case "$cmd" in
     curl -sS "${BASE}/api/agents/subagent/${id}" \
       -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}"
     ;;
+  training-export)
+    # training-export <agent> [format=anthropic-sft|openai-sft|messages]
+    [[ $# -ge 1 ]] || die "uso: pmem training-export <agent> [format]"
+    agt="$1"
+    fmt="${2:-anthropic-sft}"
+    curl -sS "${BASE}/api/training-export?agent=${agt}&format=${fmt}"
+    ;;
   cron)
     sub="${1:-}"; shift || true
     case "$sub" in
@@ -190,6 +197,7 @@ uso:
   pmem subagent <prompt> [tools]     Spawna subagent paralelo
   pmem poll <subagent_id>            Status/resultado de subagent
   pmem cron <schedule|list|rm>       Agendamento recorrente (rode 'pmem cron' pra subcomandos)
+  pmem training-export <agent> [fmt] Exporta chat history como dataset SFT (fine-tune)
 
 Token de auth e nome do agente vêm do env (injetado no spawn).
 Não use \$VAR diretamente — o sandbox do Claude Code bloqueia.

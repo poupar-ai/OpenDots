@@ -649,16 +649,26 @@ pub fn check_agent(
     }
 }
 
-/// `<mem_dir>/observations.jsonl` ← append line. Replica
-/// `appendObservation` em `firefighter.cjs:100-103`.
+/// `<mem_dir>/observations.jsonl` ← append line. Migrado pra
+/// core-storage::JsonlRepository: rotação automática a 50k linhas/10MB,
+/// reads transparentes via concat de partes. Hot path em observação
+/// de PostToolUse — pode receber milhares de linhas/min.
 pub fn append_observation(mem_dir: &Path, obs: &Value) -> std::io::Result<()> {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    let p = mem_dir.join("observations.jsonl");
-    let mut f = OpenOptions::new().create(true).append(true).open(p)?;
-    let line = serde_json::to_string(obs).unwrap_or_default();
-    writeln!(f, "{line}")?;
-    Ok(())
+    let r = core_storage::JsonlRepository::<Value>::open_default(
+        mem_dir.join("observations.jsonl"),
+    )
+    .map_err(|e| match e {
+        core_storage::StorageError::Io(io) => io,
+        core_storage::StorageError::Serialize(_) => {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "serialize")
+        }
+    })?;
+    r.append(obs).map_err(|e| match e {
+        core_storage::StorageError::Io(io) => io,
+        core_storage::StorageError::Serialize(_) => {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "serialize")
+        }
+    })
 }
 
 #[cfg(test)]

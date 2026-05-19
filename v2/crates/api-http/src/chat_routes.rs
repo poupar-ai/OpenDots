@@ -9,7 +9,6 @@
 
 use std::convert::Infallible;
 use std::fs;
-use std::io::Write;
 use std::path::Path;
 use std::time::Duration;
 
@@ -41,29 +40,25 @@ pub(crate) fn chat_dir(mem_dir: &Path) -> std::path::PathBuf {
     mem_dir.join("agent_chats")
 }
 
-/// Lê `agent_chats/<agent>.jsonl`, filtra linhas vazias e JSON inválido.
-/// Paridade com `readChat` em `server.cjs:1105-1111`.
+/// Lê `agent_chats/<agent>.jsonl` (+ partes rotacionadas), filtra
+/// linhas vazias e JSON inválido. Concat preserva ordem cronológica.
+/// Migrado pra core-storage::JsonlRepository — linhas malformadas
+/// agora logam warning em vez de descartar silencioso.
 pub(crate) fn read_chat(mem_dir: &Path, agent: &str) -> Vec<Value> {
     let p = chat_log_path(mem_dir, agent);
-    let Ok(raw) = fs::read_to_string(&p) else {
-        return Vec::new();
-    };
-    raw.split('\n')
-        .filter(|l| !l.is_empty())
-        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .collect()
+    match core_storage::JsonlRepository::<Value>::open_default(p) {
+        Ok(r) => r.read_all(),
+        Err(_) => Vec::new(),
+    }
 }
 
-/// Append JSONL entry + dispara `graph::on_agent_chat_row`.
-/// Paridade com `appendChat` em `server.cjs:370-374`.
+/// Append entry no JSONL via core_storage (rotação automática a 50k
+/// linhas / 10MB) + dispara `graph::on_agent_chat_row`. Throughput
+/// alvo: thousands of lines/min — handler hot path.
 pub(crate) fn append_chat(mem_dir: &Path, agent: &str, entry: &Value) {
-    let dir = chat_dir(mem_dir);
-    let _ = fs::create_dir_all(&dir);
-    if let Ok(line) = serde_json::to_string(entry) {
-        let path = chat_log_path(mem_dir, agent);
-        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-            let _ = writeln!(f, "{line}");
-        }
+    let path = chat_log_path(mem_dir, agent);
+    if let Ok(r) = core_storage::JsonlRepository::<Value>::open_default(path) {
+        let _ = r.append(entry);
     }
     domain_graph::on_agent_chat_row(mem_dir, agent, entry, &GraphSystemClock);
 }

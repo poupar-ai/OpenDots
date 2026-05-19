@@ -21,6 +21,7 @@ import { NetworkPanel } from '@/panels/NetworkPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
+import { VaultBootstrap } from '@/components/VaultBootstrap';
 
 function humanInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -104,6 +105,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+      <VaultBootstrap onOpenVault={() => setVaultOpen(true)} />
       {showOnboarding && (
         <HumanOnboarding
           onDone={(id) => {

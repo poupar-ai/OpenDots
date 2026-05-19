@@ -89,6 +89,26 @@ async fn main() -> ExitCode {
         }
     };
 
+    // Loop de reconciliação: a cada 60s, varre `running` da queue e
+    // detecta turns que passaram do TTL (default 5 min). Zumbi volta
+    // pra `pending` com retries+1; se passou de max_retries, vai pro
+    // `dead.jsonl`. Rodando em background, sobrevive ao serve loop.
+    let queue_for_reconcile = std::sync::Arc::clone(&state.auto_queue);
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            let res = queue_for_reconcile.reconcile();
+            if res.recycled > 0 || res.dead > 0 {
+                eprintln!(
+                    "reconcile: {} zumbi(s) reciclado(s), {} dead-letter",
+                    res.recycled, res.dead
+                );
+            }
+        }
+    });
+
     let app = build_router(state);
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,

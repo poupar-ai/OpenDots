@@ -24,12 +24,16 @@
 //! - `_running`/`_pending` expostos no .cjs pra introspecção não têm
 //!   equivalente — use `stats()` / `is_running()` / `pending_size()`.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
+use std::fs;
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 // ─── Tipos públicos ──────────────────────────────────────────────────
 
@@ -73,6 +77,25 @@ pub struct DrainStartEvent {
 #[derive(Debug, Clone)]
 pub struct DrainEndEvent {
     pub to_agent: String,
+}
+
+/// Item movido pra dead-letter — falhou (ou ficou zumbi) `max_retries`
+/// vezes. Caller pode logar/alertar via hook.
+#[derive(Debug, Clone)]
+pub struct DeadLetterEvent {
+    pub to_agent: String,
+    pub from_agent: String,
+    pub trace_id: Option<String>,
+    pub retries: u8,
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ReconcileResult {
+    /// Quantos entries voltaram pra `pending` (retries+1).
+    pub recycled: usize,
+    /// Quantos entries foram pro `dead.jsonl`.
+    pub dead: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,11 +188,23 @@ pub struct AgentQueueConfig {
     pub on_drain_start: Option<Hook<DrainStartEvent>>,
     pub on_drain_end: Option<Hook<DrainEndEvent>>,
     pub clock: Arc<dyn Clock + Send + Sync + 'static>,
+    /// Pasta onde persistir `state.json` + `dead.jsonl`. None = só
+    /// in-memory (comportamento legado — pending some em restart).
+    pub state_dir: Option<PathBuf>,
+    /// Tempo máximo que um turn pode ficar em `running` antes de ser
+    /// considerado zumbi (processo morreu, etc.). reconcile() devolve
+    /// zumbis pra pending com retries+1.
+    pub turn_ttl: Duration,
+    /// Após N tentativas, entry vai pro `dead.jsonl` em vez de voltar
+    /// pra pending.
+    pub max_retries: u8,
+    /// Hook chamado quando um item é movido pra dead-letter.
+    pub on_dead_letter: Option<Hook<DeadLetterEvent>>,
 }
 
 impl AgentQueueConfig {
     /// Cria config com defaults do `.cjs` (rate_max=40, 60s, sem hooks,
-    /// SystemClock).
+    /// SystemClock). Persistência off (state_dir=None).
     pub fn new(runner: Runner) -> Self {
         Self {
             runner,
@@ -180,23 +215,213 @@ impl AgentQueueConfig {
             on_drain_start: None,
             on_drain_end: None,
             clock: Arc::new(SystemClock::new()),
+            state_dir: None,
+            turn_ttl: Duration::from_secs(300), // 5 min
+            max_retries: 3,
+            on_dead_letter: None,
         }
     }
 }
 
 // ─── Estado interno ──────────────────────────────────────────────────
 
+#[derive(Clone)]
 struct Entry {
     from_agent: String,
     message: String,
     trace_id: Option<String>,
+    /// Unix epoch ms — quando o item foi enfileirado (ou re-enfileirado
+    /// pela reconciliação).
+    enqueued_at_ms: u64,
+    /// Quantas vezes esse item já tentou rodar e falhou (zumbi). 0 na
+    /// primeira tentativa.
+    retries: u8,
+}
+
+#[derive(Clone)]
+struct RunningMeta {
+    from_agent: String,
+    trace_id: Option<String>,
+    /// Unix epoch ms — quando o turn começou. reconcile() compara
+    /// `now() - started_at_ms` com `turn_ttl`.
+    started_at_ms: u64,
+    /// Carregado do entry no momento do acquire — se o turn for
+    /// declarado zumbi, esse é o `retries` atual (será incrementado).
+    retries: u8,
 }
 
 #[derive(Default)]
 struct State {
-    running: HashSet<String>,
+    running: HashMap<String, RunningMeta>,
     pending: HashMap<String, VecDeque<Entry>>,
     rate_stamps: VecDeque<u64>,
+}
+
+// ─── Persistência (state_dir setado) ─────────────────────────────────
+
+#[derive(Serialize, Deserialize)]
+struct PersistedEntry {
+    from_agent: String,
+    message: String,
+    trace_id: Option<String>,
+    enqueued_at_ms: u64,
+    retries: u8,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedRunning {
+    from_agent: String,
+    trace_id: Option<String>,
+    started_at_ms: u64,
+    retries: u8,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct PersistedState {
+    pending: HashMap<String, Vec<PersistedEntry>>,
+    running: HashMap<String, PersistedRunning>,
+}
+
+fn unix_now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn state_file(state_dir: &Path) -> PathBuf {
+    state_dir.join("state.json")
+}
+
+fn dead_file(state_dir: &Path) -> PathBuf {
+    state_dir.join("dead.jsonl")
+}
+
+/// Snapshot do `State` → `state.json` (atomic write via tmp+rename).
+/// Falhas silenciadas (logs ficariam ruidosos demais com cada enqueue);
+/// se disco quebra, próximo restart cai no estado vazio — comportamento
+/// pré-persistência. Não é crítico pra correção.
+fn persist_state(state_dir: &Path, st: &State) {
+    let p = PersistedState {
+        pending: st
+            .pending
+            .iter()
+            .map(|(k, q)| {
+                (
+                    k.clone(),
+                    q.iter()
+                        .map(|e| PersistedEntry {
+                            from_agent: e.from_agent.clone(),
+                            message: e.message.clone(),
+                            trace_id: e.trace_id.clone(),
+                            enqueued_at_ms: e.enqueued_at_ms,
+                            retries: e.retries,
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+        running: st
+            .running
+            .iter()
+            .map(|(k, m)| {
+                (
+                    k.clone(),
+                    PersistedRunning {
+                        from_agent: m.from_agent.clone(),
+                        trace_id: m.trace_id.clone(),
+                        started_at_ms: m.started_at_ms,
+                        retries: m.retries,
+                    },
+                )
+            })
+            .collect(),
+    };
+    let Ok(json) = serde_json::to_string_pretty(&p) else {
+        return;
+    };
+    let _ = fs::create_dir_all(state_dir);
+    let tmp = state_dir.join("state.json.tmp");
+    if fs::write(&tmp, json).is_ok() {
+        let _ = fs::rename(&tmp, state_file(state_dir));
+    }
+}
+
+/// Lê `state.json` se existir. Tudo que falhar (file ausente, JSON
+/// corrupto, schema antigo) cai no `State::default()` — o pior que
+/// acontece é perder a queue (que é o estado pré-persistência).
+fn restore_state(state_dir: &Path) -> State {
+    let content = match fs::read_to_string(state_file(state_dir)) {
+        Ok(c) => c,
+        Err(_) => return State::default(),
+    };
+    let parsed: PersistedState = match serde_json::from_str(&content) {
+        Ok(p) => p,
+        Err(_) => return State::default(),
+    };
+    State {
+        pending: parsed
+            .pending
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    v.into_iter()
+                        .map(|e| Entry {
+                            from_agent: e.from_agent,
+                            message: e.message,
+                            trace_id: e.trace_id,
+                            enqueued_at_ms: e.enqueued_at_ms,
+                            retries: e.retries,
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+        running: parsed
+            .running
+            .into_iter()
+            .map(|(k, m)| {
+                (
+                    k,
+                    RunningMeta {
+                        from_agent: m.from_agent,
+                        trace_id: m.trace_id,
+                        started_at_ms: m.started_at_ms,
+                        retries: m.retries,
+                    },
+                )
+            })
+            .collect(),
+        rate_stamps: VecDeque::new(),
+    }
+}
+
+fn append_dead_letter(
+    state_dir: &Path,
+    to_agent: &str,
+    entry: &Entry,
+    reason: &str,
+) {
+    let line = serde_json::json!({
+        "ts_ms": unix_now_ms(),
+        "to_agent": to_agent,
+        "from_agent": entry.from_agent,
+        "trace_id": entry.trace_id,
+        "message": entry.message,
+        "retries": entry.retries,
+        "reason": reason,
+    })
+    .to_string();
+    let _ = fs::create_dir_all(state_dir);
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dead_file(state_dir))
+    {
+        let _ = writeln!(f, "{line}");
+    }
 }
 
 // ─── Fila ────────────────────────────────────────────────────────────
@@ -208,13 +433,30 @@ pub struct AgentQueue {
 
 impl AgentQueue {
     /// Cria a fila. `Arc<Self>` é requerido porque `enqueue` spawna
-    /// tasks que precisam capturar `self`.
+    /// tasks que precisam capturar `self`. Se `cfg.state_dir` é Some,
+    /// restaura state.json (pending + running). Running restaurado
+    /// significa "alguém disse 'tô rodando' mas eu não estou de fato"
+    /// — reconcile() vai detectar (TTL) e ressuscitar.
     pub fn new(cfg: AgentQueueConfig) -> Arc<Self> {
         assert!(cfg.rate_max > 0, "rate_max deve ser > 0");
+        let initial_state = match &cfg.state_dir {
+            Some(dir) => restore_state(dir),
+            None => State::default(),
+        };
         Arc::new(Self {
             cfg,
-            state: Mutex::new(State::default()),
+            state: Mutex::new(initial_state),
         })
+    }
+
+    /// Persiste o state pro disco se `state_dir` está configurado.
+    /// Chamado depois de cada mutação relevante. Assume que o caller
+    /// soltou o lock — pega ele aqui.
+    fn maybe_persist(&self) {
+        if let Some(dir) = &self.cfg.state_dir {
+            let st = self.state.lock().unwrap();
+            persist_state(dir, &st);
+        }
     }
 
     /// Enfileira um turn. Retorna `false` se args vazios ou rate-limit
@@ -251,9 +493,12 @@ impl AgentQueue {
                 from_agent: from_agent.to_string(),
                 message: message.to_string(),
                 trace_id: trace_id.map(String::from),
+                enqueued_at_ms: unix_now_ms(),
+                retries: 0,
             });
             q.len()
         };
+        self.maybe_persist();
 
         if let Some(h) = &self.cfg.on_enqueue {
             (h)(EnqueueEvent {
@@ -345,37 +590,58 @@ impl AgentQueue {
     // ─── helpers síncronos (isolam MutexGuard do frame async) ────────
 
     fn try_acquire_slot(&self, to_agent: &str) -> bool {
-        let mut st = self.state.lock().unwrap();
-        if st.running.contains(to_agent) {
-            return false;
+        let acquired = {
+            let mut st = self.state.lock().unwrap();
+            if st.running.contains_key(to_agent) {
+                return false;
+            }
+            // Peek no front da pending pra puxar retries+from pro meta.
+            let (from_agent, trace_id, retries) = match st.pending.get(to_agent).and_then(|q| q.front()) {
+                Some(e) => (e.from_agent.clone(), e.trace_id.clone(), e.retries),
+                None => return false,
+            };
+            st.running.insert(
+                to_agent.to_string(),
+                RunningMeta {
+                    from_agent,
+                    trace_id,
+                    started_at_ms: unix_now_ms(),
+                    retries,
+                },
+            );
+            true
+        };
+        if acquired {
+            self.maybe_persist();
         }
-        let empty = st
-            .pending
-            .get(to_agent)
-            .map(|q| q.is_empty())
-            .unwrap_or(true);
-        if empty {
-            return false;
-        }
-        st.running.insert(to_agent.to_string());
-        true
+        acquired
     }
 
     fn take_batch(&self, to_agent: &str) -> Vec<Entry> {
-        let mut st = self.state.lock().unwrap();
-        st.pending
-            .get_mut(to_agent)
-            .map(|q| q.drain(..).collect())
-            .unwrap_or_default()
+        let batch = {
+            let mut st = self.state.lock().unwrap();
+            st.pending
+                .get_mut(to_agent)
+                .map(|q| q.drain(..).collect::<Vec<_>>())
+                .unwrap_or_default()
+        };
+        if !batch.is_empty() {
+            self.maybe_persist();
+        }
+        batch
     }
 
     fn release_slot(&self, to_agent: &str) -> bool {
-        let mut st = self.state.lock().unwrap();
-        st.running.remove(to_agent);
-        st.pending
-            .get(to_agent)
-            .map(|q| !q.is_empty())
-            .unwrap_or(false)
+        let has_more = {
+            let mut st = self.state.lock().unwrap();
+            st.running.remove(to_agent);
+            st.pending
+                .get(to_agent)
+                .map(|q| !q.is_empty())
+                .unwrap_or(false)
+        };
+        self.maybe_persist();
+        has_more
     }
 
     /// Retorna true se o agente está atualmente processando um turn
@@ -387,7 +653,7 @@ impl AgentQueue {
             return false;
         }
         let st = self.state.lock().unwrap();
-        st.running.contains(to_agent)
+        st.running.contains_key(to_agent)
     }
 
     /// Reserva um agente bloqueando o drain automático. Usado pelo chat
@@ -397,8 +663,19 @@ impl AgentQueue {
         if to_agent.is_empty() {
             return;
         }
-        let mut st = self.state.lock().unwrap();
-        st.running.insert(to_agent.to_string());
+        {
+            let mut st = self.state.lock().unwrap();
+            st.running.insert(
+                to_agent.to_string(),
+                RunningMeta {
+                    from_agent: "human".to_string(),
+                    trace_id: None,
+                    started_at_ms: unix_now_ms(),
+                    retries: 0,
+                },
+            );
+        }
+        self.maybe_persist();
     }
 
     /// Libera e re-dispara drain se houver pending. No-op se `to_agent`
@@ -415,6 +692,7 @@ impl AgentQueue {
                 .map(|q| !q.is_empty())
                 .unwrap_or(false)
         };
+        self.maybe_persist();
         if has_pending {
             let this = Arc::clone(self);
             let to = to_agent.to_string();
@@ -426,7 +704,7 @@ impl AgentQueue {
 
     pub fn is_running(&self, to_agent: &str) -> bool {
         let st = self.state.lock().unwrap();
-        st.running.contains(to_agent)
+        st.running.contains_key(to_agent)
     }
 
     pub fn pending_size(&self, to_agent: &str) -> usize {
@@ -436,7 +714,7 @@ impl AgentQueue {
 
     pub fn stats(&self) -> QueueStats {
         let st = self.state.lock().unwrap();
-        let mut running: Vec<String> = st.running.iter().cloned().collect();
+        let mut running: Vec<String> = st.running.keys().cloned().collect();
         running.sort();
         let pending: HashMap<String, usize> = st
             .pending
@@ -451,6 +729,83 @@ impl AgentQueue {
             rate_max: self.cfg.rate_max,
             rate_window_ms: self.cfg.rate_window.as_millis() as u64,
         }
+    }
+
+    /// Detecta turns "zumbis" — running há mais de `turn_ttl` (processo
+    /// caiu, server reiniciou, etc.). Cada zumbi:
+    ///   - se `retries + 1 < max_retries`: volta pro front de pending
+    ///     com `retries + 1`. Vai re-rodar na próxima drain.
+    ///   - se `retries + 1 >= max_retries`: vai pro `<state_dir>/dead.jsonl`
+    ///     (se persistência ligada) e o hook on_dead_letter é chamado.
+    ///
+    /// Retorna `ReconcileResult` com contagens. Para chamar
+    /// periodicamente, use spawn_reconciliation_loop.
+    pub fn reconcile(&self) -> ReconcileResult {
+        let now = unix_now_ms();
+        let ttl_ms = self.cfg.turn_ttl.as_millis() as u64;
+        let max_retries = self.cfg.max_retries;
+        let state_dir = self.cfg.state_dir.clone();
+
+        let mut result = ReconcileResult::default();
+        let mut dead_events: Vec<DeadLetterEvent> = Vec::new();
+        let mut to_dead_letter: Vec<(String, Entry)> = Vec::new();
+
+        {
+            let mut st = self.state.lock().unwrap();
+            let zombies: Vec<String> = st
+                .running
+                .iter()
+                .filter(|(_, m)| now.saturating_sub(m.started_at_ms) > ttl_ms)
+                .map(|(k, _)| k.clone())
+                .collect();
+            for to_agent in zombies {
+                let Some(meta) = st.running.remove(&to_agent) else {
+                    continue;
+                };
+                let next_retries = meta.retries.saturating_add(1);
+                let entry = Entry {
+                    from_agent: meta.from_agent.clone(),
+                    message: format!("[zumbi reciclado pela reconciliação] turn anterior ficou >{}s sem responder", ttl_ms / 1000),
+                    trace_id: meta.trace_id.clone(),
+                    enqueued_at_ms: now,
+                    retries: next_retries,
+                };
+                if next_retries >= max_retries {
+                    to_dead_letter.push((to_agent.clone(), entry));
+                    dead_events.push(DeadLetterEvent {
+                        to_agent,
+                        from_agent: meta.from_agent,
+                        trace_id: meta.trace_id,
+                        retries: next_retries,
+                        reason: "max_retries_zombie",
+                    });
+                    result.dead += 1;
+                } else {
+                    // Volta no FRONT pra ter prioridade (já esperou
+                    // demais). push_front pra VecDeque.
+                    let q = st.pending.entry(to_agent).or_default();
+                    q.push_front(entry);
+                    result.recycled += 1;
+                }
+            }
+        }
+
+        if let Some(dir) = state_dir.as_deref() {
+            for (to_agent, entry) in &to_dead_letter {
+                append_dead_letter(dir, to_agent, entry, "max_retries_zombie");
+            }
+        }
+        if !to_dead_letter.is_empty() || result.recycled > 0 {
+            self.maybe_persist();
+        }
+
+        if let Some(h) = &self.cfg.on_dead_letter {
+            for ev in dead_events {
+                (h)(ev);
+            }
+        }
+
+        result
     }
 
     // ─── internos ────────────────────────────────────────────────────

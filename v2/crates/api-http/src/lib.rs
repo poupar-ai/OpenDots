@@ -192,7 +192,13 @@ impl AppState {
             port,
             Arc::clone(&vault),
         );
-        let auto_queue = AgentQueue::new(AgentQueueConfig::new(runner));
+        // Queue persistente: state_dir = <mem_dir>/queue. Sobrevive
+        // restart (pending+running são restaurados; reconcile() depois
+        // detecta turns "in-flight" que não saíram porque o processo
+        // morreu e devolve pra pending).
+        let mut queue_cfg = AgentQueueConfig::new(runner);
+        queue_cfg.state_dir = Some(mem_dir.join("queue"));
+        let auto_queue = AgentQueue::new(queue_cfg);
         Self {
             mem_dir,
             project_root,

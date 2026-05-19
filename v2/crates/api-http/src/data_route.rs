@@ -7,14 +7,23 @@
 //! Esse endpoint existe pra fechar o gap durante a migração Node → Rust:
 //! a UI moderna ainda pede o agregado, em vez de N endpoints granulares.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{extract::State, http::StatusCode, response::Response, routing::get, Router};
-use core_paths::jsonl::read_jsonl;
+use core_paths::{jsonl::read_jsonl, MEM_DIR_NAME};
 use domain_agents::{count_invocations, load_manifest, load_mini_context};
 use serde_json::{json, Map, Value};
 
 use crate::{json_response, AppState};
+
+/// Caminho do mem dir project-scoped — alinhado com hooks (session_init,
+/// observe) e seeds, que escrevem em `<project_root>/.claude-project-memory/`.
+/// `AppState.mem_dir` é binary-local (pra humans/network/messages, que vivem
+/// junto do binário), mas tudo que é project-scoped (agents, sessions,
+/// observations, decisions, *.md) precisa ser lido de project_root.
+fn project_mem_dir(st: &AppState) -> PathBuf {
+    st.project_root.join(MEM_DIR_NAME)
+}
 
 pub fn data_router() -> Router<AppState> {
     Router::new().route("/api/data", get(handler))
@@ -25,7 +34,8 @@ async fn handler(State(st): State<AppState>) -> Response {
 }
 
 fn build_payload(st: &AppState) -> Value {
-    let mem = &st.mem_dir;
+    let mem_pb = project_mem_dir(st);
+    let mem = mem_pb.as_path();
 
     let sessions_raw = read_jsonl(&mem.join("sessions.jsonl")).unwrap_or_default();
     let observations = read_jsonl(&mem.join("observations.jsonl")).unwrap_or_default();
@@ -134,7 +144,8 @@ fn build_sessions(raw: &[Value]) -> Vec<Value> {
 }
 
 fn build_agents(st: &AppState) -> Value {
-    let Some(manifest) = load_manifest(&st.mem_dir) else {
+    let mem_dir = project_mem_dir(st);
+    let Some(manifest) = load_manifest(&mem_dir) else {
         return Value::Null;
     };
     let mut contexts = Map::new();
@@ -144,14 +155,14 @@ fn build_agents(st: &AppState) -> Value {
                 .get("context_file")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let ctx = load_mini_context(&st.mem_dir, ctx_file).unwrap_or_default();
+            let ctx = load_mini_context(&mem_dir, ctx_file).unwrap_or_default();
             contexts.insert(name.clone(), Value::String(ctx));
         }
     }
-    let inv = count_invocations(&st.mem_dir);
+    let inv = count_invocations(&mem_dir);
     let counts = inv.get("counts").cloned().unwrap_or_else(|| json!({}));
     let recent = inv.get("recent").cloned().unwrap_or_else(|| json!({}));
-    let logs = agent_log_summary(&st.mem_dir);
+    let logs = agent_log_summary(&mem_dir);
 
     json!({
         "manifest": manifest,

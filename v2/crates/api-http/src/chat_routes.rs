@@ -64,7 +64,7 @@ pub(crate) fn append_chat(
     mem_dir: &Path,
     agent: &str,
     entry: &Value,
-    search: Option<&std::sync::Arc<core_search::SearchIndex>>,
+    search: Option<&std::sync::Arc<core_storage::SearchIndex>>,
 ) {
     let path = chat_log_path(mem_dir, agent);
     if let Ok(r) = core_storage::JsonlRepository::<Value>::open_default(path) {
@@ -79,7 +79,7 @@ pub(crate) fn append_chat(
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let _ = idx.add(&core_search::SearchDoc {
+            let _ = idx.add(&core_storage::SearchDoc {
                 content: content.to_string(),
                 source_type: "chat".to_string(),
                 ref_id: agent.to_string(),

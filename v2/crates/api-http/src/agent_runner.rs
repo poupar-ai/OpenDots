@@ -39,7 +39,7 @@ pub fn build_runner(
     port: u16,
     vault: Arc<dyn VaultStore>,
     trace_index: Arc<domain_bus::TraceIndex>,
-    search_index: Option<Arc<core_search::SearchIndex>>,
+    search_index: Option<Arc<core_storage::SearchIndex>>,
 ) -> Runner {
     Arc::new(move |to, from, message, traces| {
         let mem_dir = mem_dir.clone();
@@ -75,7 +75,7 @@ async fn run_headless_turn(
     port: u16,
     vault: &Arc<dyn VaultStore>,
     trace_index: &Arc<domain_bus::TraceIndex>,
-    search_index: Option<&Arc<core_search::SearchIndex>>,
+    search_index: Option<&Arc<core_storage::SearchIndex>>,
     agent: &str,
     from_agent: &str,
     user_message: &str,

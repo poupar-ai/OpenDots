@@ -12,6 +12,13 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 # Binary `bench` precisa, então sai de dev-dep.
 tempfile = "3"
+# Search opcional — feature-gated pra quem não precisar de FTS5 não
+# pagar o custo do SQLite bundled (~1MB).
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+
+[features]
+default = ["search"]
+search = ["rusqlite"]
 
 [dev-dependencies]
 tempfile = "3"

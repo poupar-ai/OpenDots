@@ -24,6 +24,21 @@
 //! mas isso troca durabilidade por throughput, então deixo opt-in
 //! quando vier a precisar.
 
+// ── Search (FTS5) — submódulo opcional ──────────────────────────────────────
+//
+// Search é COMPLEMENTO do storage, não competidor. JsonlRepository é
+// source-of-truth (append-only, durável, git-friendly, sobrevive
+// snapshot/restore). SearchIndex é cache derivado em SQLite com FTS5
+// pra BM25 ranking (impossível de fazer eficientemente em arquivo plano
+// sem milhares de linhas de código de índice invertido).
+//
+// Vide CLAUDE.md seção "Storage layer (core-storage)" pra detalhes do
+// relacionamento e quando rebuild é necessário (snapshot/restore).
+#[cfg(feature = "search")]
+pub mod search;
+#[cfg(feature = "search")]
+pub use search::{SearchDoc, SearchError, SearchHit, SearchIndex};
+
 use std::fs;
 use std::io::Write;
 use std::marker::PhantomData;

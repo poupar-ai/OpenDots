@@ -50,6 +50,37 @@ scripts/
 - **Precisa de cor inline (border/bg)?** Usa `colorVar(color, shade)` de `@/ui`. Evita `var(--mantine-color-*)` solto.
 - **Trocar de lib UI no futuro**: cria `src/ui/adapter-<nome>/` espelhando a mesma API pública, troca a linha de re-export em `src/ui/index.ts`, ajusta `MantineProvider` em `main.tsx`. Panels não mudam.
 
+## Storage layer (`core-storage`)
+
+Banco do projeto = arquivos **JSONL append-only** (`agent_chats/<x>.jsonl`,
+`observations.jsonl`, `messages/YYYY-MM-DD.jsonl`, etc.) gerenciados pelo
+`JsonlRepository<T>`. **JSONL é source-of-truth — sempre.**
+
+Capacidades do `JsonlRepository`:
+- `append(item)` / `append_batch(items)` — write único, fsync opcional
+- `read_all()` — concat de partes rotacionadas + atual
+- `tail(n)` — últimas N do arquivo atual
+- Rotação automática a 50k linhas / 10MB (configurável)
+- Schema enforcement via `T: Serialize + DeserializeOwned`
+- Throughput: ~110k single fsync-off / 3M batch fsync-off por segundo
+
+### `SearchIndex` (FTS5 via SQLite) — cache derivado, NÃO competidor
+
+`core_storage::SearchIndex` (feature `search`, default on) é um **cache
+derivado** sobre os mesmos dados dos JSONLs, usando SQLite FTS5 pra
+BM25 ranking + snippets. Existe porque implementar FTS do zero seria
+~2000 LOC de bugs sutis (Unicode, tokenização, ranking).
+
+**Invariantes**:
+- JSONL é source-of-truth. Se search.db sumir, drop e rebuild de novo dos JSONLs (sem perda).
+- Inverso NÃO vale: drop dos JSONLs = perda real.
+- Snapshot inclui search.db (no skip-list de `db_routes`), mas restore dispara `rebuild_search_from_jsonls` pra garantir consistência (handle SQLite em memória aponta pra inode antigo até restart).
+- Startup: se índice está vazio E há JSONLs, rebuild automático em background. Cobre "search.db corrompido" ou "primeiro startup após snapshot restore".
+
+**Health check**: `GET /api/memory/search/health` reporta `{indexed_count, source_count, in_sync, drift}`. Drift = JSONL > search → hook falhou em algum append. Fix: `POST /api/memory/search/rebuild`.
+
+**Ao mexer em append_chat / append_observation**: lembrar de passar `search: Option<&Arc<SearchIndex>>` — sem isso o item entra no JSONL mas não no índice, criando drift silencioso.
+
 ## Backend (api-http) — TenantContext
 
 - **Handlers acessam `mem_dir` via `Extension<TenantContext>`**, nunca `st.mem_dir` direto. Scaffold em `src/tenant.rs` + `src/auth.rs` (middleware). Hoje sempre devolve tenant `default` — comportamento idêntico ao pré-tenant.

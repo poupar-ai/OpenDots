@@ -11,7 +11,6 @@ members = [
     "crates/core-ports",
     "crates/core-paths",
     "crates/core-queue",
-    "crates/core-search",
     "crates/core-storage",
     "crates/domain-agents",
     "crates/domain-architect",

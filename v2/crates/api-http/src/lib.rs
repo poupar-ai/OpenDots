@@ -195,7 +195,7 @@ pub struct AppState {
     /// Build at startup + update incremental nos hot paths de append.
     /// Pode ser None se o SQLite falhar ao abrir (degrada graciosamente
     /// — search devolve "indisponível", restante funciona).
-    pub search: Option<Arc<core_search::SearchIndex>>,
+    pub search: Option<Arc<core_storage::SearchIndex>>,
     /// Manager de subagents efêmeros paralelos. Pai (agente) chama
     /// /api/agents/subagent/spawn pra dispatch + poll pra resultado.
     /// Custo de tokens = zero (subagent tem context próprio, não
@@ -225,10 +225,26 @@ impl AppState {
         trace_index.build_from_disk(&mem_dir, domain_bus::DEFAULT_RETENTION, &SystemClock);
 
         // Search index — abrir antes do runner pra poder injetar.
-        let search = core_search::SearchIndex::open(&mem_dir)
+        // Auto-rebuild se índice vazio mas há JSONLs no disco. Cobre
+        // o caso "snapshot foi restaurado e search.db ficou stale" ou
+        // "search.db foi apagado/corrompido". JsonlRepository é
+        // sempre source-of-truth; search reconstrói daí.
+        let search = core_storage::SearchIndex::open(&mem_dir)
             .map(Arc::new)
             .map_err(|e| eprintln!("warn: search index indisponível: {e}"))
             .ok();
+        if let Some(ref idx) = search {
+            let indexed = idx.count().unwrap_or(0);
+            let has_chats = mem_dir.join("agent_chats").exists();
+            let has_obs = mem_dir.join("observations.jsonl").exists();
+            if indexed == 0 && (has_chats || has_obs) {
+                eprintln!("search: índice vazio mas há JSONLs — rebuild automático...");
+                match search_routes::rebuild_search_from_jsonls(&mem_dir, idx) {
+                    Ok(n) => eprintln!("search: rebuild indexou {n} docs"),
+                    Err(e) => eprintln!("search: rebuild falhou (não crítico): {e}"),
+                }
+            }
+        }
 
         let runner = agent_runner::build_runner(
             mem_dir.clone(),

@@ -187,7 +187,6 @@ dependencies = [
  "core-paths",
  "core-ports",
  "core-queue",
- "core-search",
  "core-storage",
  "domain-agents",
  "domain-architect",
@@ -487,20 +486,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "core-search"
-version = "0.1.0"
-dependencies = [
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "core-storage"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

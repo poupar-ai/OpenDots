@@ -347,7 +347,7 @@ async fn list_snapshots_handler(Extension(tc): Extension<TenantContext>) -> Resp
 }
 
 async fn restore_handler(
-    State(_st): State<AppState>,
+    State(st): State<AppState>,
     Extension(tc): Extension<TenantContext>,
     body: Bytes,
 ) -> Response {
@@ -365,15 +365,32 @@ async fn restore_handler(
     };
 
     match apply_restore(&tc.mem_dir, snapshot) {
-        Ok((restored, backup_dir)) => json_response(
-            StatusCode::OK,
-            json!({
-                "ok": true,
-                "restored_files": restored,
-                "backed_up_to": backup_dir.file_name().and_then(|s| s.to_str()),
-                "warning": "reinicie o servidor pra recarregar agents.json, scope.json, queue/state.json — config em memória ficou desatualizada",
-            }),
-        ),
+        Ok((restored, backup_dir)) => {
+            // Search.db restaurado é o arquivo do snapshot, mas o
+            // SearchIndex em memória (st.search) ainda aponta pro
+            // file handle antigo (SQLite mantém via inode). Após
+            // restart o handle aponta pra novo arquivo; até lá, melhor
+            // fazer um rebuild explícito pra garantir consistência
+            // com os JSONLs recém-restaurados. JsonlRepository é
+            // source-of-truth — sempre.
+            let mut rebuild_status = "skipped (search index não inicializado)".to_string();
+            if let Some(idx) = st.search.as_ref() {
+                match crate::search_routes::rebuild_search_from_jsonls(&tc.mem_dir, idx) {
+                    Ok(n) => rebuild_status = format!("reindexou {n} docs"),
+                    Err(e) => rebuild_status = format!("rebuild falhou: {e}"),
+                }
+            }
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "ok": true,
+                    "restored_files": restored,
+                    "backed_up_to": backup_dir.file_name().and_then(|s| s.to_str()),
+                    "search_rebuild": rebuild_status,
+                    "warning": "reinicie o servidor pra recarregar agents.json, scope.json, queue/state.json — config em memória ficou desatualizada",
+                }),
+            )
+        }
         Err(RestoreError::SnapshotNotFound) => json_error(StatusCode::NOT_FOUND, "snapshot não encontrado"),
         Err(RestoreError::PathEscape(p)) => {
             json_error(StatusCode::BAD_REQUEST, &format!("path escape detectado: {p}"))

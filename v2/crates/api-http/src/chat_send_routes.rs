@@ -699,7 +699,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
             "block_hits".into(),
             Value::Array(det.hits.iter().map(|h| h.to_json()).collect()),
         );
-        append_chat(&st.mem_dir, agent, &Value::Object(user_entry));
+        append_chat(&st.mem_dir, agent, &Value::Object(user_entry), st.search.as_ref());
         append_agent_log(
             &st.mem_dir,
             agent,
@@ -749,6 +749,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
                 "block_reason": "destructive_intent",
                 "synthetic": "protection_engine",
             }),
+            st.search.as_ref(),
         );
 
         if firefighter_exists {
@@ -776,6 +777,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
                     "block_reason": "destructive_intent",
                     "block_hits": det.hits.iter().map(|h| h.to_json()).collect::<Vec<_>>(),
                 }),
+                st.search.as_ref(),
             );
             append_agent_log(
                 &st.mem_dir,
@@ -830,7 +832,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
             user_entry.insert("from".into(), name);
         }
     }
-    append_chat(&st.mem_dir, agent, &Value::Object(user_entry));
+    append_chat(&st.mem_dir, agent, &Value::Object(user_entry), st.search.as_ref());
     append_agent_log(
         &st.mem_dir,
         agent,
@@ -938,6 +940,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
     let mem_dir = st.mem_dir.clone();
     let agent_cfg_clone = agent_cfg.clone();
     let plugin_dir_clone = plugin_dir.clone();
+    let search_clone = st.search.clone();
     let project_root_clone = st.project_root.clone();
     let auto_queue = Arc::clone(&st.auto_queue);
     let before_sizes_clone = before_sizes.clone();
@@ -1205,7 +1208,7 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
                         )))
                     .await;
             }
-            append_chat(&mem_dir, &agent_s, &Value::Object(chat_entry));
+            append_chat(&mem_dir, &agent_s, &Value::Object(chat_entry), search_clone.as_ref());
             let preview_err: Option<String> = if !err_text.is_empty() {
                 Some(err_text.chars().take(200).collect())
             } else {

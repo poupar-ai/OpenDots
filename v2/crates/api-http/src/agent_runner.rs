@@ -39,6 +39,7 @@ pub fn build_runner(
     port: u16,
     vault: Arc<dyn VaultStore>,
     trace_index: Arc<domain_bus::TraceIndex>,
+    search_index: Option<Arc<core_search::SearchIndex>>,
 ) -> Runner {
     Arc::new(move |to, from, message, traces| {
         let mem_dir = mem_dir.clone();
@@ -46,6 +47,7 @@ pub fn build_runner(
         let plugin_dir = plugin_dir.clone();
         let vault = Arc::clone(&vault);
         let trace_index = Arc::clone(&trace_index);
+        let search_index = search_index.clone();
         Box::pin(async move {
             run_headless_turn(
                 &mem_dir,
@@ -54,6 +56,7 @@ pub fn build_runner(
                 port,
                 &vault,
                 &trace_index,
+                search_index.as_ref(),
                 &to,
                 &from,
                 &message,
@@ -72,6 +75,7 @@ async fn run_headless_turn(
     port: u16,
     vault: &Arc<dyn VaultStore>,
     trace_index: &Arc<domain_bus::TraceIndex>,
+    search_index: Option<&Arc<core_search::SearchIndex>>,
     agent: &str,
     from_agent: &str,
     user_message: &str,
@@ -218,6 +222,7 @@ async fn run_headless_turn(
                         "duration_ms": duration_ms,
                         "from": agent,
                     }),
+                    search_index,
                 );
                 append_agent_log(
                     mem_dir,

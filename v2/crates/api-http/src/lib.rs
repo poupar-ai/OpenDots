@@ -24,6 +24,7 @@ pub mod humans_routes;
 pub mod misc_routes;
 pub mod pipelines_routes;
 pub mod scope_routes;
+pub mod search_routes;
 pub mod seeds_routes;
 pub mod tenant;
 pub mod topic_routes;
@@ -188,6 +189,11 @@ pub struct AppState {
     /// usar /handoff_batch. Defesa em código contra agente que ignora
     /// instrução do prompt — confiança em prompt é brecha conhecida.
     pub handoff_rate: Arc<Mutex<std::collections::HashMap<String, std::collections::VecDeque<std::time::Instant>>>>,
+    /// FTS5 search index (SQLite bundled) sobre chats/observations.
+    /// Build at startup + update incremental nos hot paths de append.
+    /// Pode ser None se o SQLite falhar ao abrir (degrada graciosamente
+    /// — search devolve "indisponível", restante funciona).
+    pub search: Option<Arc<core_search::SearchIndex>>,
 }
 
 impl AppState {
@@ -211,6 +217,12 @@ impl AppState {
         let trace_index = Arc::new(domain_bus::TraceIndex::new());
         trace_index.build_from_disk(&mem_dir, domain_bus::DEFAULT_RETENTION, &SystemClock);
 
+        // Search index — abrir antes do runner pra poder injetar.
+        let search = core_search::SearchIndex::open(&mem_dir)
+            .map(Arc::new)
+            .map_err(|e| eprintln!("warn: search index indisponível: {e}"))
+            .ok();
+
         let runner = agent_runner::build_runner(
             mem_dir.clone(),
             project_root.clone(),
@@ -218,6 +230,7 @@ impl AppState {
             port,
             Arc::clone(&vault),
             Arc::clone(&trace_index),
+            search.clone(),
         );
 
         // Backpressure síncrono — quando wait_ack=true no handoff, server
@@ -260,6 +273,7 @@ impl AppState {
             trace_index,
             pending_acks,
             handoff_rate: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            search,
         }
     }
 
@@ -291,6 +305,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(topic_routes::topic_router())
         .merge(db_routes::db_router())
         .merge(dev_routes::dev_router())
+        .merge(search_routes::search_router())
         .merge(humans_routes::humans_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())

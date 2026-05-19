@@ -228,6 +228,7 @@ fn try_auto_escalate_blocker(
             "original_to": to_agent,
             "signals": det.signals.clone(),
         }),
+        state.search.as_ref(),
     );
     append_agent_log(
         &state.mem_dir,
@@ -506,6 +507,7 @@ async fn handoff_handler(
                     "block_reason": "destructive_intent_handoff",
                     "block_hits": det.hits.iter().map(|h| h.to_json()).collect::<Vec<_>>(),
                 }),
+                st.search.as_ref(),
             );
             append_agent_log(
                 &st.mem_dir,
@@ -562,7 +564,7 @@ async fn handoff_handler(
     if let Some(ctx) = context_val.clone() {
         chat_entry.insert("context".into(), ctx);
     }
-    append_chat(&st.mem_dir, to, &Value::Object(chat_entry));
+    append_chat(&st.mem_dir, to, &Value::Object(chat_entry), st.search.as_ref());
 
     let mut log_out = Map::new();
     log_out.insert("ts".into(), Value::String(ts.clone()));
@@ -913,7 +915,7 @@ async fn handoff_batch_handler(
         if let Some(ref s) = subject {
             chat_entry.insert("subject".into(), Value::String(s.clone()));
         }
-        append_chat(&st.mem_dir, to, &Value::Object(chat_entry));
+        append_chat(&st.mem_dir, to, &Value::Object(chat_entry), st.search.as_ref());
 
         append_agent_log(
             &st.mem_dir,

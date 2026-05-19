@@ -1,0 +1,18 @@
+[package]
+name = "core-search"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# SQLite com FTS5 bundled (compila junto, sem depender de system lib).
+# Adiciona ~1MB no binário mas dá full-text search robusto sem rede.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"

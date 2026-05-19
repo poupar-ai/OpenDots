@@ -53,14 +53,40 @@ pub(crate) fn read_chat(mem_dir: &Path, agent: &str) -> Vec<Value> {
 }
 
 /// Append entry no JSONL via core_storage (rotação automática a 50k
-/// linhas / 10MB) + dispara `graph::on_agent_chat_row`. Throughput
-/// alvo: thousands of lines/min — handler hot path.
-pub(crate) fn append_chat(mem_dir: &Path, agent: &str, entry: &Value) {
+/// linhas / 10MB) + dispara `graph::on_agent_chat_row` + indexa no
+/// search se `search` foi passado. Throughput alvo: thousands of
+/// lines/min — handler hot path.
+///
+/// `search` opcional porque alguns callers (paridade .cjs, tests)
+/// não têm AppState. Quando passado, content é indexado em FTS5 com
+/// source_type="chat" e ref_id=agent.
+pub(crate) fn append_chat(
+    mem_dir: &Path,
+    agent: &str,
+    entry: &Value,
+    search: Option<&std::sync::Arc<core_search::SearchIndex>>,
+) {
     let path = chat_log_path(mem_dir, agent);
     if let Ok(r) = core_storage::JsonlRepository::<Value>::open_default(path) {
         let _ = r.append(entry);
     }
     domain_graph::on_agent_chat_row(mem_dir, agent, entry, &GraphSystemClock);
+    if let Some(idx) = search {
+        let content = entry.get("content").and_then(Value::as_str).unwrap_or("");
+        if !content.is_empty() {
+            let ts = entry
+                .get("ts")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let _ = idx.add(&core_search::SearchDoc {
+                content: content.to_string(),
+                source_type: "chat".to_string(),
+                ref_id: agent.to_string(),
+                ts,
+            });
+        }
+    }
 }
 
 /// Garante que todo agente do manifest tenha arquivo de canal.

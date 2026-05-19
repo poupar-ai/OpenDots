@@ -16,6 +16,7 @@ path = "src/bin/http.rs"
 
 [dependencies]
 core-paths = { path = "../core-paths" }
+core-search = { path = "../core-search" }
 core-storage = { path = "../core-storage" }
 core-ports = { path = "../core-ports" }
 core-queue = { path = "../core-queue" }

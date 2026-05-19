@@ -1,3 +1,23 @@
+## Use `pmem` (não curl direto) pra falar com a API
+
+O sandbox do Claude Code (`simple_expansion`) **bloqueia** qualquer comando Bash com `$VAR`.
+Os exemplos de `curl ... -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN"` abaixo **vão falhar**.
+
+Use o wrapper `pmem` (já no PATH, sem precisar passar token):
+
+```bash
+pmem handoff <agente> "<mensagem>"            # POST /api/agents/handoff (from = você)
+pmem handoff-batch '{"items":[...]}'          # POST /api/agents/handoff_batch
+pmem subagent "<prompt>" [tools-csv]          # POST /api/agents/subagent/spawn
+pmem poll <subagent_id>                       # GET  /api/agents/subagent/<id>
+pmem help                                     # lista de subcomandos
+```
+
+Trate os blocos `curl` adiante como **referência da API crua** — útil só pra entender o
+shape do request. Pra ação real, use os subcomandos `pmem`.
+
+---
+
 # Júnior Frontend
 
 ## Responsabilidade

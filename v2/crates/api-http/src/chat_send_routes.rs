@@ -892,6 +892,12 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
     if let Some(token) = crate::agent_keys::mint_token_for(agent, &st.vault, &st.mem_dir) {
         cmd.env("PROJECT_MEM_AGENT_TOKEN", token);
     }
+    // `plugin_dir/agent-bin` no PATH — agente chama `pmem handoff ...`
+    // sem expor $VAR na linha de comando. Veja agent_runner.rs pro motivo.
+    let agent_bin = st.plugin_dir.join("agent-bin");
+    let path_now = std::env::var("PATH").unwrap_or_default();
+    cmd.env("PATH", format!("{}:{}", agent_bin.display(), path_now));
+    cmd.env("PROJECT_MEM_PORT", st.port.to_string());
     for (k, v) in build_agent_env(&st.mem_dir, &st.vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }

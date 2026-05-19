@@ -594,14 +594,16 @@ async fn handoff_handler(
     created.insert("subject".into(), subject_val);
     created.insert("reply_to".into(), reply_to_val);
     created.insert("message_chars".into(), Value::Number(message.len().into()));
-    let _ = domain_bus::emit(&st.mem_dir, &Value::Object(created), &BusClock);
+    if let Some(ev) = domain_bus::emit(&st.mem_dir, &Value::Object(created), &BusClock) {
+        st.trace_index.record(&ev);
+    }
 
     // ── Bus: acked / reported + resumo ──────────────────────────────────────
     let mut resumed: Option<Value> = None;
     if let Some(rt) = &reply_to {
         if intent == "ack" || intent == "report" {
             let ev_type = if intent == "ack" { "acked" } else { "reported" };
-            let _ = domain_bus::emit(
+            if let Some(ev) = domain_bus::emit(
                 &st.mem_dir,
                 &json!({
                     "type": ev_type,
@@ -610,9 +612,15 @@ async fn handoff_handler(
                     "via_trace": trace_id,
                 }),
                 &BusClock,
-            );
+            ) {
+                st.trace_index.record(&ev);
+            }
             if intent == "report" {
-                if let Some(orig) = domain_bus::get_message(&st.mem_dir, rt, &BusClock) {
+                // Tenta o índice em memória primeiro; fallback pro disk scan
+                // (cobre traces fora da janela populada no startup).
+                let orig_opt = st.trace_index.get_trace(rt)
+                    .or_else(|| domain_bus::get_message(&st.mem_dir, rt, &BusClock));
+                if let Some(orig) = orig_opt {
                     if let Some(originator) = orig
                         .created
                         .as_ref()

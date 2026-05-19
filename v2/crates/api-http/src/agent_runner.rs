@@ -38,12 +38,14 @@ pub fn build_runner(
     plugin_dir: PathBuf,
     port: u16,
     vault: Arc<dyn VaultStore>,
+    trace_index: Arc<domain_bus::TraceIndex>,
 ) -> Runner {
     Arc::new(move |to, from, message, traces| {
         let mem_dir = mem_dir.clone();
         let project_root = project_root.clone();
         let plugin_dir = plugin_dir.clone();
         let vault = Arc::clone(&vault);
+        let trace_index = Arc::clone(&trace_index);
         Box::pin(async move {
             run_headless_turn(
                 &mem_dir,
@@ -51,6 +53,7 @@ pub fn build_runner(
                 &plugin_dir,
                 port,
                 &vault,
+                &trace_index,
                 &to,
                 &from,
                 &message,
@@ -68,6 +71,7 @@ async fn run_headless_turn(
     plugin_dir: &Path,
     port: u16,
     vault: &Arc<dyn VaultStore>,
+    trace_index: &Arc<domain_bus::TraceIndex>,
     agent: &str,
     from_agent: &str,
     user_message: &str,
@@ -123,8 +127,9 @@ async fn run_headless_turn(
     );
 
     // bus: `delivered` pra cada trace_id da batch (paridade L929-931).
+    // Emit + record no índice — mantém trace_index sincronizado.
     for tid in trace_ids.iter().filter(|t| !t.is_empty()) {
-        let _ = domain_bus::emit(
+        if let Some(ev) = domain_bus::emit(
             mem_dir,
             &json!({
                 "type": "delivered",
@@ -133,7 +138,9 @@ async fn run_headless_turn(
                 "from": from_agent,
             }),
             &BusSystemClock,
-        );
+        ) {
+            trace_index.record(&ev);
+        }
     }
 
     let mut args: Vec<String> = vec!["-p".into(), "--output-format".into(), "text".into()];

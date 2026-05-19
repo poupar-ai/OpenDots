@@ -170,6 +170,10 @@ pub struct AppState {
     pub vault: Arc<dyn VaultStore>,
     pub unlock_guard: Arc<UnlockGuard>,
     pub auto_queue: Arc<AgentQueue>,
+    /// Índice em memória `trace_id → eventos`. Populated no startup
+    /// via `build_from_disk`. Callers que emitem eventos no bus devem
+    /// chamar `trace_index.record(ev)` em seguida pra manter atualizado.
+    pub trace_index: Arc<domain_bus::TraceIndex>,
 }
 
 impl AppState {
@@ -185,12 +189,21 @@ impl AppState {
         let cfg = load_network_config(&mem_dir);
         let bind_host = resolve_bind_host(&cfg);
         let unlock_guard = Arc::new(UnlockGuard::load(&mem_dir));
+
+        // Trace index: popular do disco com a janela de retention padrão.
+        // O custo é O(N eventos), pagar uma vez no startup pra ter O(1)
+        // lookup nas queries futuras (vs scan completo a cada chamada).
+        // Criado antes do runner pra poder ser passado pra ele.
+        let trace_index = Arc::new(domain_bus::TraceIndex::new());
+        trace_index.build_from_disk(&mem_dir, domain_bus::DEFAULT_RETENTION, &SystemClock);
+
         let runner = agent_runner::build_runner(
             mem_dir.clone(),
             project_root.clone(),
             plugin_dir.clone(),
             port,
             Arc::clone(&vault),
+            Arc::clone(&trace_index),
         );
         // Queue persistente: state_dir = <mem_dir>/queue. Sobrevive
         // restart (pending+running são restaurados; reconcile() depois
@@ -199,6 +212,7 @@ impl AppState {
         let mut queue_cfg = AgentQueueConfig::new(runner);
         queue_cfg.state_dir = Some(mem_dir.join("queue"));
         let auto_queue = AgentQueue::new(queue_cfg);
+
         Self {
             mem_dir,
             project_root,
@@ -212,6 +226,7 @@ impl AppState {
             vault,
             unlock_guard,
             auto_queue,
+            trace_index,
         }
     }
 

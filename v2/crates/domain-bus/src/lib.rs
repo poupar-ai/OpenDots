@@ -23,6 +23,9 @@
 //! `.cjs` original via monkey-patch de `Date` no Node.
 
 use serde_json::{Map, Value};
+pub mod trace_index;
+pub use trace_index::TraceIndex;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;

@@ -287,6 +287,60 @@ cd ui-next && npm install && npm run build
 
 ---
 
+## Contribuindo um skill novo
+
+Os skills do projeto seguem o formato **[agentskills.io](https://agentskills.io/specification)** — open standard da Anthropic adotado por Codex, Cursor, GitHub Copilot, Gemini CLI, JetBrains Junie, Goose e outros. Isso significa que um skill escrito aqui é portável: tools que respeitam o spec carregam ele direto.
+
+### Layout
+
+```
+plugin/skills/<slug>/
+├── SKILL.md            # obrigatório — frontmatter YAML + corpo markdown
+├── scripts/            # opcional — executáveis (Python/Bash/JS)
+├── references/         # opcional — docs auxiliares carregados sob demanda
+└── assets/             # opcional — arquivos estáticos (templates, etc)
+```
+
+### `SKILL.md`
+
+Começa com frontmatter YAML obrigatório:
+
+```markdown
+---
+name: meu-skill              # ≤64 chars, mesmo slug da pasta
+description: O que faz, em uma linha — aparece na descoberta.
+---
+
+# /meu-skill — Título legível
+
+Instruções, exemplos, passos pro Claude executar.
+```
+
+Campos:
+- **`name`** (obrigatório, ≤64 chars) — slug do skill, idêntico ao nome da pasta. Usado como `/<name>` no Claude Code.
+- **`description`** (obrigatório) — uma linha; é o que o modelo vê na fase de descoberta (~100 tokens).
+
+### Progressive disclosure
+
+Pense em 3 camadas conforme o agente avança:
+
+1. **Descoberta** (~100 tokens) — só o frontmatter. O modelo decide se invoca o skill com base na `description`.
+2. **Ativação** (<5k tokens) — corpo do `SKILL.md`. Instruções, exemplos, passos. Não dilua com referências enormes.
+3. **Recursos sob demanda** — `scripts/`, `references/`, `assets/` só carregam quando o corpo do SKILL.md instrui (`leia references/X.md`, `rode scripts/Y.py`).
+
+### Workflow
+
+1. Crie a pasta: `plugin/skills/<slug>/`
+2. Escreva `SKILL.md` com frontmatter + corpo
+3. (Opcional) Adicione `scripts/`, `references/`, `assets/` se precisar
+4. Reinstale o plugin (`make install` ou reabra Claude Code) — skill vira `/<slug>` automaticamente
+
+### Não tente expandir o padrão pra outras camadas
+
+`agentskills.io` cobre **só a camada de skills**. Identidade de agente (`agents.json`), config MCP (`.mcp.json`), runtime de handoff inter-agente (JWT Ed25519 + queue persistente) seguem proprietários — não há padrão aberto consolidado pra essas camadas ainda. Se quiser estender o sistema nesses pontos, fica no formato deste projeto.
+
+---
+
 ## O que é gravado automaticamente
 
 | Evento | O que grava |

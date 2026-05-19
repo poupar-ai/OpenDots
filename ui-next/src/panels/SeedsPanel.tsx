@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Package, Check, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
+import { Package, Check, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import {
+  Accordion,
+  AccordionControl,
+  AccordionItem,
+  AccordionPanel,
   Alert,
   Badge,
   Box,
   Button,
-  Checkbox,
   Chip,
+  Divider,
   Group,
+  Loader,
   Modal,
-  Paper,
   Stack,
+  Switch,
   Text,
   Title,
-  UnstyledButton,
 } from '@/ui';
 import {
   listSeeds,
@@ -70,8 +74,12 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
     return picked[ref] ?? new Set(allAgents);
   }
 
-  function resetPicked(ref: string, allAgents: string[]) {
+  function selectAll(ref: string, allAgents: string[]) {
     setPicked((prev) => ({ ...prev, [ref]: new Set(allAgents) }));
+  }
+
+  function clearAll(ref: string) {
+    setPicked((prev) => ({ ...prev, [ref]: new Set() }));
   }
 
   async function install(ref: string, allAgents: string[]) {
@@ -107,123 +115,148 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
       onClose={onClose}
       size="xl"
       title={
-        <Group gap="xs">
-          <Package size={18} />
+        <Group gap="sm" align="center">
+          <Package size={20} />
           <Box>
-            <Title order={5}>Instalar time de agentes</Title>
-            <Text size="xs" muted>
+            <Title order={4}>Instalar time de agentes</Title>
+            <Text size="sm" muted>
               projeto: {projectRoot || '…'}
             </Text>
           </Box>
         </Group>
       }
     >
-      <Stack gap="md">
-        {loadErr && <Alert color="danger">{loadErr}</Alert>}
+      <Stack gap="lg">
+        {loadErr && <Alert color="danger" icon={<AlertCircle size={16} />}>{loadErr}</Alert>}
 
         {!categories && !loadErr && (
-          <Text size="xs" muted>carregando…</Text>
+          <Group gap="sm">
+            <Loader size="sm" />
+            <Text size="sm" muted>Carregando packs disponíveis…</Text>
+          </Group>
         )}
 
         {categories && categories.length === 0 && (
-          <Text size="xs" muted>Nenhum pack disponível.</Text>
+          <Text size="sm" muted>Nenhum pack disponível.</Text>
         )}
 
         {categories?.map((cat) => (
-          <Stack key={cat.name} gap="xs">
-            <Title order={6}>{cat.label}</Title>
-            {cat.description && (
-              <Text size="xs" muted>{cat.description}</Text>
-            )}
+          <Stack key={cat.name} gap="sm">
+            <Box>
+              <Title order={5}>{cat.label}</Title>
+              {cat.description && (
+                <Text size="sm" muted>{cat.description}</Text>
+              )}
+            </Box>
 
-            <Stack gap="xs">
+            <Accordion
+              value={expandedPack}
+              onChange={setExpandedPack}
+              variant="separated"
+            >
               {cat.packs.map((p) => {
                 const ref = `${cat.name}/${p.name}`;
-                const expanded = expandedPack === ref;
                 const sel = getPicked(ref, p.agents);
-                const all = sel.size === p.agents.length;
+                const allSelected = sel.size === p.agents.length;
+                const noneSelected = sel.size === 0;
+
                 return (
-                  <Paper key={ref} withBorder padding="sm">
-                    <Stack gap="sm">
-                      <UnstyledButton
-                        fullWidth
-                        onClick={() => setExpandedPack(expanded ? null : ref)}
-                      >
-                        <Group justify="space-between" gap="xs">
-                          <Group gap="xs">
-                            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            <Text size="sm" fw={600}>{p.label}</Text>
-                            <Badge variant="outline">{p.agents.length} agentes</Badge>
-                          </Group>
-                          <Text size="xs" muted style={{ fontFamily: 'monospace' }}>
-                            {ref}
-                          </Text>
+                  <AccordionItem key={ref} value={ref}>
+                    <AccordionControl>
+                      <Group justify="space-between" gap="sm" wrap="nowrap">
+                        <Group gap="sm">
+                          <Text size="md" fw={600}>{p.label}</Text>
+                          <Badge variant="light" color="primary">
+                            {p.agents.length} agentes
+                          </Badge>
                         </Group>
-                      </UnstyledButton>
+                        <Text size="xs" muted style={{ fontFamily: 'monospace' }}>
+                          {ref}
+                        </Text>
+                      </Group>
+                    </AccordionControl>
 
-                      {expanded && (
-                        <Stack gap="sm">
-                          {p.description && (
-                            <Text size="xs" muted>{p.description}</Text>
-                          )}
+                    <AccordionPanel>
+                      <Stack gap="md">
+                        {p.description && (
+                          <Text size="sm">{p.description}</Text>
+                        )}
 
-                          <Group justify="space-between" gap="xs">
-                            <Text size="xs" fw={600} muted>
-                              Selecionados: {sel.size}/{p.agents.length}
+                        <Box>
+                          <Group justify="space-between" gap="sm" align="center">
+                            <Text size="sm" fw={600}>
+                              {sel.size} de {p.agents.length} selecionados
                             </Text>
-                            <Button
-                              variant="subtle"
-                              size="xs"
-                              color="gray"
-                              onClick={() => resetPicked(ref, p.agents)}
-                            >
-                              todos
-                            </Button>
-                          </Group>
-
-                          <Group gap={6} wrap="wrap">
-                            {p.agents.map((a) => (
-                              <Chip
-                                key={a}
-                                checked={sel.has(a)}
-                                onChange={() => toggleAgent(ref, a, p.agents)}
+                            <Group gap="xs">
+                              <Button
+                                variant="subtle"
                                 size="xs"
-                                variant="outline"
+                                color="primary"
+                                disabled={allSelected}
+                                leftIcon={<CheckSquare size={14} />}
+                                onClick={() => selectAll(ref, p.agents)}
                               >
-                                {a}
-                              </Chip>
-                            ))}
+                                Selecionar todos
+                              </Button>
+                              <Button
+                                variant="subtle"
+                                size="xs"
+                                color="gray"
+                                disabled={noneSelected}
+                                leftIcon={<Square size={14} />}
+                                onClick={() => clearAll(ref)}
+                              >
+                                Limpar
+                              </Button>
+                            </Group>
                           </Group>
+                        </Box>
 
-                          <Group justify="space-between" gap="xs">
-                            <Checkbox
-                              checked={overwrite}
-                              onChange={setOverwrite}
-                              label="sobrescrever existentes"
-                              size="xs"
-                            />
-                            <Button
-                              size="xs"
-                              disabled={sel.size === 0 || applying === ref}
-                              loading={applying === ref}
-                              leftIcon={<Check size={14} />}
-                              onClick={() => install(ref, p.agents)}
+                        <Group gap="xs" wrap="wrap">
+                          {p.agents.map((a) => (
+                            <Chip
+                              key={a}
+                              checked={sel.has(a)}
+                              onChange={() => toggleAgent(ref, a, p.agents)}
+                              size="sm"
+                              variant="outline"
                             >
-                              Instalar {all ? 'todos' : `${sel.size}`}
-                            </Button>
-                          </Group>
-                        </Stack>
-                      )}
-                    </Stack>
-                  </Paper>
+                              {a}
+                            </Chip>
+                          ))}
+                        </Group>
+
+                        <Divider />
+
+                        <Group justify="space-between" gap="md" align="center">
+                          <Switch
+                            checked={overwrite}
+                            onChange={setOverwrite}
+                            label="Sobrescrever existentes"
+                            size="sm"
+                          />
+                          <Button
+                            size="sm"
+                            color="primary"
+                            disabled={sel.size === 0 || applying === ref}
+                            loading={applying === ref}
+                            leftIcon={<Check size={16} />}
+                            onClick={() => install(ref, p.agents)}
+                          >
+                            Instalar {sel.size} {sel.size === 1 ? 'agente' : 'agentes'}
+                          </Button>
+                        </Group>
+                      </Stack>
+                    </AccordionPanel>
+                  </AccordionItem>
                 );
               })}
-            </Stack>
+            </Accordion>
           </Stack>
         ))}
 
         {applyErr && (
-          <Alert color="danger" icon={<AlertCircle size={14} />}>
+          <Alert color="danger" icon={<AlertCircle size={16} />}>
             {applyErr}
           </Alert>
         )}
@@ -231,18 +264,18 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
         {result && (
           <Alert
             color="success"
-            icon={<Check size={14} />}
+            icon={<Check size={16} />}
             title={`${result.ref} instalado — ${summary}`}
           >
-            <Stack gap={4}>
+            <Stack gap={6}>
               {result.r.added.length > 0 && (
-                <Text size="xs">+ {result.r.added.join(', ')}</Text>
+                <Text size="sm">+ {result.r.added.join(', ')}</Text>
               )}
               {result.r.replaced.length > 0 && (
-                <Text size="xs">↻ {result.r.replaced.join(', ')}</Text>
+                <Text size="sm">↻ {result.r.replaced.join(', ')}</Text>
               )}
               {result.r.skipped.length > 0 && (
-                <Text size="xs" muted>
+                <Text size="sm" muted>
                   = preservados (use "sobrescrever"): {result.r.skipped.join(', ')}
                 </Text>
               )}

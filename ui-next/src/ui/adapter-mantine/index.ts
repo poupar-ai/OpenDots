@@ -49,6 +49,21 @@ export type { CheckboxProps } from './Checkbox';
 export { Chip } from './Chip';
 export type { ChipProps } from './Chip';
 
+export { Switch } from './Switch';
+export type { SwitchProps } from './Switch';
+
+export { Loader } from './Loader';
+export type { LoaderProps } from './Loader';
+
+export { Accordion, AccordionItem, AccordionControl, AccordionPanel } from './Accordion';
+export type {
+  AccordionProps,
+  AccordionItemProps,
+  AccordionControlProps,
+  AccordionPanelProps,
+  AccordionVariant,
+} from './Accordion';
+
 export { UnstyledButton } from './UnstyledButton';
 export type { UnstyledButtonProps } from './UnstyledButton';
 

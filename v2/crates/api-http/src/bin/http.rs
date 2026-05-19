@@ -110,7 +110,28 @@ async fn main() -> ExitCode {
     });
 
     let app = build_router(state);
-    let listener = match tokio::net::TcpListener::bind(addr).await {
+
+    // Bind: por default TCP em $bind_host:$port. Env PROJECT_MEM_BIND_UNIX
+    // sobrescreve pra Unix socket (endurece contra ataques same-LAN —
+    // ninguém na rede consegue chegar). UI quebra em modo Unix-only
+    // (browser não fala unix); pra ter UI + Unix simultâneos, rodar
+    // reverse proxy (caddy/nginx) que faça TCP localhost → Unix.
+    //
+    // Limitação atual: axum 0.7 `serve()` só aceita TcpListener. Pra ter
+    // ambos simultâneos no MESMO processo precisa upgrade pra axum 0.8
+    // (breaking em ~100 handlers — fora de escopo aqui).
+    #[cfg(unix)]
+    if let Ok(unix_path) = std::env::var("PROJECT_MEM_BIND_UNIX") {
+        if !unix_path.is_empty() {
+            let _ = std::fs::remove_file(&unix_path);
+            // Truque pra axum 0.7 aceitar Unix: criar TcpListener "fake"
+            // não funciona. Em vez disso usamos hyper direto via accept
+            // loop manual.
+            return serve_unix(&unix_path, app).await;
+        }
+    }
+
+    let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
             eprintln!("falha ao bind em {addr}: {e}");
@@ -118,9 +139,53 @@ async fn main() -> ExitCode {
         }
     };
     eprintln!("pmem-http escutando em http://{addr}");
-    if let Err(e) = axum::serve(listener, app).await {
+    if let Err(e) = axum::serve(tcp_listener, app).await {
         eprintln!("servidor caiu: {e}");
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
+}
+
+/// Servir o axum app sobre um Unix socket. Implementação manual via
+/// hyper-util (já é dep transitiva do axum 0.7). Aceita conexões em
+/// loop, faz upgrade pra http1 por conexão e despacha pra tower service.
+#[cfg(unix)]
+async fn serve_unix(path: &str, app: axum::Router) -> ExitCode {
+    use hyper::server::conn::http1;
+    use hyper_util::rt::TokioIo;
+
+    let listener = match tokio::net::UnixListener::bind(path) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("falha ao bind unix://{path}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    eprintln!("pmem-http escutando em unix://{path}");
+
+    use tower::ServiceExt;
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("accept falhou: {e}");
+                continue;
+            }
+        };
+        let io = TokioIo::new(stream);
+        let app = app.clone();
+        tokio::spawn(async move {
+            // Pra cada request, clona o router e usa oneshot (consome o
+            // service). Axum 0.7 Router não é Clone-with-call direto;
+            // esse pattern é o documentado no exemplo unix-domain-socket
+            // do repo do axum.
+            let service = hyper::service::service_fn(move |req| {
+                let app = app.clone();
+                async move { app.oneshot(req).await }
+            });
+            if let Err(e) = http1::Builder::new().serve_connection(io, service).await {
+                eprintln!("conn erro: {e}");
+            }
+        });
+    }
 }

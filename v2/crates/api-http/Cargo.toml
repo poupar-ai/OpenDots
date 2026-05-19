@@ -52,6 +52,10 @@ thiserror = { workspace = true }
 # - rand_core/OsRng pra geração de chaves (entropy do SO).
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
+# Bind Unix socket (PROJECT_MEM_BIND_UNIX). axum 0.7 só aceita TCP no
+# serve(), então fazemos accept loop manual com hyper direto.
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 
 [dev-dependencies]
 tempfile = "3"

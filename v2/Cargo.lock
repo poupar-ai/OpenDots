@@ -185,6 +185,8 @@ dependencies = [
  "domain-skills-install",
  "ed25519-dalek",
  "futures-util",
+ "hyper",
+ "hyper-util",
  "if-addrs",
  "mime_guess",
  "rand_core 0.6.4",

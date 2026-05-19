@@ -154,6 +154,25 @@ where
 
 // ── Helpers de integração com vault + agents.json ──────────────────────────
 
+/// Nome canônico do secret da privkey do agente no vault. Uppercase +
+/// underscore pra bater a regex de validação `[A-Z][A-Z0-9_]{0,63}` —
+/// vide vault_routes::secret_put. Caracteres não-alfanuméricos no nome
+/// do agente viram `_`. Single source of truth pra evitar drift entre
+/// `create_handler` (escreve) e `mint_token_for` (lê).
+pub fn privkey_secret_name(agent: &str) -> String {
+    let normalized: String = agent
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("AGENT_{normalized}_PRIVKEY")
+}
+
 /// Lê a privada do agente do vault, monta JWT pronto pra spawn. None
 /// se vault locked, secret ausente, ou hex inválido — caller decide se
 /// continua sem token (modo untrusted) ou aborta. TTL: 10 minutos.
@@ -162,7 +181,7 @@ pub fn mint_token_for(
     vault: &std::sync::Arc<dyn core_ports::VaultStore>,
     mem_dir: &std::path::Path,
 ) -> Option<String> {
-    let secret_name = format!("agent.{agent}.privkey");
+    let secret_name = privkey_secret_name(agent);
     let hex = vault.get_secret(mem_dir, &secret_name).ok()??;
     let priv_bytes = hex_to_bytes(&hex).ok()?;
     Some(sign_jwt(&priv_bytes, agent, 600))

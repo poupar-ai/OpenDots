@@ -49,7 +49,7 @@ export default function App() {
   const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [prefCollapsed, setPrefCollapsed] = useState(false);
-  const { data, err } = useData(10000, chatStreaming);
+  const { data, err, refresh } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -127,7 +127,10 @@ export default function App() {
         />
       )}
       {seedsOpen && (
-        <SeedsPanel onClose={() => setSeedsOpen(false)} />
+        <SeedsPanel
+          onClose={() => setSeedsOpen(false)}
+          onInstalled={refresh}
+        />
       )}
       {pipelinesOpen && (
         <PipelinesPanel

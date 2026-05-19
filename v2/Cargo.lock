@@ -203,6 +203,7 @@ dependencies = [
  "domain-seed",
  "domain-sigilo",
  "domain-skills-install",
+ "domain-training-export",
  "ed25519-dalek",
  "flate2",
  "futures-util",
@@ -788,6 +789,17 @@ name = "domain-skills-install"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "domain-training-export"
+version = "0.1.0"
+dependencies = [
+ "core-storage",
  "serde",
  "serde_json",
  "tempfile",

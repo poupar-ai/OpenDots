@@ -10,6 +10,12 @@ repository.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# Binary `bench` precisa, então sai de dev-dep.
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bin]]
+name = "bench"
+path = "src/bin/bench.rs"

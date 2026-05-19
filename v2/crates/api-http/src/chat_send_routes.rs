@@ -261,6 +261,29 @@ pub(crate) fn build_agent_env(
 
 // ── Channel size snapshot / violations ──────────────────────────────────────
 
+/// Grava 1 linha em `observations.jsonl` representando um turno de chat
+/// (vindo pela UI, handoff agente-a-agente, ou disparo de cron). Espelha
+/// o que o hook `PostToolUse` faz pra Edit/Write/Bash — fluxo de
+/// aprendizado fica completo independente do canal (CLI ou serviço web).
+///
+/// Falhas são silenciosas (mesma política dos hooks): o chat não pode
+/// quebrar por falha de I/O num side-channel de telemetria.
+pub(crate) fn record_chat_observation(mem_dir: &Path, obs: &Value) {
+    let _ = core_paths::append_jsonl(&mem_dir.join("observations.jsonl"), obs);
+}
+
+/// Trunca content pra um preview de N chars (boundary char-safe).
+pub(crate) fn preview_for_obs(s: &str, max_chars: usize) -> String {
+    let mut out = String::with_capacity(max_chars.min(s.len()));
+    for c in s.chars().take(max_chars) {
+        out.push(c);
+    }
+    if s.chars().count() > max_chars {
+        out.push('…');
+    }
+    out
+}
+
 /// Paridade com `snapshotChannelSizes` em `server.cjs:1074-1082`.
 pub(crate) fn snapshot_channel_sizes(mem_dir: &Path) -> BTreeMap<String, u64> {
     let mut out: BTreeMap<String, u64> = BTreeMap::new();
@@ -871,6 +894,21 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
             "model": agent_cfg.get("model").cloned().unwrap_or(Value::Null),
         }),
     );
+    // Alimenta o learning loop também pela UI/chat (não só pelos hooks do
+    // Claude Code CLI). Necessário pro futuro SaaS — uma instalação
+    // hospedada não tem PostToolUse hook acessível.
+    record_chat_observation(
+        &st.mem_dir,
+        &json!({
+            "ts":              user_ts,
+            "kind":            "chat_turn",
+            "role":            "user",
+            "agent":           agent,
+            "content_preview": preview_for_obs(message, 280),
+            "human_id":        human_profile.as_ref().and_then(|h| h.get("id")).cloned().unwrap_or(Value::Null),
+            "source":          "ui",
+        }),
+    );
     st.auto_queue.acquire(agent);
 
     // Build CLI args.
@@ -1256,6 +1294,23 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
                     "duration_ms": duration_ms,
                     "code": code,
                     "stderr_preview": preview_err,
+                    "sigilo_redacted": if sanitized.leaked { Some(true) } else { None },
+                }),
+            );
+            // Observation pro learning loop (mesmo fluxo dos hooks PostToolUse,
+            // mas vindo da camada HTTP). Permite que o sistema "sempre aprenda"
+            // mesmo quando o usuário interage só pela UI (= modo SaaS futuro).
+            record_chat_observation(
+                &mem_dir,
+                &json!({
+                    "ts":              agent_ts,
+                    "kind":            "chat_turn",
+                    "role":            "assistant",
+                    "agent":           agent_s,
+                    "content_preview": preview_for_obs(&persist_content, 280),
+                    "duration_ms":     duration_ms,
+                    "code":            code,
+                    "source":          "ui",
                     "sigilo_redacted": if sanitized.leaked { Some(true) } else { None },
                 }),
             );

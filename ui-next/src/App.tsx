@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { updateHuman } from '@/lib/humans';
@@ -19,6 +19,7 @@ import { ProtectionsPanel } from '@/panels/ProtectionsPanel';
 import { VaultPanel } from '@/panels/VaultPanel';
 import { NetworkPanel } from '@/panels/NetworkPanel';
 import { SubagentPanel } from '@/panels/SubagentPanel';
+import { CronPanel } from '@/panels/CronPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -47,6 +48,7 @@ export default function App() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [cronOpen, setCronOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [prefCollapsed, setPrefCollapsed] = useState(false);
   const { data, err, refresh } = useData(10000, chatStreaming);
@@ -164,6 +166,9 @@ export default function App() {
       {subagentsOpen && (
         <SubagentPanel onClose={() => setSubagentsOpen(false)} />
       )}
+      {cronOpen && (
+        <CronPanel onClose={() => setCronOpen(false)} agents={agents} />
+      )}
       {networkOpen && (
         <NetworkPanel onClose={() => setNetworkOpen(false)} />
       )}
@@ -276,6 +281,14 @@ export default function App() {
             title="subagents — workstreams paralelos disparados por agents"
           >
             <Activity className="h-4 w-4 text-indigo-600" /> subagents
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setCronOpen(true)}
+            title="agendamentos — jobs recorrentes via cron"
+          >
+            <Clock className="h-4 w-4 text-emerald-600" /> cron
           </Button>
           {human && (
             <Button

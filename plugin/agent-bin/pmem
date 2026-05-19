@@ -85,6 +85,59 @@ case "$cmd" in
     curl -sS "${BASE}/api/agents/subagent/${id}" \
       -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}"
     ;;
+  cron)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      schedule)
+        # cron schedule "<cron-expr>" <target> "<message>"
+        [[ $# -ge 3 ]] || die "uso: pmem cron schedule \"<cron-expr>\" <target> \"<message>\""
+        schedule="$1"; target="$2"; shift 2
+        msg="$*"
+        if command -v jq >/dev/null 2>&1; then
+          body=$(jq -n --arg s "$schedule" --arg t "$target" --arg m "$msg" \
+                 '{schedule:$s, target:$t, message:$m}')
+        else
+          body=$(printf '{"schedule":"%s","target":"%s","message":"%s"}' \
+                 "${schedule//\"/\\\"}" "${target//\"/\\\"}" "${msg//\"/\\\"}")
+        fi
+        curl -sS -X POST "${BASE}/api/cron" \
+          -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+          -H 'Content-Type: application/json' \
+          -d "$body"
+        ;;
+      list)
+        curl -sS "${BASE}/api/cron"
+        ;;
+      rm)
+        [[ $# -ge 1 ]] || die "uso: pmem cron rm <id>"
+        id="$1"
+        curl -sS -X DELETE "${BASE}/api/cron/${id}" \
+          -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}"
+        ;;
+      ""|help|-h|--help)
+        cat <<EOF
+pmem cron — agendamento recorrente.
+
+uso:
+  pmem cron schedule "<cron-expr>" <target> "<msg>"
+  pmem cron list
+  pmem cron rm <id>
+
+Formato cron 6-campo: sec min hora dom mês dow (0=domingo).
+Atalhos: @hourly, @daily, @weekly, @monthly, @yearly.
+
+Exemplos:
+  pmem cron schedule "@hourly" oracle "ronda de status"
+  pmem cron schedule "0 0 9 * * 1-5" oracle "bom dia, comece o dia"
+  pmem cron schedule "*/30 * * * * *" self "tick a cada 30s"
+EOF
+        [[ "$sub" == "" ]] && exit 1 || exit 0
+        ;;
+      *)
+        die "subcomando cron desconhecido: $sub (rode 'pmem cron help')"
+        ;;
+    esac
+    ;;
   ""|help|-h|--help)
     cat <<EOF
 pmem — wrapper auth pra API do project-memory (porta ${PORT}).
@@ -94,6 +147,7 @@ uso:
   pmem handoff-batch <json>          Batch (N msgs num único POST)
   pmem subagent <prompt> [tools]     Spawna subagent paralelo
   pmem poll <subagent_id>            Status/resultado de subagent
+  pmem cron <schedule|list|rm>       Agendamento recorrente (rode 'pmem cron' pra subcomandos)
 
 Token de auth e nome do agente vêm do env (injetado no spawn).
 Não use \$VAR diretamente — o sandbox do Claude Code bloqueia.

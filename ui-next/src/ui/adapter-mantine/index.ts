@@ -25,6 +25,12 @@ export type { ButtonProps } from './Button';
 export { TextInput } from './TextInput';
 export type { TextInputProps } from './TextInput';
 
+export { Select } from './Select';
+export type { SelectProps, SelectOption } from './Select';
+
+export { Textarea } from './Textarea';
+export type { TextareaProps } from './Textarea';
+
 export { ActionIcon } from './ActionIcon';
 export type { ActionIconProps } from './ActionIcon';
 

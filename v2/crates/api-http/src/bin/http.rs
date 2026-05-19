@@ -100,6 +100,11 @@ async fn main() -> ExitCode {
         }
     };
 
+    // Cron scheduler — feeder da AgentQueue. Lê `cron_jobs.jsonl` a cada
+    // 5s e enfileira jobs vencidos. Sem catchup: jobs perdidos durante
+    // downtime ficam pra próxima ocorrência válida.
+    api_http::cron_scheduler::spawn(state.clone());
+
     // Loop de reconciliação: a cada 60s, varre `running` da queue e
     // detecta turns que passaram do TTL (default 5 min). Zumbi volta
     // pra `pending` com retries+1; se passou de max_retries, vai pro

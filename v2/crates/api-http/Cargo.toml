@@ -23,6 +23,7 @@ domain-agents = { path = "../domain-agents" }
 domain-architect = { path = "../domain-architect" }
 domain-best-practices = { path = "../domain-best-practices" }
 domain-bus = { path = "../domain-bus" }
+domain-cron = { path = "../domain-cron" }
 domain-destructive = { path = "../domain-destructive" }
 domain-graph = { path = "../domain-graph" }
 domain-humans = { path = "../domain-humans" }

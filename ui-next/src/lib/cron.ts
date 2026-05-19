@@ -5,7 +5,9 @@ export interface CronJob {
   owner: string;
   target: string;
   message: string;
-  schedule: string;
+  schedule: string | null;
+  run_at_ms: number | null;
+  one_shot: boolean;
   created_at_ms: number;
   active: boolean;
   next_run_ms: number | null;
@@ -17,7 +19,12 @@ export interface CreateCronInput {
   owner: string;
   target: string;
   message: string;
-  schedule: string;
+  /** Recorrente (mutuamente exclusivo com run_in_seconds/run_at_ms). */
+  schedule?: string;
+  /** One-shot: dispara uma vez daqui a N segundos, auto-desativa. */
+  run_in_seconds?: number;
+  /** One-shot: timestamp absoluto (ms desde epoch). */
+  run_at_ms?: number;
 }
 
 export async function listCronJobs(includeInactive = false): Promise<CronJob[]> {

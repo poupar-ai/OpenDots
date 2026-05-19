@@ -71,10 +71,28 @@ async fn create_handler(
     let target = v.get("target").and_then(Value::as_str).unwrap_or("");
     let message = v.get("message").and_then(Value::as_str).unwrap_or("");
     let schedule = v.get("schedule").and_then(Value::as_str).unwrap_or("");
-    if target.is_empty() || message.is_empty() || schedule.is_empty() {
+    let run_at_ms = v.get("run_at_ms").and_then(Value::as_u64);
+    // Conveniência: `run_in_seconds` (relativo a agora) gera `run_at_ms`.
+    // Usado pelo wrapper pmem (`pmem cron at "2m" ...`) e pela UI
+    // ("Daqui a quanto tempo"). Aceita zero ou negativo? Sem clamp —
+    // o scheduler dispara no próximo tick se já passou.
+    let run_in_seconds = v.get("run_in_seconds").and_then(Value::as_i64);
+    let run_at_resolved = run_at_ms.or_else(|| {
+        run_in_seconds.map(|secs| {
+            let now = unix_now_ms() as i64;
+            (now + secs.saturating_mul(1000)).max(0) as u64
+        })
+    });
+    if target.is_empty() || message.is_empty() {
         return json_error(
             StatusCode::BAD_REQUEST,
-            "need {target, message, schedule}",
+            "need {target, message, [schedule | run_at_ms | run_in_seconds]}",
+        );
+    }
+    if schedule.is_empty() && run_at_resolved.is_none() {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "need either {schedule} (recorrente) ou {run_at_ms | run_in_seconds} (one-shot)",
         );
     }
 
@@ -87,7 +105,8 @@ async fn create_handler(
     let job = CronJob {
         id: gen_id(),
         owner,
-        schedule: schedule.to_string(),
+        schedule: if run_at_resolved.is_some() { String::new() } else { schedule.to_string() },
+        run_at_ms: run_at_resolved,
         action: JobAction::Chat {
             target: target.to_string(),
             message: message.to_string(),
@@ -224,7 +243,9 @@ fn job_to_json(j: &CronJob, _now: u64) -> Value {
         "owner":         j.owner,
         "target":        target,
         "message":       message,
-        "schedule":      j.schedule,
+        "schedule":      if j.schedule.is_empty() { Value::Null } else { Value::String(j.schedule.clone()) },
+        "run_at_ms":     j.run_at_ms,
+        "one_shot":      j.is_one_shot(),
         "created_at_ms": j.created_at_ms,
         "active":        j.active,
         "next_run_ms":   j.next_run_ms,

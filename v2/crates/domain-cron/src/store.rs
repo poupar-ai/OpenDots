@@ -48,14 +48,20 @@ pub fn load_state(mem_dir: &Path) -> Result<Vec<CronJob>, StoreError> {
 }
 
 /// Lista apenas jobs ativos, com `next_run_ms` calculado a partir de
-/// `now_ms` (= próxima execução >= now).
+/// `now_ms` (= próxima execução >= now). Pra one-shot, `next_run_ms` é o
+/// próprio `run_at_ms` (ou `None` se já passou e ainda não disparou —
+/// o scheduler vai pegar no próximo tick).
 pub fn list_active(mem_dir: &Path, now_ms: u64) -> Result<Vec<CronJob>, StoreError> {
     let mut jobs = load_state(mem_dir)?;
     jobs.retain(|j| j.active);
     for j in &mut jobs {
-        if let Ok(cron) = parser::parse(&j.schedule) {
-            j.next_run_ms = parser::next_run(&cron, now_ms.saturating_sub(1));
-        }
+        j.next_run_ms = if let Some(at) = j.run_at_ms {
+            Some(at)
+        } else if let Ok(cron) = parser::parse(&j.schedule) {
+            parser::next_run(&cron, now_ms.saturating_sub(1))
+        } else {
+            None
+        };
     }
     Ok(jobs)
 }
@@ -66,10 +72,27 @@ pub fn list_all(mem_dir: &Path) -> Result<Vec<CronJob>, StoreError> {
     load_state(mem_dir)
 }
 
-/// Cria um novo cron job. Valida schedule antes de persistir.
+/// Cria um novo cron job. Valida schedule (ou run_at_ms) antes de persistir.
+/// Exatamente um dos dois é obrigatório.
 pub fn create_job(mem_dir: &Path, mut job: CronJob) -> Result<CronJob, StoreError> {
-    // Valida schedule
-    parser::parse(&job.schedule)?;
+    match (job.schedule.is_empty(), job.run_at_ms.is_none()) {
+        (true, true) => {
+            return Err(StoreError::BadSchedule(parser::CronError::Empty));
+        }
+        (false, false) => {
+            // Tem ambos: tira o schedule, prioriza run_at_ms (one-shot).
+            job.schedule = String::new();
+        }
+        (false, true) => {
+            // Recorrente: valida cron expr
+            parser::parse(&job.schedule)?;
+        }
+        (true, false) => {
+            // One-shot: tudo certo. run_at_ms pode até estar no passado —
+            // o scheduler dispara no próximo tick. Caller pode bloquear
+            // valores nonsense (ex.: muito no passado).
+        }
+    }
     job.active = true;
     job.last_run_ms = None;
     job.next_run_ms = None;
@@ -100,7 +123,10 @@ pub fn deactivate_job(mem_dir: &Path, id: &str) -> Result<(), StoreError> {
 /// `last_runs` é o mapa `id → last_run_ms` mantido em memória pelo
 /// scheduler (sobrevive scheduler-loop mas não survive restart). Quando
 /// um job acabou de subir e ainda não tem entrada aqui, assumimos
-/// `last_run = now` (skip catchup) pra evitar fire imediato em restart.
+/// `last_run = now` pra evitar fire imediato em restart **só** pra
+/// recorrentes. **One-shots** ignoram esse skip-catchup: se
+/// `run_at_ms <= now`, dispara mesmo que `last_runs` esteja vazio —
+/// senão jobs criados via UI/CLI sumiriam sem disparar.
 pub fn due_jobs(
     mem_dir: &Path,
     now_ms: u64,
@@ -110,6 +136,17 @@ pub fn due_jobs(
     jobs.retain(|j| j.active);
     let mut out = Vec::new();
     for mut j in jobs {
+        // One-shot: dispara se run_at <= now e ainda não rodou.
+        if let Some(at) = j.run_at_ms {
+            let already_ran = last_runs.contains_key(&j.id);
+            if at <= now_ms && !already_ran {
+                j.last_run_ms = Some(now_ms);
+                j.next_run_ms = None;
+                out.push(j);
+            }
+            continue;
+        }
+        // Recorrente: baseline = last_run (memória) || now (skip catchup).
         let baseline = last_runs.get(&j.id).copied().unwrap_or(now_ms);
         let cron = match parser::parse(&j.schedule) {
             Ok(c) => c,
@@ -136,9 +173,27 @@ mod tests {
             id: id.into(),
             owner: owner.into(),
             schedule: schedule.into(),
+            run_at_ms: None,
             action: JobAction::Chat {
                 target: "oracle".into(),
                 message: "tick".into(),
+            },
+            created_at_ms: 1_700_000_000_000,
+            active: true,
+            last_run_ms: None,
+            next_run_ms: None,
+        }
+    }
+
+    fn mkjob_oneshot(id: &str, owner: &str, at_ms: u64) -> CronJob {
+        CronJob {
+            id: id.into(),
+            owner: owner.into(),
+            schedule: String::new(),
+            run_at_ms: Some(at_ms),
+            action: JobAction::Chat {
+                target: "oracle".into(),
+                message: "one-shot".into(),
             },
             created_at_ms: 1_700_000_000_000,
             active: true,
@@ -171,6 +226,28 @@ mod tests {
         let tmp = tempdir().unwrap();
         let err = create_job(tmp.path(), mkjob("j1", "manager", "lixo")).unwrap_err();
         matches!(err, StoreError::BadSchedule(_));
+    }
+
+    #[test]
+    fn one_shot_due_when_run_at_passes() {
+        let tmp = tempdir().unwrap();
+        let at = 1_700_000_010_000;
+        create_job(tmp.path(), mkjob_oneshot("j1", "manager", at)).unwrap();
+
+        // Antes de at_ms: não devido
+        let mut last_runs = BTreeMap::new();
+        let due = due_jobs(tmp.path(), at - 1, &last_runs).unwrap();
+        assert!(due.is_empty());
+
+        // No exato at_ms: devido, mesmo com last_runs vazio (one-shot ignora skip-catchup)
+        let due = due_jobs(tmp.path(), at, &last_runs).unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].id, "j1");
+
+        // Após registrar last_run, mesmo passando muito depois: não devido (já rodou)
+        last_runs.insert("j1".into(), at);
+        let due = due_jobs(tmp.path(), at + 10_000, &last_runs).unwrap();
+        assert!(due.is_empty());
     }
 
     #[test]

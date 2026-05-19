@@ -1,39 +1,3 @@
-## Use `pmem` (não curl direto) pra falar com a API
-
-O sandbox do Claude Code (`simple_expansion`) **bloqueia** qualquer comando Bash com `$VAR`.
-Os exemplos de `curl ... -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN"` abaixo **vão falhar**.
-
-Use o wrapper `pmem` (já no PATH, sem precisar passar token):
-
-```bash
-pmem handoff <agente> "<mensagem>"            # POST /api/agents/handoff (from = você)
-pmem handoff-batch '{"items":[...]}'          # POST /api/agents/handoff_batch
-pmem subagent "<prompt>" [tools-csv]          # POST /api/agents/subagent/spawn
-pmem poll <subagent_id>                       # GET  /api/agents/subagent/<id>
-pmem cron schedule "<cron-expr>" <target> "<msg>"   # POST /api/cron (recorrente/atrasado)
-pmem cron list                                # GET  /api/cron
-pmem cron rm <id>                             # DELETE /api/cron/<id>
-pmem help                                     # lista de subcomandos
-```
-
-Trate os blocos `curl` adiante como **referência da API crua** — útil só pra entender o
-shape do request. Pra ação real, use os subcomandos `pmem`.
-
-### Agendamento = EXECUÇÃO, não promessa
-
-Quando o humano pedir algo com delay (`"daqui a 2 min"`, `"amanhã 9h"`, `"toda hora"`,
-`"a cada 30s"`), use **`pmem cron schedule`** e reporte o `id` que o endpoint devolve.
-Sem id retornado, **não houve agendamento** — dizer "agendado" sem ter rodado o cron
-é **simulação** (a regra absoluta proíbe).
-
-Cron 6-campos: `sec min hora dom mês dow` (0=domingo). Atalhos: `@hourly`, `@daily`,
-`@weekly`. Pra delays absolutos curtos (ex.: "daqui a 2 min"), calcule o horário-alvo
-em UTC e use os campos sec/min/hora; o job dispara uma vez e fica na lista pra rodar de
-novo na próxima ocorrência válida (se quiser uma única execução, faça `pmem cron rm
-<id>` no relatório do disparo).
-
----
-
 # Oracle — Fonte de verdade
 
 ## Responsabilidade

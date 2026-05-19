@@ -56,10 +56,13 @@ export function CronPanel({ onClose, agents }: Props) {
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   // Form state
+  const [mode, setMode] = useState<'once' | 'recurring'>('once');
   const [owner, setOwner] = useState<string | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<string>('@hourly');
   const [customExpr, setCustomExpr] = useState<string>('');
+  const [delayValue, setDelayValue] = useState<string>('2');
+  const [delayUnit, setDelayUnit] = useState<string>('m');
   const [message, setMessage] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -113,10 +116,17 @@ export function CronPanel({ onClose, agents }: Props) {
   const resolvedSchedule =
     schedule === '__custom__' ? customExpr.trim() : schedule;
 
+  const delaySeconds = useMemo(() => {
+    const n = parseInt(delayValue, 10);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    const mult: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+    return n * (mult[delayUnit] || 1);
+  }, [delayValue, delayUnit]);
+
   const canSave =
     !!owner &&
     !!target &&
-    !!resolvedSchedule &&
+    (mode === 'recurring' ? !!resolvedSchedule : delaySeconds > 0) &&
     message.trim().length > 0 &&
     !saving;
 
@@ -126,13 +136,15 @@ export function CronPanel({ onClose, agents }: Props) {
     setSaveErr(null);
     setSavedFlash(null);
     try {
-      const created = await createCronJob({
-        owner,
-        target,
-        schedule: resolvedSchedule,
-        message: message.trim(),
-      });
-      setSavedFlash(`${created.id} criado — próximo: ${fmtAbsolute(created.next_run_ms)}`);
+      const created = await createCronJob(
+        mode === 'recurring'
+          ? { owner, target, schedule: resolvedSchedule, message: message.trim() }
+          : { owner, target, run_in_seconds: delaySeconds, message: message.trim() }
+      );
+      const when = created.one_shot
+        ? `dispara em ${fmtAbsolute(created.run_at_ms)}`
+        : `próximo: ${fmtAbsolute(created.next_run_ms)}`;
+      setSavedFlash(`${created.id} criado — ${when}`);
       setMessage('');
       await refresh();
     } catch (e: any) {
@@ -200,24 +212,66 @@ export function CronPanel({ onClose, agents }: Props) {
 
             <Box>
               <Select
-                label="Quando"
-                value={schedule}
-                onChange={(v) => setSchedule(v || '@hourly')}
-                data={scheduleOptions}
+                label="Modo"
+                value={mode}
+                onChange={(v) => setMode((v as 'once' | 'recurring') || 'once')}
+                data={[
+                  { value: 'once', label: 'Daqui a... (one-shot)' },
+                  { value: 'recurring', label: 'Recorrente (cron)' },
+                ]}
               />
-              {schedule === '__custom__' && (
-                <Box mt="xs">
-                  <TextInput
-                    value={customExpr}
-                    onChange={setCustomExpr}
-                    placeholder='cron 6-campo: ex. "0 30 9 * * 1-5" (9:30 dias úteis)'
-                  />
-                  <Text size="xs" muted>
-                    Formato: <code>sec min hora dom mês dow</code> · 0=domingo · suporta <code>*</code>, <code>N</code>, <code>N-M</code>, <code>N,M</code>, <code>*/N</code>
-                  </Text>
-                </Box>
-              )}
             </Box>
+
+            {mode === 'once' ? (
+              <Group gap="sm" align="flex-end">
+                <Box flex={1} style={{ minWidth: 100 }}>
+                  <TextInput
+                    value={delayValue}
+                    onChange={setDelayValue}
+                    placeholder="2"
+                    type="number"
+                  />
+                </Box>
+                <Box style={{ minWidth: 140 }}>
+                  <Select
+                    value={delayUnit}
+                    onChange={(v) => setDelayUnit(v || 'm')}
+                    data={[
+                      { value: 's', label: 'segundos' },
+                      { value: 'm', label: 'minutos' },
+                      { value: 'h', label: 'horas' },
+                      { value: 'd', label: 'dias' },
+                    ]}
+                  />
+                </Box>
+                {delaySeconds > 0 && (
+                  <Text size="xs" muted>
+                    dispara em {fmtAbsolute(Date.now() + delaySeconds * 1000)}
+                  </Text>
+                )}
+              </Group>
+            ) : (
+              <Box>
+                <Select
+                  label="Quando (recorrente)"
+                  value={schedule}
+                  onChange={(v) => setSchedule(v || '@hourly')}
+                  data={scheduleOptions}
+                />
+                {schedule === '__custom__' && (
+                  <Box mt="xs">
+                    <TextInput
+                      value={customExpr}
+                      onChange={setCustomExpr}
+                      placeholder='cron 6-campo: ex. "0 30 9 * * 1-5" (9:30 dias úteis)'
+                    />
+                    <Text size="xs" muted>
+                      Formato: <code>sec min hora dom mês dow</code> · 0=domingo · suporta <code>*</code>, <code>N</code>, <code>N-M</code>, <code>N,M</code>, <code>*/N</code>
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+            )}
 
             <Textarea
               label="Mensagem"
@@ -289,9 +343,13 @@ export function CronPanel({ onClose, agents }: Props) {
                     <Badge color="primary" variant="light">{j.owner}</Badge>
                     <Text size="sm" muted>→</Text>
                     <Badge color="info" variant="light">{j.target}</Badge>
-                    <Text size="xs" muted style={{ fontFamily: 'monospace' }}>
-                      {j.schedule}
-                    </Text>
+                    {j.one_shot ? (
+                      <Badge color="warning" variant="light">one-shot</Badge>
+                    ) : (
+                      <Text size="xs" muted style={{ fontFamily: 'monospace' }}>
+                        {j.schedule}
+                      </Text>
+                    )}
                   </Group>
                   <Box mt="xs">
                     <Text size="sm">{j.message}</Text>

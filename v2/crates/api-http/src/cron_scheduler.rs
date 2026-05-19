@@ -55,6 +55,11 @@ async fn tick(state: &AppState, last_runs: &Arc<Mutex<BTreeMap<String, u64>>>) {
         // bool — se falhar não é fatal, próximo tick tenta de novo.
         let _ = state.auto_queue.enqueue(&target, &job.owner, &message, None);
         guard.insert(job.id.clone(), now);
+        // One-shot: auto-desativa após o fire pra não tentar rodar de novo
+        // (e pra sumir da lista de jobs ativos na UI).
+        if job.is_one_shot() {
+            let _ = store::deactivate_job(&state.mem_dir, &job.id);
+        }
     }
 }
 

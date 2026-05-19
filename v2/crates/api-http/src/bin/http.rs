@@ -26,18 +26,16 @@ async fn main() -> ExitCode {
         .map(PathBuf::from)
         .or_else(|_| std::env::var("PWD").map(PathBuf::from))
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    // `mem_dir_base` define ONDE a memória mora — sempre derivado do cwd
-    // (git toplevel ou cwd cru), pra que `.claude-project-memory/` fique
-    // sempre junto do binário. Não usar `project_root` aqui: quando o
-    // project_root aponta pro pai (workspace), a memória fica perdida no
-    // pai e some quando o usuário troca o escopo.
+    // `mem_dir_base` é o clone do plugin (cwd ou git toplevel). Usado
+    // apenas como **bootstrap** pra encontrar scope.json (legado: o arquivo
+    // que diz qual é o project_root sempre nasce dentro do clone, antes da
+    // UI ajustar o escopo).
     let mem_dir_base = find_project_root(&cwd);
-    let mem_dir = std::env::var("PROJECT_MEM_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| mem_dir_base.join(MEM_DIR_NAME));
+    let scope_bootstrap_dir = mem_dir_base.join(MEM_DIR_NAME);
+
     // `project_root` (escopo do agente — cwd que ele recebe ao ser spawnado)
     // tem 3 fontes em ordem de prioridade:
-    //   1. `<mem_dir>/scope.json::project_root` — configurável pela UI.
+    //   1. `<scope_bootstrap_dir>/scope.json::project_root` — configurável pela UI.
     //   2. Smart default: se `cwd` é clone do plugin (tem `.claude-plugin/`),
     //      usa `cwd.parent()` — o clone é só armazenamento, o "projeto" de
     //      verdade é o workspace onde ele foi colocado.
@@ -49,7 +47,18 @@ async fn main() -> ExitCode {
     } else {
         mem_dir_base.clone()
     };
-    let project_root = read_scope_project_root(&mem_dir).unwrap_or(default_project_root);
+    let project_root = read_scope_project_root(&scope_bootstrap_dir).unwrap_or(default_project_root);
+
+    // `mem_dir` oficial é **project-scoped**, alinhado com hooks
+    // (session_init/observe/session_end), seeds_applier, MCP server e tudo
+    // mais que escreve memória. Versão anterior usava `mem_dir_base` —
+    // resultava em writers gravando em <project_root>/.claude-project-memory/
+    // enquanto a API lia de <clone>/.claude-project-memory/ (paths divergentes,
+    // agents/sessions/observations sumiam da UI). `PROJECT_MEM_DIR` ainda
+    // override pra testes/setups custom.
+    let mem_dir = std::env::var("PROJECT_MEM_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| project_root.join(MEM_DIR_NAME));
 
     // `ui-next/dist` mora **dentro do clone do plugin** (junto do binário),
     // NÃO no projeto-alvo. Quando o user ajusta `project_root` via UI pra

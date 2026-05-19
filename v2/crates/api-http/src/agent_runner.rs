@@ -163,6 +163,8 @@ async fn run_headless_turn(
     args.push("--".into());
     args.push(prompt);
 
+    // [ADR-001] Claude CLI hardcoded — vide docs/adr-001-multi-modelo.md
+    // pra contexto e plano de migração quando vier multi-provider.
     let mut cmd = TokioCommand::new("claude");
     cmd.args(&args)
         .current_dir(project_root)

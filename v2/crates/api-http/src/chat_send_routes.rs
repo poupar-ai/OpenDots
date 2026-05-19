@@ -872,6 +872,8 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
     let before_integrity = domain_integrity::snapshot(&plugin_dir, &st.mem_dir);
     let started = Instant::now();
 
+    // [ADR-001] Claude CLI hardcoded — vide docs/adr-001-multi-modelo.md
+    // pra contexto e plano de migração quando vier multi-provider.
     let mut cmd = TokioCommand::new("claude");
     cmd.args(&args)
         .current_dir(&st.project_root)

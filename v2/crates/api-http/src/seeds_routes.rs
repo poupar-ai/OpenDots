@@ -106,6 +106,10 @@ async fn seeds_apply(State(st): State<AppState>, body: Bytes) -> Response {
     let only = csv_field(v.get("only"));
     let exclude = csv_field(v.get("exclude"));
     let overwrite = v.get("overwrite").and_then(Value::as_bool).unwrap_or(false);
+    // `addNew`: quando true, agentes que colidem com nomes existentes são
+    // instalados com suffix (manager → manager-2/3/...). Mutuamente exclusivo
+    // com `overwrite` na UI; backend prioriza addNew se ambos vierem true.
+    let add_new = v.get("addNew").and_then(Value::as_bool).unwrap_or(false);
     // `skills`: pode ser array, bool, ou ausente.
     let skills_val = v.get("skills");
     let skills_names_owned: Option<Vec<String>> = skills_val.and_then(|sv| match sv {
@@ -141,6 +145,7 @@ async fn seeds_apply(State(st): State<AppState>, body: Bytes) -> Response {
         only: only.as_deref(),
         exclude: exclude.as_deref(),
         overwrite,
+        add_new,
         skills,
         ide,
     };

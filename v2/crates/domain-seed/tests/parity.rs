@@ -444,6 +444,8 @@ fn parity_apply_fresh() {
         only: None,
         exclude: None,
         overwrite: false,
+
+        add_new: false,
         skills: None,
         ide: None,
     })
@@ -483,6 +485,8 @@ fn parity_apply_with_filter() {
         only: Some("coder"),
         exclude: None,
         overwrite: false,
+
+        add_new: false,
         skills: None,
         ide: None,
     })
@@ -529,6 +533,8 @@ fn parity_apply_preserves_existing() {
         only: None,
         exclude: None,
         overwrite: false,
+
+        add_new: false,
         skills: None,
         ide: None,
     })
@@ -542,6 +548,8 @@ fn parity_apply_preserves_existing() {
         only: None,
         exclude: None,
         overwrite: false,
+
+        add_new: false,
         skills: None,
         ide: None,
     })
@@ -584,6 +592,8 @@ fn parity_apply_generates_identical_agents_json() {
         only: None,
         exclude: None,
         overwrite: false,
+
+        add_new: false,
         skills: None,
         ide: None,
     })

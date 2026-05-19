@@ -38,7 +38,9 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
 
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [picked, setPicked] = useState<Record<string, Set<string>>>({});
-  const [overwrite, setOverwrite] = useState(false);
+  // Conflict mode: "skip" (default), "overwrite" ou "add_new". Os 2 toggles
+  // são mutuamente exclusivos — ligar um desliga o outro.
+  const [conflictMode, setConflictMode] = useState<'skip' | 'overwrite' | 'add_new'>('skip');
   const [applying, setApplying] = useState<string | null>(null);
   const [result, setResult] = useState<{ ref: string; r: SeedApplyResult } | null>(null);
   const [applyErr, setApplyErr] = useState<string | null>(null);
@@ -89,7 +91,12 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
     try {
       const sel = getPicked(ref, allAgents);
       const only = sel.size === allAgents.length ? undefined : Array.from(sel);
-      const r = await applySeed({ ref, only, overwrite });
+      const r = await applySeed({
+        ref,
+        only,
+        overwrite: conflictMode === 'overwrite',
+        addNew: conflictMode === 'add_new',
+      });
       setResult({ ref, r });
       onInstalled?.();
     } catch (e: any) {
@@ -228,13 +235,26 @@ export function SeedsPanel({ onClose, onInstalled }: Props) {
 
                         <Divider />
 
-                        <Group justify="space-between" gap="md" align="center">
-                          <Switch
-                            checked={overwrite}
-                            onChange={setOverwrite}
-                            label="Sobrescrever existentes"
-                            size="sm"
-                          />
+                        <Group justify="space-between" gap="md" align="center" wrap="wrap">
+                          <Group gap="md" align="center">
+                            <Switch
+                              checked={conflictMode === 'overwrite'}
+                              onChange={(on) =>
+                                setConflictMode(on ? 'overwrite' : 'skip')
+                              }
+                              label="Sobrescrever existentes"
+                              size="sm"
+                            />
+                            <Switch
+                              checked={conflictMode === 'add_new'}
+                              onChange={(on) =>
+                                setConflictMode(on ? 'add_new' : 'skip')
+                              }
+                              label="Add as new (suffix -2, -3…)"
+                              size="sm"
+                              color="success"
+                            />
+                          </Group>
                           <Button
                             size="sm"
                             color="primary"

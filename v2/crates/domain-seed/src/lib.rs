@@ -239,8 +239,28 @@ pub struct ApplyInput<'a> {
     pub only: Option<&'a str>,
     pub exclude: Option<&'a str>,
     pub overwrite: bool,
+    /// Quando true E há colisão de nome, instala como agente novo com
+    /// suffix `-2`, `-3`, … (procura o próximo disponível). Mutuamente
+    /// exclusivo com `overwrite` na prática — UI garante.
+    pub add_new: bool,
     pub skills: Option<SkillsFilter>,
     pub ide: Option<&'a str>,
+}
+
+/// Computa o próximo nome disponível com suffix incremental.
+/// Se `base` não colide, retorna `base`. Senão tenta `base-2`, `base-3`, ...
+fn next_available_name(base: &str, existing: &Map<String, Value>) -> String {
+    if !existing.contains_key(base) {
+        return base.to_string();
+    }
+    let mut n: u32 = 2;
+    loop {
+        let candidate = format!("{base}-{n}");
+        if !existing.contains_key(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -266,6 +286,7 @@ pub fn apply(input: ApplyInput) -> Result<ApplyResult, Error> {
         only,
         exclude,
         overwrite,
+        add_new,
         skills,
         ide,
     } = input;
@@ -327,6 +348,10 @@ pub fn apply(input: ApplyInput) -> Result<ApplyResult, Error> {
     let mut replaced = Vec::new();
     let mut md_copied = Vec::new();
     let mut md_skipped = Vec::new();
+    // Mapeia nome de origem → nome final (após suffix, se aplicável). Usado
+    // pela seção `_meta.agent_origin` mais abaixo pra rastrear cada agente
+    // instalado de fato (incluindo os renomeados em modo add_new).
+    let mut final_names: Vec<(String, String)> = Vec::with_capacity(src_agents.len());
 
     for (name, cfg) in &src_agents {
         let target_agents = target
@@ -334,34 +359,73 @@ pub fn apply(input: ApplyInput) -> Result<ApplyResult, Error> {
             .and_then(Value::as_object_mut)
             .expect("garantido acima");
         let exists = target_agents.contains_key(name);
-        if exists && !overwrite {
-            skipped.push(name.clone());
+
+        // Resolve nome final + ação. Ordem de precedência: add_new > overwrite.
+        let (final_name, action): (String, &'static str) = if !exists {
+            (name.clone(), "added")
+        } else if add_new {
+            (next_available_name(name, target_agents), "added")
+        } else if overwrite {
+            (name.clone(), "replaced")
         } else {
-            target_agents.insert(name.clone(), cfg.clone());
-            if exists {
-                replaced.push(name.clone());
+            (name.clone(), "skipped")
+        };
+
+        let renamed = final_name != *name;
+
+        if action == "skipped" {
+            skipped.push(final_name.clone());
+        } else {
+            // Quando renomeado (final_name != name), ajusta `context_file` no
+            // cfg pra apontar pro .md com nome novo. Sem isso o agente
+            // carregaria o context_file do irmão original.
+            let mut cfg_to_write = cfg.clone();
+            if renamed {
+                if let Some(obj) = cfg_to_write.as_object_mut() {
+                    obj.insert(
+                        "context_file".into(),
+                        Value::String(format!("agents/{final_name}.md")),
+                    );
+                }
+            }
+            target_agents.insert(final_name.clone(), cfg_to_write);
+
+            if action == "replaced" {
+                replaced.push(final_name.clone());
             } else {
-                added.push(name.clone());
+                added.push(final_name.clone());
             }
         }
-        let rel = cfg
+        final_names.push((name.clone(), final_name.clone()));
+
+        // Copia o .md de origem pro destino. Em modo add_new, o destino tem
+        // o nome novo (`agents/manager-2.md`), então é "sempre novo arquivo".
+        // Quando skipped/replaced sem rename, respeita o flag overwrite —
+        // mantendo a paridade com o `.cjs` (skipped → md_skipped, replaced
+        // c/ overwrite → md_copied).
+        let src_rel = cfg
             .get("context_file")
             .and_then(Value::as_str)
             .map(String::from)
             .unwrap_or_else(|| format!("agents/{name}.md"));
-        let src_md = pack_ref.dir.join(&rel);
-        let dst_md = mem_dir.join(&rel);
+        let dst_rel = if renamed {
+            format!("agents/{final_name}.md")
+        } else {
+            src_rel.clone()
+        };
+        let src_md = pack_ref.dir.join(&src_rel);
+        let dst_md = mem_dir.join(&dst_rel);
         if src_md.exists() {
             if let Some(parent) = dst_md.parent() {
                 if !parent.exists() {
                     fs::create_dir_all(parent)?;
                 }
             }
-            if !dst_md.exists() || overwrite {
+            if !dst_md.exists() || overwrite || renamed {
                 fs::copy(&src_md, &dst_md)?;
-                md_copied.push(rel);
+                md_copied.push(dst_rel);
             } else {
-                md_skipped.push(rel);
+                md_skipped.push(dst_rel);
             }
         }
     }
@@ -402,11 +466,15 @@ pub fn apply(input: ApplyInput) -> Result<ApplyResult, Error> {
             .get_mut("agent_origin")
             .and_then(Value::as_object_mut)
             .unwrap();
-        for name in src_agents.keys() {
+        // Em modo add_new um agente renomeado (manager → manager-2) deve
+        // ficar registrado pelo nome final, senão `_meta.agent_origin/manager-2`
+        // some e o "manager" original (que veio de outro pack) seria
+        // sobrescrito incorretamente.
+        for (_src_name, final_name) in &final_names {
             let mut entry = Map::new();
             entry.insert("category".into(), Value::String(seed_category.to_string()));
             entry.insert("slug".into(), Value::String(seed_slug.to_string()));
-            origin.insert(name.clone(), Value::Object(entry));
+            origin.insert(final_name.clone(), Value::Object(entry));
         }
     }
 
@@ -722,6 +790,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -765,6 +834,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -779,6 +849,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -805,6 +876,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -819,12 +891,94 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: true,
+            add_new: false,
             skills: None,
             ide: None,
         })
         .unwrap();
         assert_eq!(r.replaced.len(), 2);
         assert!(r.skipped.is_empty());
+    }
+
+    #[test]
+    fn apply_add_new_suffixes_colliding_agents() {
+        let tmp = tempdir().unwrap();
+        seed_min(tmp.path());
+        let bp = setup_bp(tmp.path());
+        let proj = tmp.path().join("proj");
+        fs::create_dir_all(&proj).unwrap();
+
+        // 1ª instalação: coder + reviewer instalados pelo nome original.
+        let _ = apply(ApplyInput {
+            seeds_dir: &tmp.path().join("seeds"),
+            bp_dir: &bp,
+            reference: "dev/base",
+            project_root: &proj,
+            mem_dir_name: ".claude-project-memory",
+            only: None,
+            exclude: None,
+            overwrite: false,
+            add_new: false,
+            skills: None,
+            ide: None,
+        })
+        .unwrap();
+
+        // 2ª instalação com add_new: deve suffixar pra coder-2, reviewer-2.
+        let r = apply(ApplyInput {
+            seeds_dir: &tmp.path().join("seeds"),
+            bp_dir: &bp,
+            reference: "dev/base",
+            project_root: &proj,
+            mem_dir_name: ".claude-project-memory",
+            only: None,
+            exclude: None,
+            overwrite: false,
+            add_new: true,
+            skills: None,
+            ide: None,
+        })
+        .unwrap();
+        assert!(r.skipped.is_empty(), "skipped should be empty in add_new mode: {:?}", r.skipped);
+        assert!(r.replaced.is_empty(), "replaced should be empty: {:?}", r.replaced);
+        assert_eq!(r.added.len(), 2);
+        assert!(r.added.contains(&"coder-2".to_string()));
+        assert!(r.added.contains(&"reviewer-2".to_string()));
+
+        // 3ª: deve ir pra -3.
+        let r = apply(ApplyInput {
+            seeds_dir: &tmp.path().join("seeds"),
+            bp_dir: &bp,
+            reference: "dev/base",
+            project_root: &proj,
+            mem_dir_name: ".claude-project-memory",
+            only: None,
+            exclude: None,
+            overwrite: false,
+            add_new: true,
+            skills: None,
+            ide: None,
+        })
+        .unwrap();
+        assert!(r.added.contains(&"coder-3".to_string()));
+        assert!(r.added.contains(&"reviewer-3".to_string()));
+
+        // Verifica manifest no disco: context_file aponta pro .md certo,
+        // agent_origin tem os nomes finais.
+        let manifest: Value = serde_json::from_str(
+            &fs::read_to_string(proj.join(".claude-project-memory/agents.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            manifest.pointer("/agents/coder-2/context_file").and_then(Value::as_str),
+            Some("agents/coder-2.md"),
+        );
+        assert!(manifest.pointer("/_meta/agent_origin/coder-2").is_some());
+        assert!(manifest.pointer("/_meta/agent_origin/coder-3").is_some());
+
+        // .md files devem existir com nomes suffixados.
+        assert!(proj.join(".claude-project-memory/agents/coder-2.md").exists());
+        assert!(proj.join(".claude-project-memory/agents/reviewer-3.md").exists());
     }
 
     #[test]
@@ -844,6 +998,7 @@ mod tests {
             only: Some("coder"),
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -868,6 +1023,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })
@@ -894,6 +1050,7 @@ mod tests {
             only: None,
             exclude: None,
             overwrite: false,
+            add_new: false,
             skills: None,
             ide: None,
         })

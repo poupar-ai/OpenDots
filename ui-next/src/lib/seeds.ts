@@ -22,6 +22,9 @@ export interface SeedApplyInput {
   only?: string[];
   exclude?: string[];
   overwrite?: boolean;
+  /** Quando true, agentes que colidem viram `<name>-2`, `<name>-3`, etc.
+   *  Mutuamente exclusivo com `overwrite` na UI. */
+  addNew?: boolean;
   skills?: boolean | string[];
   ide?: 'claude-code' | 'cursor' | 'vscode-copilot' | 'codex' | null;
 }

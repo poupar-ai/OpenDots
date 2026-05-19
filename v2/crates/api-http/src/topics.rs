@@ -81,6 +81,60 @@ pub fn append_event(mem_dir: &Path, name: &str, ev: &serde_json::Value) -> std::
     writeln!(f, "{line}")
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn topic_name_aceita_kebab_snake_alfa() {
+        assert!(is_valid_topic_name("ci-events"));
+        assert!(is_valid_topic_name("alerts_v2"));
+        assert!(is_valid_topic_name("a"));
+        assert!(is_valid_topic_name("ABC123"));
+    }
+
+    #[test]
+    fn topic_name_rejeita_traversal_e_caracteres_perigosos() {
+        assert!(!is_valid_topic_name(""), "vazio");
+        assert!(!is_valid_topic_name("../etc"), "path traversal");
+        assert!(!is_valid_topic_name("a/b"), "barra");
+        assert!(!is_valid_topic_name("a b"), "espaço");
+        assert!(!is_valid_topic_name("a.b"), "ponto (esconde dotfiles)");
+        assert!(!is_valid_topic_name(".hidden"), "começa com dot");
+        assert!(!is_valid_topic_name("ola!"), "char especial");
+        let long: String = "x".repeat(65);
+        assert!(!is_valid_topic_name(&long), "limite 64 chars");
+    }
+
+    #[test]
+    fn subscribers_roundtrip_grava_e_le() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let mut subs = Subscribers::default();
+        subs.agents.insert("manager".into());
+        subs.agents.insert("oracle".into());
+        save_subscribers(tmp.path(), "ci-events", &subs).unwrap();
+        let loaded = load_subscribers(tmp.path(), "ci-events");
+        assert_eq!(loaded.agents.len(), 2);
+        assert!(loaded.agents.contains("manager"));
+        assert!(loaded.agents.contains("oracle"));
+    }
+
+    #[test]
+    fn list_topics_so_lista_dirs_validos() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Cria 3 topics + 1 arquivo solto + 1 hidden — só os 3 dirs
+        // válidos devem aparecer.
+        for t in ["alerts", "ci-events", "deploys"] {
+            save_subscribers(tmp.path(), t, &Subscribers::default()).unwrap();
+        }
+        std::fs::write(tmp.path().join("topics").join("not-a-dir.txt"), "x").ok();
+        std::fs::create_dir_all(tmp.path().join("topics").join(".hidden")).ok();
+        let mut topics = list_topics(tmp.path());
+        topics.sort();
+        assert_eq!(topics, vec!["alerts", "ci-events", "deploys"]);
+    }
+}
+
 pub fn list_topics(mem_dir: &Path) -> Vec<String> {
     let dir = topics_dir(mem_dir);
     let Ok(entries) = fs::read_dir(&dir) else {

@@ -134,3 +134,64 @@ fn simple_uuid_v4() -> String {
         u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]]) & 0xffff_ffff_ffff,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn uuid_v4_tem_formato_canonico() {
+        let s = simple_uuid_v4();
+        // 8-4-4-4-12 = 36 chars total incluindo hífens.
+        assert_eq!(s.len(), 36, "formato: {s}");
+        let parts: Vec<&str> = s.split('-').collect();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(parts[0].len(), 8);
+        assert_eq!(parts[1].len(), 4);
+        assert_eq!(parts[2].len(), 4);
+        assert_eq!(parts[3].len(), 4);
+        assert_eq!(parts[4].len(), 12);
+        // Versão 4: primeiro nibble do parts[2] = '4'.
+        assert_eq!(&parts[2][0..1], "4", "version 4: {s}");
+        // Variant RFC 4122: primeiro nibble do parts[3] em {8,9,a,b}.
+        let variant = parts[3].chars().next().unwrap();
+        assert!(matches!(variant, '8' | '9' | 'a' | 'b'), "variant: {s}");
+    }
+
+    #[test]
+    fn uuid_v4_gera_1000_unicos() {
+        let mut seen = HashSet::new();
+        for _ in 0..1000 {
+            // Sleep pra forçar nanos diferentes (entropia depende disso).
+            std::thread::sleep(std::time::Duration::from_micros(1));
+            let s = simple_uuid_v4();
+            assert!(seen.insert(s), "colisão em 1000 chamadas");
+        }
+        assert_eq!(seen.len(), 1000);
+    }
+
+    #[test]
+    fn token_preview_mostra_head_e_tail() {
+        let t = "abcdef1234567890";
+        let p = token_preview(t);
+        assert!(p.starts_with("abcd"));
+        assert!(p.ends_with("7890"));
+        assert!(p.contains("…"));
+        // Token curto vira mascaramento total.
+        assert_eq!(token_preview("abc"), "***");
+    }
+
+    #[test]
+    fn save_then_load_token_roundtrip() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Nada gravado → None.
+        assert!(load_server_token(tmp.path()).is_none());
+        // Grava.
+        save_server_token(tmp.path(), Some("xyz-token")).unwrap();
+        assert_eq!(load_server_token(tmp.path()).as_deref(), Some("xyz-token"));
+        // Apaga.
+        save_server_token(tmp.path(), None).unwrap();
+        assert!(load_server_token(tmp.path()).is_none());
+    }
+}

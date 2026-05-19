@@ -88,3 +88,63 @@ impl TraceIndex {
         self.by_trace.lock().unwrap().is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{emit, SystemClock};
+    use serde_json::json;
+
+    #[test]
+    fn record_then_get_returns_trace_summary() {
+        let idx = TraceIndex::new();
+        idx.record(&json!({"type":"created","trace_id":"t-1","from":"a","to":"b"}));
+        idx.record(&json!({"type":"delivered","trace_id":"t-1","to":"b","from":"a"}));
+        idx.record(&json!({"type":"acked","trace_id":"t-1","by":"b"}));
+        let summary = idx.get_trace("t-1").expect("trace deveria estar indexado");
+        assert!(summary.created.is_some(), "created event esperado");
+        assert_eq!(summary.events.len(), 3);
+        // attempts conta delivered+retry (vide trace_summary).
+        assert_eq!(summary.attempts, 1);
+        assert!(idx.get_trace("t-nao-existe").is_none());
+        assert_eq!(idx.len(), 1);
+    }
+
+    #[test]
+    fn record_skips_events_without_trace_id() {
+        let idx = TraceIndex::new();
+        idx.record(&json!({"type":"noise","not_a_trace":"x"}));
+        assert!(idx.is_empty());
+    }
+
+    #[test]
+    fn build_from_disk_populates_from_events_jsonl() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let clock = SystemClock;
+        // Emit eventos com diferentes trace_ids; emit grava no disco.
+        emit(
+            tmp.path(),
+            &json!({"type":"created","trace_id":"trace-A","from":"x","to":"y"}),
+            &clock,
+        );
+        emit(
+            tmp.path(),
+            &json!({"type":"created","trace_id":"trace-B","from":"x","to":"z"}),
+            &clock,
+        );
+        emit(
+            tmp.path(),
+            &json!({"type":"delivered","trace_id":"trace-A","to":"y","from":"x"}),
+            &clock,
+        );
+
+        let idx = TraceIndex::new();
+        idx.build_from_disk(tmp.path(), 30, &clock);
+
+        assert_eq!(idx.len(), 2, "esperava 2 traces indexados");
+        let sa = idx.get_trace("trace-A").unwrap();
+        assert_eq!(sa.events.len(), 2);
+        let sb = idx.get_trace("trace-B").unwrap();
+        assert_eq!(sb.events.len(), 1);
+    }
+}

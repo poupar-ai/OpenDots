@@ -276,42 +276,42 @@ async fn handoff_handler(
     }
     let message = message_opt.unwrap();
 
-    // Fase C — verificação de identidade via JWT EdDSA.
-    // Bearer presente: valida com pubkey do agent declarado, sobrescreve
-    // `from` com o do claim. Se body.from != claim.agent → 403 (tentou
-    // assinar como X mas declarou Y no body).
-    // Bearer ausente: aceita com `from` do body (compat retro pra agentes
-    // sem keypair), mas marca como untrusted no log.
+    // Fase C — JWT EdDSA OBRIGATÓRIO. Sem header = 401, sem fallback.
+    // Segurança não pode depender do prompt do agente lembrar de
+    // adicionar o Bearer: confiança em prompt é brecha. O server
+    // garante; quem não consegue assinar (vault locked, agente legacy
+    // pré-keypair, atacante externo) não consegue chamar handoff.
+    //
+    // Body.from é IGNORADO — `from` autoritativo vem do claim. Mesmo
+    // assim validamos consistência: se body declara X mas token assina
+    // como Y, é tentativa de impersonação ou agente confuso → 403.
     let bearer = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "));
-    let mem_dir_for_lookup = st.mem_dir.clone();
-    let (from, untrusted) = match bearer {
-        Some(token) => {
-            match crate::agent_keys::verify_jwt(token, |name| {
-                crate::agent_keys::lookup_pubkey(&mem_dir_for_lookup, name)
-            }) {
-                Ok(claims) => {
-                    if !body_from.is_empty() && body_from != claims.agent {
-                        return json_error(
-                            StatusCode::FORBIDDEN,
-                            "body.from não bate com agent do token JWT",
-                        );
-                    }
-                    (claims.agent, false)
-                }
-                Err(e) => {
-                    return json_error(
-                        StatusCode::UNAUTHORIZED,
-                        &format!("JWT inválido: {e}"),
-                    );
-                }
-            }
-        }
-        None => (body_from.to_string(), true),
+    let Some(token) = bearer else {
+        return json_error(
+            StatusCode::UNAUTHORIZED,
+            "Authorization: Bearer <JWT> obrigatório — agente sem keypair? recrie com vault destrancado.",
+        );
     };
-    let from = from.as_str();
+    let mem_dir_for_lookup = st.mem_dir.clone();
+    let claims = match crate::agent_keys::verify_jwt(token, |name| {
+        crate::agent_keys::lookup_pubkey(&mem_dir_for_lookup, name)
+    }) {
+        Ok(c) => c,
+        Err(e) => {
+            return json_error(StatusCode::UNAUTHORIZED, &format!("JWT inválido: {e}"));
+        }
+    };
+    if !body_from.is_empty() && body_from != claims.agent {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "body.from não bate com agent do token JWT (impersonação?)",
+        );
+    }
+    let from_owned = claims.agent;
+    let from = from_owned.as_str();
 
     // intent validation: if body.intent present and not in set → 400 (order
     // matches node: intent validated BEFORE computing default).
@@ -543,10 +543,6 @@ async fn handoff_handler(
             .clone()
             .map(Value::String)
             .unwrap_or(Value::Null),
-    );
-    log_out.insert(
-        "auth".into(),
-        Value::String(if untrusted { "untrusted".into() } else { "signed".into() }),
     );
     append_agent_log(&st.mem_dir, from, &Value::Object(log_out));
 

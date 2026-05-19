@@ -10,6 +10,7 @@
 pub mod agent_runner;
 pub mod agents_routes;
 pub mod auth;
+pub mod auth_routes;
 pub mod best_practices_routes;
 pub mod chat_routes;
 pub mod chat_send_routes;
@@ -231,6 +232,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(pipelines_routes::pipelines_router())
         .merge(misc_routes::misc_router())
         .merge(scope_routes::scope_router())
+        .merge(auth_routes::auth_router())
         .merge(humans_routes::humans_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())

@@ -1,30 +1,52 @@
-//! Middleware de auth — resolve a request num `TenantContext`.
+//! Middleware de auth — resolve a request num `TenantContext` e (opt-in)
+//! exige Bearer token global do servidor.
 //!
-//! Hoje single-tenant: lê (opcionalmente) `Authorization: Bearer <token>`
-//! e ignora o valor, retornando sempre o tenant `default`. Sem header
-//! também → `default`. Logging zero pra não poluir.
+//! Single-tenant hoje. Bearer enforcement é OPT-IN via env
+//! `PROJECT_MEM_REQUIRE_TOKEN=1`:
+//!   - Off (default): comportamento atual, sem auth header obrigatório.
+//!   - On: middleware rejeita 401 quando header ausente/inválido —
+//!     EXCETO em rotas whitelistadas (status do token, init de vault)
+//!     pra UI conseguir bootstrappar.
 //!
-//! Quando multi-tenancy real ativar:
-//!   1. Substituir `resolve_tenant` por lookup numa tabela token→tenant_id
-//!   2. Retornar 401 quando o token não bate
-//!   3. Endpoints públicos (ex.: UI local) podem ser whitelistados antes
-//!
-//! Handlers acessam via `Extension<TenantContext>` no signature.
+//! Quando multi-tenancy real ativar, substitui o resolve_tenant aqui.
 
+use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, Response as HttpResponse, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 
+use crate::auth_routes::load_server_token;
 use crate::tenant::TenantContext;
 use crate::AppState;
 
-/// Resolve o tenant baseado nos headers da request.
-/// Single-tenant hoje: sempre `default_for(state.mem_dir)`.
+/// Rotas que NUNCA exigem token — UI precisa conseguir ler o status
+/// inicial pra orientar o user a configurar.
+const WHITELIST_PREFIXES: &[&str] = &[
+    "/api/auth/server-token", // GET status / preview
+    "/",                       // serve_index
+];
+
+fn is_whitelisted(path: &str) -> bool {
+    WHITELIST_PREFIXES.iter().any(|p| path == *p || path.starts_with(&format!("{p}/")))
+}
+
 fn resolve_tenant(_headers: &HeaderMap, state: &AppState) -> TenantContext {
-    // Futuro: ler "Authorization: Bearer <token>", buscar em DB, etc.
-    // Hoje, sem efeito — devolve default.
+    // Hoje sempre default; futuro: lookup token → tenant.
     TenantContext::default_for(&state.mem_dir)
+}
+
+fn unauthorized(msg: &str) -> Response {
+    let body = format!(r#"{{"error":"{msg}"}}"#);
+    HttpResponse::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn require_token_enabled() -> bool {
+    std::env::var("PROJECT_MEM_REQUIRE_TOKEN").ok().as_deref() == Some("1")
 }
 
 pub async fn auth_middleware(
@@ -32,6 +54,25 @@ pub async fn auth_middleware(
     mut req: Request,
     next: Next,
 ) -> Response {
+    // Bearer enforcement opcional.
+    if require_token_enabled() && !is_whitelisted(req.uri().path()) {
+        let expected = load_server_token(&state.mem_dir);
+        // Sem token configurado mas enforcement ligado = sistema fechado.
+        // Mensagem distinta pra UI orientar a gerar.
+        let Some(expected) = expected else {
+            return unauthorized("server_token não configurado — gere em /api/auth/server-token/generate");
+        };
+        let got = req
+            .headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "));
+        match got {
+            Some(t) if t == expected => {}
+            _ => return unauthorized("Authorization: Bearer <token> ausente ou inválido"),
+        }
+    }
+
     let tenant = resolve_tenant(req.headers(), &state);
     req.extensions_mut().insert(tenant);
     next.run(req).await

@@ -26,9 +26,13 @@ import {
   Check,
   Copy,
   FolderOpen,
+  KeyRound,
   Network as NetworkIcon,
+  RefreshCw,
   Save,
+  Trash2,
 } from 'lucide-react';
+import { apiFetch, getServerToken, setServerToken } from '@/lib/api';
 
 interface Props {
   onClose: () => void;
@@ -60,6 +64,12 @@ interface ScopeSuggestions {
   siblings: string[];
 }
 
+interface AuthInfo {
+  configured: boolean;
+  preview: string | null;
+  enforced: boolean;
+}
+
 export function NetworkPanel({ onClose }: Props) {
   const [cfg, setCfg] = useState<NetworkConfig | null>(null);
   const [mode, setMode] = useState<BindMode>('localhost');
@@ -67,6 +77,11 @@ export function NetworkPanel({ onClose }: Props) {
   const [scope, setScope] = useState<ScopeConfig | null>(null);
   const [projectRoot, setProjectRoot] = useState('');
   const [suggestions, setSuggestions] = useState<ScopeSuggestions | null>(null);
+  const [auth, setAuth] = useState<AuthInfo | null>(null);
+  const [localToken, setLocalToken] = useState(getServerToken() || '');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMsg, setAuthMsg] = useState<string | null>(null);
+  const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [savingScope, setSavingScope] = useState(false);
   const [scopeMsg, setScopeMsg] = useState<string | null>(null);
   const [scopeErr, setScopeErr] = useState<string | null>(null);
@@ -79,14 +94,16 @@ export function NetworkPanel({ onClose }: Props) {
     let alive = true;
     (async () => {
       try {
-        const [rNet, rScope, rSugg] = await Promise.all([
-          fetch('/api/network-config'),
-          fetch('/api/scope'),
-          fetch('/api/scope/suggestions'),
+        const [rNet, rScope, rSugg, rAuth] = await Promise.all([
+          apiFetch('/api/network-config'),
+          apiFetch('/api/scope'),
+          apiFetch('/api/scope/suggestions'),
+          apiFetch('/api/auth/server-token'),
         ]);
         const j = await rNet.json();
         const s = await rScope.json();
         const sg = await rSugg.json();
+        const a = await rAuth.json();
         if (!alive) return;
         setCfg(j);
         setMode(j.bind);
@@ -94,6 +111,7 @@ export function NetworkPanel({ onClose }: Props) {
         setScope(s);
         setProjectRoot(s.project_root || '');
         setSuggestions(sg);
+        setAuth(a);
       } catch (e: any) {
         if (alive) setErr(e?.message || 'falha ao carregar');
       } finally {
@@ -104,6 +122,51 @@ export function NetworkPanel({ onClose }: Props) {
       alive = false;
     };
   }, []);
+
+  const generateToken = async () => {
+    setAuthBusy(true);
+    setAuthMsg(null);
+    try {
+      const r = await apiFetch('/api/auth/server-token/generate', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setRevealedToken(j.token);
+      setLocalToken(j.token);
+      setServerToken(j.token);
+      setAuth({ configured: true, preview: j.preview, enforced: auth?.enforced || false });
+      setAuthMsg('Token gerado e salvo no navegador. Copie agora — só essa vez.');
+    } catch (e: any) {
+      setAuthMsg(e?.message || 'falha ao gerar');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const removeToken = async () => {
+    setAuthBusy(true);
+    setAuthMsg(null);
+    try {
+      const r = await apiFetch('/api/auth/server-token', { method: 'DELETE' });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      setRevealedToken(null);
+      setLocalToken('');
+      setServerToken(null);
+      setAuth({ configured: false, preview: null, enforced: auth?.enforced || false });
+      setAuthMsg('Token removido do servidor e do navegador.');
+    } catch (e: any) {
+      setAuthMsg(e?.message || 'falha ao remover');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const applyLocalToken = () => {
+    setServerToken(localToken.trim() || null);
+    setAuthMsg('Token do navegador atualizado.');
+  };
 
   const saveScope = async () => {
     setSavingScope(true);
@@ -263,6 +326,96 @@ export function NetworkPanel({ onClose }: Props) {
               {scopeMsg && (
                 <Box mt="xs">
                   <Alert color="success">{scopeMsg}</Alert>
+                </Box>
+              )}
+            </Paper>
+          )}
+
+          {auth && (
+            <Paper withBorder padding="md">
+              <Group gap="xs">
+                <KeyRound size={14} />
+                <Text size="sm" fw={600}>
+                  Token de auth do servidor
+                </Text>
+                <Badge size="xs" color={auth.enforced ? 'warning' : 'gray'}>
+                  {auth.enforced ? 'enforcement ON' : 'opt-in (env off)'}
+                </Badge>
+                {auth.configured && (
+                  <Badge size="xs" color="primary">
+                    configurado
+                  </Badge>
+                )}
+              </Group>
+              <Box mt="xs">
+                <Text size="xs" muted>
+                  Quando o servidor roda com <Code>PROJECT_MEM_REQUIRE_TOKEN=1</Code>, qualquer
+                  request (exceto rotas de bootstrap) precisa de{' '}
+                  <Code>Authorization: Bearer &lt;token&gt;</Code>. Útil pra expor o servidor
+                  fora de localhost. Sem a env ligada, o token configurado é ignorado.
+                </Text>
+              </Box>
+              {auth.configured && auth.preview && (
+                <Box mt="xs">
+                  <Text size="xs" muted>
+                    no servidor: <Code>{auth.preview}</Code>
+                  </Text>
+                </Box>
+              )}
+              {revealedToken && (
+                <Box mt="xs">
+                  <Alert color="warning" title="Copie agora — só dessa vez">
+                    <Code style={{ wordBreak: 'break-all' }}>{revealedToken}</Code>
+                  </Alert>
+                </Box>
+              )}
+              <Box mt="xs">
+                <Group gap="xs" align="flex-end">
+                  <TextInput
+                    flex={1}
+                    value={localToken}
+                    onChange={setLocalToken}
+                    placeholder="cole/edite o token usado pelo navegador"
+                    spellCheck={false}
+                    type="password"
+                  />
+                  <Button
+                    variant="default"
+                    color="gray"
+                    onClick={applyLocalToken}
+                    disabled={localToken === (getServerToken() || '')}
+                  >
+                    aplicar local
+                  </Button>
+                </Group>
+              </Box>
+              <Box mt="xs">
+                <Group gap="xs">
+                  <Button
+                    leftIcon={<RefreshCw size={14} />}
+                    loading={authBusy}
+                    onClick={generateToken}
+                  >
+                    {auth.configured ? 'gerar novo' : 'gerar token'}
+                  </Button>
+                  {auth.configured && (
+                    <Button
+                      leftIcon={<Trash2 size={14} />}
+                      variant="default"
+                      color="danger"
+                      loading={authBusy}
+                      onClick={removeToken}
+                    >
+                      remover
+                    </Button>
+                  )}
+                </Group>
+              </Box>
+              {authMsg && (
+                <Box mt="xs">
+                  <Alert color={authMsg.includes('falha') ? 'danger' : 'success'}>
+                    {authMsg}
+                  </Alert>
                 </Box>
               )}
             </Paper>

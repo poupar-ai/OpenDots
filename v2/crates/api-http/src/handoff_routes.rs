@@ -250,9 +250,14 @@ fn try_auto_escalate_blocker(
             "chars": message.len(),
         }),
     );
-    let _ = state
-        .auto_queue
-        .enqueue("internal_firefighter", from_agent, &composed, None);
+    // Auto-escalation pra bombeiro = High priority (cobre blocker detectado).
+    let _ = state.auto_queue.enqueue_with(
+        "internal_firefighter",
+        from_agent,
+        &composed,
+        None,
+        core_queue::Priority::High,
+    );
     Some((ts, det.signals))
 }
 
@@ -482,9 +487,14 @@ async fn handoff_handler(
                     "hits": det.hits.iter().map(|h| h.to_json()).collect::<Vec<_>>(),
                 }),
             );
-            let _ = st
-                .auto_queue
-                .enqueue("internal_firefighter", from, &composed, None);
+            // Destrutivo bloqueado vai pro firefighter como High também.
+            let _ = st.auto_queue.enqueue_with(
+                "internal_firefighter",
+                from,
+                &composed,
+                None,
+                core_queue::Priority::High,
+            );
         }
         return json_response(
             StatusCode::FORBIDDEN,
@@ -632,7 +642,15 @@ async fn handoff_handler(
     }
 
     // ── Enqueue auto-turn normal ────────────────────────────────────────────
-    let _ = st.auto_queue.enqueue(to, from, message, Some(&trace_id));
+    // Prioridade vem do body opcionalmente (`"priority": "high|normal|low"`).
+    // Default Normal. Auto-escalation de bombeiro usa High (vide
+    // tryAutoEscalateBlocker logo abaixo, que chama enqueue diretamente).
+    let priority = v
+        .get("priority")
+        .and_then(Value::as_str)
+        .map(core_queue::Priority::parse)
+        .unwrap_or(core_queue::Priority::Normal);
+    let _ = st.auto_queue.enqueue_with(to, from, message, Some(&trace_id), priority);
 
     // ── Auto-escalação de blocker ───────────────────────────────────────────
     let escalation = try_auto_escalate_blocker(&st, &manifest, from, to, message, &ts);

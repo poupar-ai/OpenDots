@@ -198,6 +198,11 @@ pub struct AgentQueueConfig {
     /// Após N tentativas, entry vai pro `dead.jsonl` em vez de voltar
     /// pra pending.
     pub max_retries: u8,
+    /// Idade máxima de uma mensagem em `pending` — passou disso e ainda
+    /// não foi pro runner, vai pro dead.jsonl com reason="expired".
+    /// Cobre o caso "intent tempo-crítico ficou esperando demais
+    /// porque agente alvo estava ocupado/inativo".
+    pub message_max_age: Duration,
     /// Hook chamado quando um item é movido pra dead-letter.
     pub on_dead_letter: Option<Hook<DeadLetterEvent>>,
 }
@@ -218,12 +223,56 @@ impl AgentQueueConfig {
             state_dir: None,
             turn_ttl: Duration::from_secs(300), // 5 min
             max_retries: 3,
+            message_max_age: Duration::from_secs(3600), // 1h
             on_dead_letter: None,
         }
     }
 }
 
 // ─── Estado interno ──────────────────────────────────────────────────
+
+/// Prioridade do entry. Menor número = maior prioridade. Default
+/// `Normal`. Inserção em pending mantém ordem por prioridade (estável
+/// dentro de cada nível). Auto-escalações de bombeiro = High; humano
+/// no chat = Normal; auto-handoff entre agentes = Low.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Priority {
+    High,
+    Normal,
+    Low,
+}
+
+impl Default for Priority {
+    fn default() -> Self {
+        Priority::Normal
+    }
+}
+
+impl Priority {
+    fn as_u8(self) -> u8 {
+        match self {
+            Priority::High => 0,
+            Priority::Normal => 1,
+            Priority::Low => 2,
+        }
+    }
+    fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Priority::High,
+            2 => Priority::Low,
+            _ => Priority::Normal,
+        }
+    }
+    /// Parse de string vinda do HTTP — `"high"|"normal"|"low"` (case
+    /// insensitive). Default Normal.
+    pub fn parse(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "high" | "urgent" | "h" => Priority::High,
+            "low" | "l" => Priority::Low,
+            _ => Priority::Normal,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Entry {
@@ -236,6 +285,8 @@ struct Entry {
     /// Quantas vezes esse item já tentou rodar e falhou (zumbi). 0 na
     /// primeira tentativa.
     retries: u8,
+    /// Prioridade da entrega.
+    priority: Priority,
 }
 
 #[derive(Clone)]
@@ -266,6 +317,8 @@ struct PersistedEntry {
     trace_id: Option<String>,
     enqueued_at_ms: u64,
     retries: u8,
+    #[serde(default)]
+    priority: u8,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -316,6 +369,7 @@ fn persist_state(state_dir: &Path, st: &State) {
                             trace_id: e.trace_id.clone(),
                             enqueued_at_ms: e.enqueued_at_ms,
                             retries: e.retries,
+                            priority: e.priority.as_u8(),
                         })
                         .collect(),
                 )
@@ -373,6 +427,7 @@ fn restore_state(state_dir: &Path) -> State {
                             trace_id: e.trace_id,
                             enqueued_at_ms: e.enqueued_at_ms,
                             retries: e.retries,
+                            priority: Priority::from_u8(e.priority),
                         })
                         .collect(),
                 )
@@ -459,15 +514,28 @@ impl AgentQueue {
         }
     }
 
-    /// Enfileira um turn. Retorna `false` se args vazios ou rate-limit
-    /// atingido. Spawn do drain acontece via `tokio::spawn` (equivalente
-    /// a `setImmediate` do `.cjs` — mesmo contrato de "processa depois").
+    /// Enfileira um turn com prioridade Normal. Wrapper sobre
+    /// [`Self::enqueue_with`] pra preservar a API antiga.
     pub fn enqueue(
         self: &Arc<Self>,
         to_agent: &str,
         from_agent: &str,
         message: &str,
         trace_id: Option<&str>,
+    ) -> bool {
+        self.enqueue_with(to_agent, from_agent, message, trace_id, Priority::Normal)
+    }
+
+    /// Enfileira com prioridade explícita. Insere mantendo a fila
+    /// ordenada por prioridade (estável dentro do mesmo nível —
+    /// posicionada no fim do bloco da prioridade dela).
+    pub fn enqueue_with(
+        self: &Arc<Self>,
+        to_agent: &str,
+        from_agent: &str,
+        message: &str,
+        trace_id: Option<&str>,
+        priority: Priority,
     ) -> bool {
         if to_agent.is_empty() || from_agent.is_empty() {
             return false;
@@ -486,16 +554,27 @@ impl AgentQueue {
             return false;
         }
 
+        let new_entry = Entry {
+            from_agent: from_agent.to_string(),
+            message: message.to_string(),
+            trace_id: trace_id.map(String::from),
+            enqueued_at_ms: unix_now_ms(),
+            retries: 0,
+            priority,
+        };
+
         let size = {
             let mut st = self.state.lock().unwrap();
             let q = st.pending.entry(to_agent.to_string()).or_default();
-            q.push_back(Entry {
-                from_agent: from_agent.to_string(),
-                message: message.to_string(),
-                trace_id: trace_id.map(String::from),
-                enqueued_at_ms: unix_now_ms(),
-                retries: 0,
-            });
+            // Insere mantendo ordem: encontra primeiro item com
+            // prioridade > new (= menos prioritário) e insere antes.
+            // Estável dentro do mesmo nível (push_back se nenhum item
+            // for menos prioritário).
+            let insert_at = q
+                .iter()
+                .position(|e| e.priority > new_entry.priority)
+                .unwrap_or(q.len());
+            q.insert(insert_at, new_entry);
             q.len()
         };
         self.maybe_persist();
@@ -743,15 +822,45 @@ impl AgentQueue {
     pub fn reconcile(&self) -> ReconcileResult {
         let now = unix_now_ms();
         let ttl_ms = self.cfg.turn_ttl.as_millis() as u64;
+        let max_age_ms = self.cfg.message_max_age.as_millis() as u64;
         let max_retries = self.cfg.max_retries;
         let state_dir = self.cfg.state_dir.clone();
 
         let mut result = ReconcileResult::default();
         let mut dead_events: Vec<DeadLetterEvent> = Vec::new();
-        let mut to_dead_letter: Vec<(String, Entry)> = Vec::new();
+        let mut to_dead_letter: Vec<(String, Entry, &'static str)> = Vec::new();
 
         {
             let mut st = self.state.lock().unwrap();
+
+            // (1) Expira mensagens velhas em pending — alguma esperou
+            // mais que max_age sem chegar no runner. Vai direto pro
+            // dead.jsonl com reason="expired".
+            let agents: Vec<String> = st.pending.keys().cloned().collect();
+            for agent in agents {
+                let Some(q) = st.pending.get_mut(&agent) else { continue };
+                let before = q.len();
+                let mut kept: VecDeque<Entry> = VecDeque::with_capacity(before);
+                while let Some(e) = q.pop_front() {
+                    if now.saturating_sub(e.enqueued_at_ms) > max_age_ms {
+                        dead_events.push(DeadLetterEvent {
+                            to_agent: agent.clone(),
+                            from_agent: e.from_agent.clone(),
+                            trace_id: e.trace_id.clone(),
+                            retries: e.retries,
+                            reason: "expired",
+                        });
+                        to_dead_letter.push((agent.clone(), e, "expired"));
+                        result.dead += 1;
+                    } else {
+                        kept.push_back(e);
+                    }
+                }
+                *q = kept;
+            }
+
+            // (2) Zumbis: turns rodando há mais que TTL — processo morreu,
+            // ressuscita pra pending ou dead-letter conforme retries.
             let zombies: Vec<String> = st
                 .running
                 .iter()
@@ -769,9 +878,12 @@ impl AgentQueue {
                     trace_id: meta.trace_id.clone(),
                     enqueued_at_ms: now,
                     retries: next_retries,
+                    // Reciclados ganham High pra processar antes dos outros
+                    // (já esperaram além do TTL).
+                    priority: Priority::High,
                 };
                 if next_retries >= max_retries {
-                    to_dead_letter.push((to_agent.clone(), entry));
+                    to_dead_letter.push((to_agent.clone(), entry, "max_retries_zombie"));
                     dead_events.push(DeadLetterEvent {
                         to_agent,
                         from_agent: meta.from_agent,
@@ -781,18 +893,23 @@ impl AgentQueue {
                     });
                     result.dead += 1;
                 } else {
-                    // Volta no FRONT pra ter prioridade (já esperou
-                    // demais). push_front pra VecDeque.
+                    // Volta pra pending respeitando ordem por prioridade
+                    // (zumbi é High → vai antes de Normal/Low já lá, mas
+                    // depois de outras Highs pré-existentes).
                     let q = st.pending.entry(to_agent).or_default();
-                    q.push_front(entry);
+                    let insert_at = q
+                        .iter()
+                        .position(|e| e.priority > entry.priority)
+                        .unwrap_or(q.len());
+                    q.insert(insert_at, entry);
                     result.recycled += 1;
                 }
             }
         }
 
         if let Some(dir) = state_dir.as_deref() {
-            for (to_agent, entry) in &to_dead_letter {
-                append_dead_letter(dir, to_agent, entry, "max_retries_zombie");
+            for (to_agent, entry, reason) in &to_dead_letter {
+                append_dead_letter(dir, to_agent, entry, reason);
             }
         }
         if !to_dead_letter.is_empty() || result.recycled > 0 {

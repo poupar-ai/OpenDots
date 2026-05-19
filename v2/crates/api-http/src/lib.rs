@@ -168,6 +168,12 @@ pub struct AppState {
     pub mem_dir: PathBuf,
     pub project_root: PathBuf,
     pub plugin_dir: PathBuf,
+    /// Diretório onde mora config de **processo** (network.json) — não
+    /// dados de projeto. Tipicamente o `<clone>/.claude-project-memory/`
+    /// (binary-local), onde o startup do seed escreve. Isolado do
+    /// `mem_dir` (que é project-scoped) pra evitar que mudança de
+    /// project_root via UI quebre o binding do servidor.
+    pub runtime_cfg_dir: PathBuf,
     pub port: u16,
     pub bind_host: String,
     pub network_cfg: Arc<Mutex<NetworkConfig>>,
@@ -207,11 +213,12 @@ impl AppState {
         mem_dir: PathBuf,
         project_root: PathBuf,
         plugin_dir: PathBuf,
+        runtime_cfg_dir: PathBuf,
         port: u16,
         dist_dir: Option<PathBuf>,
         vault: Arc<dyn VaultStore>,
     ) -> Self {
-        let cfg = load_network_config(&mem_dir);
+        let cfg = load_network_config(&runtime_cfg_dir);
         let bind_host = resolve_bind_host(&cfg);
         let unlock_guard = Arc::new(UnlockGuard::load(&mem_dir));
 
@@ -282,6 +289,7 @@ impl AppState {
             mem_dir,
             project_root,
             plugin_dir,
+            runtime_cfg_dir,
             port,
             bind_host,
             network_cfg: Arc::new(Mutex::new(cfg)),
@@ -478,7 +486,7 @@ async fn put_network(State(st): State<AppState>, body: Bytes) -> Response {
         bind: bind.to_string(),
         custom_host,
     };
-    save_network_config(&st.mem_dir, &next);
+    save_network_config(&st.runtime_cfg_dir, &next);
     {
         let mut lock = st.network_cfg.lock().unwrap();
         *lock = next.clone();

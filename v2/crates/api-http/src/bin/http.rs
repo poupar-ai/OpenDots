@@ -80,10 +80,14 @@ async fn main() -> ExitCode {
         .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../plugin")));
 
     let vault = Arc::new(FileVaultStore::new());
+    // `runtime_cfg_dir` é o dir binary-local onde o startup do seed escreve
+    // `network.json` (config de processo). Mantemos isolado do `mem_dir`
+    // project-scoped pra que LAN/bind sobreviva à troca de project_root.
     let state = AppState::new(
         mem_dir,
         project_root,
         plugin_dir,
+        scope_bootstrap_dir,
         port,
         dist_dir,
         vault,

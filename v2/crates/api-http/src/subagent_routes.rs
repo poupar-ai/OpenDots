@@ -16,11 +16,12 @@
 use std::time::Duration;
 
 use axum::body::Bytes;
-use axum::extract::{Extension, Path as AxumPath, State};
+use axum::extract::{Extension, Path as AxumPath, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::agent_keys;
@@ -35,10 +36,85 @@ const MAX_BATCH_TASKS: usize = 20;
 
 pub fn subagent_router() -> Router<AppState> {
     Router::new()
+        .route("/api/agents/subagent", get(list_handler))
         .route("/api/agents/subagent/spawn", post(spawn_handler))
         .route("/api/agents/subagent/spawn_batch", post(spawn_batch_handler))
-        .route("/api/agents/subagent/:id", get(get_handler))
+        .route(
+            "/api/agents/subagent/:id",
+            get(get_handler).delete(cancel_handler),
+        )
         .route("/api/agents/subagent/batch/:id", get(batch_handler))
+}
+
+#[derive(Debug, Deserialize)]
+struct ListQuery {
+    parent: Option<String>,
+    status: Option<String>,
+    limit: Option<usize>,
+}
+
+/// `GET /api/agents/subagent?parent=X&status=running&limit=50` —
+/// listagem pro SubagentPanel da UI. Sem JWT (somente leitura,
+/// usado por UI local).
+async fn list_handler(
+    State(st): State<AppState>,
+    Query(q): Query<ListQuery>,
+) -> Response {
+    let all = st.subagents.list(q.parent.as_deref());
+    let limit = q.limit.unwrap_or(100).min(500);
+    let snaps: Vec<Value> = all
+        .iter()
+        .filter_map(|s| {
+            let snap = s.lock().unwrap().clone();
+            if let Some(ref want) = q.status {
+                let cur = serde_json::to_value(&snap.status).ok()?;
+                if cur.as_str() != Some(want.as_str()) {
+                    return None;
+                }
+            }
+            serde_json::to_value(snap).ok()
+        })
+        .take(limit)
+        .collect();
+    json_response(
+        StatusCode::OK,
+        json!({
+            "count": snaps.len(),
+            "subagents": snaps,
+        }),
+    )
+}
+
+/// `DELETE /api/agents/subagent/:id` — cancela subagent. Requer JWT
+/// do pai (não dá pra cancelar subagent de outro agent).
+async fn cancel_handler(
+    State(st): State<AppState>,
+    Extension(tc): Extension<TenantContext>,
+    AxumPath(id): AxumPath<String>,
+    headers: HeaderMap,
+) -> Response {
+    let requester = match require_parent_agent(&headers, &tc.mem_dir) {
+        Ok(a) => a,
+        Err(r) => return r,
+    };
+    // Confere que o requester É o pai do subagent.
+    let Some(state_arc) = st.subagents.get(&id) else {
+        return json_error(StatusCode::NOT_FOUND, "subagent não encontrado");
+    };
+    let parent = state_arc.lock().unwrap().parent_agent.clone();
+    if parent != requester {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "só o pai do subagent pode cancelá-lo",
+        );
+    }
+    match st.subagents.cancel(&id) {
+        Ok(()) => json_response(
+            StatusCode::OK,
+            json!({ "ok": true, "subagent_id": id, "status": "cancelled" }),
+        ),
+        Err(e) => json_error(StatusCode::CONFLICT, e),
+    }
 }
 
 /// Extrai JWT, valida, retorna o `agent` autoritativo do claim.

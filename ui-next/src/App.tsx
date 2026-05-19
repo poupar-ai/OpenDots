@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { updateHuman } from '@/lib/humans';
@@ -18,6 +18,7 @@ import { ArchitectPanel } from '@/panels/ArchitectPanel';
 import { ProtectionsPanel } from '@/panels/ProtectionsPanel';
 import { VaultPanel } from '@/panels/VaultPanel';
 import { NetworkPanel } from '@/panels/NetworkPanel';
+import { SubagentPanel } from '@/panels/SubagentPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
@@ -45,6 +46,7 @@ export default function App() {
   const [protectionsOpen, setProtectionsOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [prefCollapsed, setPrefCollapsed] = useState(false);
   const { data, err } = useData(10000, chatStreaming);
@@ -156,6 +158,9 @@ export default function App() {
       {vaultOpen && (
         <VaultPanel onClose={() => setVaultOpen(false)} />
       )}
+      {subagentsOpen && (
+        <SubagentPanel onClose={() => setSubagentsOpen(false)} />
+      )}
       {networkOpen && (
         <NetworkPanel onClose={() => setNetworkOpen(false)} />
       )}
@@ -260,6 +265,14 @@ export default function App() {
             title="rede — bind do servidor (localhost/LAN/IP)"
           >
             <Network className="h-4 w-4 text-sky-600" /> rede
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setSubagentsOpen(true)}
+            title="subagents — workstreams paralelos disparados por agents"
+          >
+            <Activity className="h-4 w-4 text-indigo-600" /> subagents
           </Button>
           {human && (
             <Button

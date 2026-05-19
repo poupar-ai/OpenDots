@@ -51,6 +51,7 @@ pub enum SubagentStatus {
     Done,
     Failed,
     TimedOut,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -68,10 +69,18 @@ pub struct SubagentState {
     pub batch_id: Option<String>,
 }
 
+/// Handle interno pra abort do task em background. Separado do
+/// SubagentState pra não vazar `tokio::task::AbortHandle` (não-serde)
+/// nas responses JSON.
+struct SubagentHandle {
+    state: Arc<Mutex<SubagentState>>,
+    abort: tokio::task::AbortHandle,
+}
+
 /// Manager — guarda estado de todos os subagents vivos + finished
 /// recentes. Thread-safe via Mutex<HashMap>. Acesso é cheap (ms).
 pub struct SubagentManager {
-    state: Mutex<HashMap<String, Arc<Mutex<SubagentState>>>>,
+    state: Mutex<HashMap<String, SubagentHandle>>,
 }
 
 impl SubagentManager {
@@ -85,42 +94,88 @@ impl SubagentManager {
     pub fn list_batch(&self, batch_id: &str) -> Vec<Arc<Mutex<SubagentState>>> {
         let map = self.state.lock().unwrap();
         map.values()
-            .filter(|s| {
-                s.lock()
+            .filter(|h| {
+                h.state
+                    .lock()
                     .unwrap()
                     .batch_id
                     .as_deref()
                     .map(|b| b == batch_id)
                     .unwrap_or(false)
             })
-            .cloned()
+            .map(|h| h.state.clone())
             .collect()
     }
 
     /// Lookup individual.
     pub fn get(&self, id: &str) -> Option<Arc<Mutex<SubagentState>>> {
-        self.state.lock().unwrap().get(id).cloned()
+        self.state.lock().unwrap().get(id).map(|h| h.state.clone())
     }
 
     /// Conta vivos por pai (pra rate limit por agent).
     pub fn count_running_for(&self, parent: &str) -> usize {
         let map = self.state.lock().unwrap();
         map.values()
-            .filter(|s| {
-                let st = s.lock().unwrap();
+            .filter(|h| {
+                let st = h.state.lock().unwrap();
                 st.parent_agent == parent && st.status == SubagentStatus::Running
             })
             .count()
     }
 
-    /// Remove subagents `done|failed|timed_out` com finished > `max_age`.
+    /// Lista subagents filtrados por pai (opcional). Útil pro
+    /// SubagentPanel da UI — pega visão geral.
+    pub fn list(&self, parent_filter: Option<&str>) -> Vec<Arc<Mutex<SubagentState>>> {
+        let map = self.state.lock().unwrap();
+        let mut out: Vec<_> = map
+            .values()
+            .filter(|h| {
+                parent_filter
+                    .map(|p| h.state.lock().unwrap().parent_agent == p)
+                    .unwrap_or(true)
+            })
+            .map(|h| h.state.clone())
+            .collect();
+        // Mais recente primeiro (started_at desc).
+        out.sort_by(|a, b| {
+            b.lock()
+                .unwrap()
+                .started_at_ms
+                .cmp(&a.lock().unwrap().started_at_ms)
+        });
+        out
+    }
+
+    /// Cancela subagent em execução. Aborta o background task e marca
+    /// status como Cancelled. Retorna `Ok` se cancelou, `Err` se já
+    /// estava finished ou se ID não existe.
+    pub fn cancel(&self, id: &str) -> Result<(), &'static str> {
+        let map = self.state.lock().unwrap();
+        let handle = map.get(id).ok_or("subagent não encontrado")?;
+        let mut st = handle.state.lock().unwrap();
+        if st.status != SubagentStatus::Running {
+            return Err("subagent já finalizado");
+        }
+        handle.abort.abort();
+        st.status = SubagentStatus::Cancelled;
+        st.finished_at_ms = Some(unix_now_ms());
+        st.duration_ms = Some(
+            st.finished_at_ms
+                .unwrap()
+                .saturating_sub(st.started_at_ms),
+        );
+        st.error = Some("cancelado por DELETE /api/agents/subagent/:id".into());
+        Ok(())
+    }
+
+    /// Remove subagents `done|failed|timed_out|cancelled` com finished > `max_age`.
     /// Não toca em `running`. Retorna count removido.
     pub fn cleanup_finished(&self, max_age: Duration) -> usize {
         let cutoff = unix_now_ms().saturating_sub(max_age.as_millis() as u64);
         let mut map = self.state.lock().unwrap();
         let before = map.len();
-        map.retain(|_, s| {
-            let st = s.lock().unwrap();
+        map.retain(|_, h| {
+            let st = h.state.lock().unwrap();
             match st.status {
                 SubagentStatus::Running => true,
                 _ => st.finished_at_ms.map(|t| t > cutoff).unwrap_or(true),
@@ -156,12 +211,11 @@ impl SubagentManager {
             error: None,
             batch_id,
         }));
-        self.state.lock().unwrap().insert(id.clone(), state.clone());
 
         // Background: spawn claude CLI, captura stdout, atualiza state.
-        let state_for_task = state;
+        let state_for_task = state.clone();
         let id_for_log = id.clone();
-        tokio::spawn(async move {
+        let join = tokio::spawn(async move {
             let started = Instant::now();
             // [ADR-001] Claude CLI hardcoded — vide docs/adr-001-multi-modelo.md.
             let mut args = vec!["-p".to_string(), "--output-format".to_string(), "text".to_string()];
@@ -240,6 +294,15 @@ impl SubagentManager {
             }
         });
 
+        // Inserir handle no map APÓS spawn — abort handle do task que
+        // acabou de subir. Cancel via abort() vai matar o task (e o
+        // child via kill_on_drop).
+        let abort = join.abort_handle();
+        self.state.lock().unwrap().insert(
+            id.clone(),
+            SubagentHandle { state, abort },
+        );
+
         id
     }
 }
@@ -297,11 +360,23 @@ pub fn new_batch_id() -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn manager_tracks_state() {
+    /// Insere state dummy no map (com abort handle de no-op task).
+    /// Tests não fazem spawn real porque não tem `claude` CLI.
+    fn dummy_insert(mgr: &SubagentManager, id: &str, st: SubagentState) {
+        let join = tokio::spawn(async {});
+        let abort = join.abort_handle();
+        mgr.state.lock().unwrap().insert(
+            id.to_string(),
+            SubagentHandle {
+                state: Arc::new(Mutex::new(st)),
+                abort,
+            },
+        );
+    }
+
+    #[tokio::test]
+    async fn manager_tracks_state() {
         let mgr = Arc::new(SubagentManager::new());
-        // Não vou spawn de verdade (precisa do claude CLI) — só testa
-        // o lifecycle manual do state.
         let st = SubagentState {
             id: "sa_test".into(),
             parent_agent: "manager".into(),
@@ -314,21 +389,46 @@ mod tests {
             error: None,
             batch_id: Some("bat_1".into()),
         };
-        mgr.state
-            .lock()
-            .unwrap()
-            .insert("sa_test".into(), Arc::new(Mutex::new(st)));
+        dummy_insert(&mgr, "sa_test", st);
         assert!(mgr.get("sa_test").is_some());
         assert_eq!(mgr.count_running_for("manager"), 1);
         assert_eq!(mgr.list_batch("bat_1").len(), 1);
         assert_eq!(mgr.list_batch("bat_X").len(), 0);
+        // list(None) inclui tudo; list(Some("manager")) só do pai.
+        assert_eq!(mgr.list(None).len(), 1);
+        assert_eq!(mgr.list(Some("manager")).len(), 1);
+        assert_eq!(mgr.list(Some("outro")).len(), 0);
     }
 
-    #[test]
-    fn cleanup_removes_old_finished() {
+    #[tokio::test]
+    async fn cancel_marks_status_and_aborts() {
+        let mgr = SubagentManager::new();
+        let st = SubagentState {
+            id: "sa_cancel".into(),
+            parent_agent: "x".into(),
+            prompt_preview: "".into(),
+            status: SubagentStatus::Running,
+            started_at_ms: unix_now_ms(),
+            finished_at_ms: None,
+            duration_ms: None,
+            result: None,
+            error: None,
+            batch_id: None,
+        };
+        dummy_insert(&mgr, "sa_cancel", st);
+        assert!(mgr.cancel("sa_cancel").is_ok());
+        let snap = mgr.get("sa_cancel").unwrap();
+        assert_eq!(snap.lock().unwrap().status, SubagentStatus::Cancelled);
+        // Segunda cancel falha (já não está running).
+        assert!(mgr.cancel("sa_cancel").is_err());
+        // ID inexistente falha.
+        assert!(mgr.cancel("nao_existe").is_err());
+    }
+
+    #[tokio::test]
+    async fn cleanup_removes_old_finished() {
         let mgr = SubagentManager::new();
         let now = unix_now_ms();
-        // 1 done velho (> 1h)
         let old = SubagentState {
             id: "sa_old".into(),
             parent_agent: "x".into(),
@@ -341,7 +441,6 @@ mod tests {
             error: None,
             batch_id: None,
         };
-        // 1 done recente
         let fresh = SubagentState {
             id: "sa_fresh".into(),
             parent_agent: "x".into(),
@@ -354,7 +453,6 @@ mod tests {
             error: None,
             batch_id: None,
         };
-        // 1 ainda rodando — não pode ser removido
         let running = SubagentState {
             id: "sa_run".into(),
             parent_agent: "x".into(),
@@ -367,11 +465,9 @@ mod tests {
             error: None,
             batch_id: None,
         };
-        let mut m = mgr.state.lock().unwrap();
-        m.insert("sa_old".into(), Arc::new(Mutex::new(old)));
-        m.insert("sa_fresh".into(), Arc::new(Mutex::new(fresh)));
-        m.insert("sa_run".into(), Arc::new(Mutex::new(running)));
-        drop(m);
+        dummy_insert(&mgr, "sa_old", old);
+        dummy_insert(&mgr, "sa_fresh", fresh);
+        dummy_insert(&mgr, "sa_run", running);
 
         let removed = mgr.cleanup_finished(Duration::from_secs(3600));
         assert_eq!(removed, 1);

@@ -420,6 +420,57 @@ Os dois podem coexistir — servem propósitos diferentes.
 
 ---
 
+## Débitos técnicos a resolver
+
+Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto.
+
+### Alto valor
+
+- **Search index só reconstrói se vazio → drift silencioso.**
+  `v2/crates/api-http/src/lib.rs` (`if indexed == 0`) só rebuilda o FTS5 quando
+  o índice está vazio. Itens gravados no JSONL sem indexar (drift) nunca são
+  reindexados. → No startup, comparar `indexed vs source` e rebuildar no drift;
+  ou reconciliar periodicamente. (`GET /api/memory/search/health` já reporta o
+  drift — falta agir nele.)
+- **Bundle único de ~1.2MB (mobile sofre).** `ui-next/vite.config.ts` sem
+  `manualChunks`/code-split — Pixi/WebGL (canvas) vão no bundle principal.
+  → `React.lazy` no `AgentCanvas`/Pixi + `manualChunks` pra separar vendor.
+- **Rotas de escrita sem guard de origin/host (exceto vault).** Só
+  `vault_routes` tem `guard()`. `POST /api/humans`, `/api/chat`,
+  `/api/humans/:id` (CRUD), `/api/scope` etc. não checam origin — com bind LAN,
+  qualquer dispositivo/página posta. → Aplicar o guard de origin/host nas rotas
+  mutáveis (o handoff já exige JWT).
+
+### Médio
+
+- **9 painéis ainda no legado `@/components/ui/*`** (migrar pra `@/ui`):
+  `AgentInfoPanel` (1607 linhas), `VaultPanel`, `PipelinesPanel`,
+  `ArchitectPanel`, `MyChatsPanel`, `ProtectionsPanel`, `IdeExportPanel`,
+  `BestPracticesPanel`, `CopyButton`.
+- **Zero testes de frontend** (sem vitest/jest). Cobrir as partes frágeis:
+  reset de agente no `useChat`, lazy-load por janela, `useMediaQuery`, gate do
+  cofre.
+- **Chat humano por polling (5s), agente por SSE.** `HumansPanel` usa
+  `setInterval(refreshChat, 5000)`. → Reusar o `/stream` SSE no chat humano.
+
+### Menor / pendências conhecidas
+
+- **Shadow-turn** (humano offline responder via IA) — `humans_routes.rs`
+  ("fica pra depois").
+- **Limpar conversa** zera o arquivo do par (ambos os lados) — sem limpeza
+  por-usuário (marcador `cleared_at` por humano).
+- **~22 handlers** ainda em `st.mem_dir` vs `Extension<TenantContext>` — dívida
+  pra quando multi-tenancy ligar.
+- **Token do humano em `sessionStorage`** (exposição a XSS) — ok pra local,
+  repensar se exposto.
+- **Senha do humano exige cofre destrancado** (hash mora no cofre) — gate
+  obrigatório hoje; reavaliar quando integrar auth externo (ex.: Firebase).
+- **Snapshot/restore**: upload via multipart é "fase futura"
+  (`db_routes.rs`).
+- **Dependabot**: vulnerabilidades nas deps do repo a tratar.
+
+---
+
 ## Contribuindo
 
 Issues, PRs e sugestões são bem-vindos.

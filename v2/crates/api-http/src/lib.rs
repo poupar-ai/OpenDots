@@ -23,6 +23,7 @@ pub mod data_route;
 pub mod training_export_routes;
 pub mod destructive_routes;
 pub mod handoff_routes;
+pub mod human_keys;
 pub mod humans_routes;
 pub mod misc_routes;
 pub mod pipelines_routes;

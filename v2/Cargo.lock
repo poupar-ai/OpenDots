@@ -212,6 +212,7 @@ dependencies = [
  "hyper-util",
  "if-addrs",
  "mime_guess",
+ "pbkdf2",
  "rand_core 0.6.4",
  "regex",
  "serde",

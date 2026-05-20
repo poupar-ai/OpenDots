@@ -14,7 +14,7 @@
 
 use axum::body::Bytes;
 use axum::extract::{Extension, Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
@@ -37,6 +37,7 @@ pub fn humans_router() -> Router<AppState> {
             get(get_handler).put(update_handler).delete(delete_handler),
         )
         .route("/api/humans/:id/heartbeat", post(heartbeat_handler))
+        .route("/api/humans/:id/login", post(login_handler))
         .route("/api/humans/:id/chats", get(chats_summary_handler))
         .route("/api/human-chat/history", get(human_chat_history_handler))
         .route("/api/human-handoff", post(handoff_handler))
@@ -45,20 +46,75 @@ pub fn humans_router() -> Router<AppState> {
 /// `POST /api/human-handoff` — envia mensagem de um humano pra outro.
 /// Body: `{ from, to, message }`. Faz append no log do par e marca o
 /// remetente como visto. (Shadow-turn de IA quando offline fica pra depois.)
-async fn handoff_handler(
+/// `POST /api/humans/:id/login` — valida a senha (hash no cofre) e, se ok,
+/// emite um JWT de sessão assinado com o keypair do humano. O cofre precisa
+/// estar destrancado pra ler o hash.
+async fn login_handler(
+    State(st): State<AppState>,
     Extension(tc): Extension<crate::tenant::TenantContext>,
+    Path(id): Path<String>,
     body: Bytes,
 ) -> Response {
     let v: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
     };
-    let from = v.get("from").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let password = v.get("password").and_then(Value::as_str).unwrap_or("");
+    if password.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "senha obrigatória");
+    }
+    let clock = HumansSystemClock;
+    if get_human_summary(&tc.mem_dir, &id, clock.now_ms()).is_none() {
+        return json_error(StatusCode::NOT_FOUND, "perfil não encontrado");
+    }
+    if !crate::human_keys::verify_human_password(&st.vault, &tc.mem_dir, &id, password) {
+        return json_error(StatusCode::UNAUTHORIZED, "senha incorreta (ou cofre trancado)");
+    }
+    let _ = touch_human(&tc.mem_dir, &id, &clock);
+    let token = crate::human_keys::mint_token_for_human(&tc.mem_dir, &id);
+    json_response(StatusCode::OK, json!({ "token": token }))
+}
+
+/// `POST /api/human-handoff` — envia mensagem de um humano pra outro.
+/// Exige `Authorization: Bearer <JWT>` (mesma segurança dos agentes): o
+/// `from` é o subject autoritativo do token, validado por Ed25519. Body:
+/// `{ from, to, message }` — `from` precisa bater com o token.
+async fn handoff_handler(
+    Extension(tc): Extension<crate::tenant::TenantContext>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let bearer = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    let Some(token) = bearer else {
+        return json_error(StatusCode::UNAUTHORIZED, "Authorization: Bearer <JWT> obrigatório — faça login");
+    };
+    let claims = match crate::agent_keys::verify_jwt(token, |id| {
+        crate::human_keys::lookup_human_pubkey(&tc.mem_dir, id)
+    }) {
+        Ok(c) => c,
+        Err(e) => return json_error(StatusCode::UNAUTHORIZED, &format!("token inválido: {e}")),
+    };
+
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
+    };
     let to = v.get("to").and_then(Value::as_str).filter(|s| !s.is_empty());
     let message = v.get("message").and_then(Value::as_str).filter(|s| !s.is_empty());
-    let (Some(from), Some(to), Some(message)) = (from, to, message) else {
-        return json_error(StatusCode::BAD_REQUEST, "missing from/to/message");
+    let (Some(to), Some(message)) = (to, message) else {
+        return json_error(StatusCode::BAD_REQUEST, "missing to/message");
     };
+    // `from` autoritativo é o subject do token (claims.agent). Se o body
+    // declarar outro, é tentativa de impersonação.
+    let from = claims.agent.as_str();
+    if let Some(body_from) = v.get("from").and_then(Value::as_str) {
+        if body_from != from {
+            return json_error(StatusCode::FORBIDDEN, "from não bate com o token (impersonação?)");
+        }
+    }
 
     let clock = HumansSystemClock;
     let entry = json!({
@@ -80,6 +136,7 @@ async fn list_handler(State(st): State<AppState>) -> Response {
 }
 
 async fn create_handler(
+    State(st): State<AppState>,
     Extension(tc): Extension<crate::tenant::TenantContext>,
     body: Bytes,
 ) -> Response {
@@ -115,6 +172,15 @@ async fn create_handler(
         );
     }
 
+    // Senha obrigatória — o hash vai pro cofre (auth gate). Sem legado.
+    let password = v
+        .get("password")
+        .and_then(Value::as_str)
+        .filter(|s| s.len() >= 4);
+    let Some(password) = password else {
+        return json_error(StatusCode::BAD_REQUEST, "senha obrigatória (mín. 4 caracteres)");
+    };
+
     let description = v.get("description").and_then(Value::as_str);
     let important = v.get("important").and_then(Value::as_str);
     let notes = v.get("notes").and_then(Value::as_str);
@@ -136,8 +202,18 @@ async fn create_handler(
     let clock = HumansSystemClock;
     match create_human(&tc.mem_dir, &input, &clock) {
         Ok(h) => {
+            let id = h.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+            // Salva o hash da senha no cofre (requer cofre destrancado).
+            if let Err(e) = crate::human_keys::set_human_password(&st.vault, &tc.mem_dir, &id, password) {
+                return json_error(
+                    StatusCode::CONFLICT,
+                    &format!("perfil criado, mas falhou ao salvar senha (destranque o cofre): {e}"),
+                );
+            }
+            // Provisiona keypair + emite token de sessão (identidade do handoff).
+            let token = crate::human_keys::mint_token_for_human(&tc.mem_dir, &id);
             let summary = human_summary(&h, clock.now_ms());
-            json_response(StatusCode::CREATED, json!({ "human": summary }))
+            json_response(StatusCode::CREATED, json!({ "human": summary, "token": token }))
         }
         Err(HumansError::NeedName) => json_error(StatusCode::BAD_REQUEST, "need name"),
         Err(e) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),

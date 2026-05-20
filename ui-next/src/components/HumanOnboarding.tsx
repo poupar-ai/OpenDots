@@ -4,6 +4,7 @@ import { Button, Chip, Group, Modal, Select, Text, Textarea, TextInput } from '@
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   createHuman,
+  humanLogin,
   listHumans,
   randomSkin,
   HUMAN_LOCATIONS,
@@ -38,6 +39,7 @@ export function HumanOnboarding({ onDone }: Props) {
   const [selectedId, setSelectedId] = useState<string>('');
 
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [description, setDescription] = useState('');
   const [skills, setSkills] = useState('');
   const [important, setImportant] = useState('');
@@ -74,13 +76,22 @@ export function HumanOnboarding({ onDone }: Props) {
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedId) return;
-    onDone(selectedId);
+    if (!selectedId || !password.trim() || submitting) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await humanLogin(selectedId, password);
+      onDone(selectedId);
+    } catch (e: any) {
+      setErr(e?.message || 'falha no login');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || submitting) return;
+    if (!name.trim() || password.trim().length < 4 || submitting) return;
     setSubmitting(true);
     setErr(null);
     try {
@@ -88,6 +99,7 @@ export function HumanOnboarding({ onDone }: Props) {
       const neverShareList = neverShare.split(',').map((s) => s.trim()).filter(Boolean);
       const h = await createHuman({
         name: name.trim(),
+        password,
         description: description.trim() || undefined,
         skills: skillsList,
         important: important.trim() || undefined,
@@ -143,6 +155,15 @@ export function HumanOnboarding({ onDone }: Props) {
               placeholder="escolha um perfil"
             />
           </Field>
+          <Field label="Senha">
+            <TextInput
+              type="password"
+              value={password}
+              onChange={setPassword}
+              placeholder="sua senha"
+            />
+          </Field>
+          {err && <p className="text-xs text-red-600">{err}</p>}
           <Group justify="space-between" gap="xs">
             <Button
               type="button"
@@ -154,7 +175,13 @@ export function HumanOnboarding({ onDone }: Props) {
             >
               criar novo
             </Button>
-            <Button type="submit" size="sm" disabled={!selectedId} leftIcon={<LogIn className="h-4 w-4" />}>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!selectedId || !password.trim() || submitting}
+              loading={submitting}
+              leftIcon={<LogIn className="h-4 w-4" />}
+            >
               Entrar
             </Button>
           </Group>
@@ -178,6 +205,15 @@ export function HumanOnboarding({ onDone }: Props) {
               <div className="space-y-4">
                 <Field label="Nome" required>
                   <TextInput value={name} onChange={setName} placeholder="Ex.: Tiago" />
+                </Field>
+
+                <Field label="Senha" required hint="(mín. 4 caracteres)">
+                  <TextInput
+                    type="password"
+                    value={password}
+                    onChange={setPassword}
+                    placeholder="defina uma senha"
+                  />
                 </Field>
 
                 <Field label="Quem você é">
@@ -316,7 +352,12 @@ export function HumanOnboarding({ onDone }: Props) {
               ) : (
                 <span />
               )}
-              <Button type="submit" size="sm" disabled={submitting || !name.trim()} loading={submitting}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={submitting || !name.trim() || password.trim().length < 4}
+                loading={submitting}
+              >
                 {submitting ? 'Salvando…' : 'Entrar'}
               </Button>
             </Group>

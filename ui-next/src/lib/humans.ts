@@ -1,3 +1,5 @@
+import { setHumanToken, getHumanToken } from './session';
+
 export type HumanLocation = 'core' | 'devs' | 'specialists' | 'integrators' | 'motors' | 'firefighter';
 export type HumanGender = 'male' | 'female' | 'other';
 
@@ -40,6 +42,8 @@ export interface HumanProfile {
 
 export interface HumanCreateInput {
   name: string;
+  /** Senha do humano — backend guarda só o hash (PBKDF2) no cofre. */
+  password?: string;
   description?: string;
   skills?: string[];
   important?: string;
@@ -112,9 +116,28 @@ export async function createHuman(input: HumanCreateInput): Promise<HumanProfile
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${r.status}`);
+  }
   const j = await r.json();
+  if (j.token) setHumanToken(j.token); // já loga: token de sessão emitido na criação
   return j.human || j;
+}
+
+/** Login: valida senha (hash no cofre) e guarda o token de sessão. */
+export async function humanLogin(id: string, password: string): Promise<void> {
+  const r = await fetch(`/api/humans/${encodeURIComponent(id)}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${r.status}`);
+  }
+  const j = await r.json();
+  setHumanToken(j.token || null);
 }
 
 export async function getHuman(id: string): Promise<HumanProfile> {
@@ -145,12 +168,19 @@ export async function deleteHuman(id: string): Promise<void> {
 }
 
 export async function humanHandoff(from: string, to: string, message: string): Promise<void> {
+  const token = getHumanToken();
   const r = await fetch('/api/human-handoff', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ from, to, message }),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${r.status}`);
+  }
 }
 
 export interface AgentChatSummary {

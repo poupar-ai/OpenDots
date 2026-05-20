@@ -85,6 +85,7 @@ fn resolve_principal(headers: &HeaderMap, mem_dir: &std::path::Path) -> Principa
 
 /// PONTO ÚNICO de autorização. Hoje: qualquer principal autenticado pode tudo.
 /// Futuro: RBAC/ABAC aqui — checar se `principal` pode `action` em `resource`.
+/// Receita de evolução (papéis, ownership, etc.): `docs/permissoes-granulares.md`.
 pub fn authorize(principal: &Principal, _action: &str, _resource: &str) -> bool {
     principal.is_authenticated()
 }

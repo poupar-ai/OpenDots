@@ -234,20 +234,22 @@ impl AppState {
         trace_index.build_from_disk(&mem_dir, domain_bus::DEFAULT_RETENTION, &SystemClock);
 
         // Search index — abrir antes do runner pra poder injetar.
-        // Auto-rebuild se índice vazio mas há JSONLs no disco. Cobre
-        // o caso "snapshot foi restaurado e search.db ficou stale" ou
-        // "search.db foi apagado/corrompido". JsonlRepository é
-        // sempre source-of-truth; search reconstrói daí.
+        // Auto-rebuild quando há DRIFT entre o índice (search.db) e o
+        // source (JSONLs): cobre índice vazio/corrompido, snapshot restaurado
+        // E o caso de appends que não foram indexados (hook falhou). Antes só
+        // rebuildava se vazio — drift parcial ficava silencioso pra sempre.
+        // JsonlRepository é sempre source-of-truth; search reconstrói daí.
         let search = core_storage::SearchIndex::open(&mem_dir)
             .map(Arc::new)
             .map_err(|e| eprintln!("warn: search index indisponível: {e}"))
             .ok();
         if let Some(ref idx) = search {
             let indexed = idx.count().unwrap_or(0);
-            let has_chats = mem_dir.join("agent_chats").exists();
-            let has_obs = mem_dir.join("observations.jsonl").exists();
-            if indexed == 0 && (has_chats || has_obs) {
-                eprintln!("search: índice vazio mas há JSONLs — rebuild automático...");
+            let source = search_routes::count_jsonl_sources(&mem_dir);
+            if source != indexed {
+                eprintln!(
+                    "search: drift detectado (indexed={indexed}, source={source}) — rebuild automático..."
+                );
                 match search_routes::rebuild_search_from_jsonls(&mem_dir, idx) {
                     Ok(n) => eprintln!("search: rebuild indexou {n} docs"),
                     Err(e) => eprintln!("search: rebuild falhou (não crítico): {e}"),

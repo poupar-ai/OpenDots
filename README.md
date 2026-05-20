@@ -431,18 +431,6 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 > - [`docs/permissoes-granulares.md`](docs/permissoes-granulares.md) — como
 >   evoluir o `authorize()` pra RBAC/ABAC.
 
-### Alto valor
-
-- **Search index só reconstrói se vazio → drift silencioso.**
-  `v2/crates/api-http/src/lib.rs` (`if indexed == 0`) só rebuilda o FTS5 quando
-  o índice está vazio. Itens gravados no JSONL sem indexar (drift) nunca são
-  reindexados. → No startup, comparar `indexed vs source` e rebuildar no drift;
-  ou reconciliar periodicamente. (`GET /api/memory/search/health` já reporta o
-  drift — falta agir nele.)
-- **Bundle único de ~1.2MB (mobile sofre).** `ui-next/vite.config.ts` sem
-  `manualChunks`/code-split — Pixi/WebGL (canvas) vão no bundle principal.
-  → `React.lazy` no `AgentCanvas`/Pixi + `manualChunks` pra separar vendor.
-
 ### Médio
 
 - **9 painéis ainda no legado `@/components/ui/*`** (migrar pra `@/ui`):

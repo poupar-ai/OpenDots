@@ -19,5 +19,31 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        // Separa vendors pesados em chunks próprios (cacheáveis e carregados
+        // em paralelo). Ordem importa: checar libs específicas ANTES de
+        // "react" (que casaria com react-markdown/react-dom).
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('pixi')) return 'pixi';
+          if (
+            id.includes('react-markdown') ||
+            id.includes('remark') ||
+            id.includes('micromark') ||
+            id.includes('mdast') ||
+            id.includes('hast') ||
+            id.includes('unist') ||
+            id.includes('property-information') ||
+            id.includes('vfile')
+          )
+            return 'markdown';
+          if (id.includes('@mantine')) return 'mantine';
+          if (id.includes('/react') || id.includes('react-dom') || id.includes('scheduler'))
+            return 'react-vendor';
+          return undefined;
+        },
+      },
+    },
   },
 });

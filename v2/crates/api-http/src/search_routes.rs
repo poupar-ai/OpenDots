@@ -59,8 +59,8 @@ async fn health_handler(State(st): State<AppState>) -> Response {
 
 /// Conta total de itens indexáveis nos JSONLs (chats + observations).
 /// Equivalente ao que `rebuild_search_from_jsonls` indexaria — usado
-/// pra detectar drift no health check.
-fn count_jsonl_sources(mem_dir: &std::path::Path) -> usize {
+/// pra detectar drift no health check e no auto-rebuild do startup.
+pub(crate) fn count_jsonl_sources(mem_dir: &std::path::Path) -> usize {
     let mut total = 0;
     if let Ok(entries) = std::fs::read_dir(mem_dir.join("agent_chats")) {
         for e in entries.flatten() {

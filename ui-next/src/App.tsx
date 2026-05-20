@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock, MessageCircle, X, PanelLeft } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -6,7 +6,12 @@ import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { updateHuman } from '@/lib/humans';
 import { useTheme } from '@/hooks/useTheme';
 import { ModulesPanel } from '@/panels/ModulesPanel';
-import { AgentCanvas, type CanvasControls } from '@/panels/AgentCanvas';
+import type { CanvasControls } from '@/panels/AgentCanvas';
+// Lazy: o AgentCanvas puxa o Pixi/WebGL (chunk pesado). Carrega depois do
+// shell pra não travar o load inicial (sobretudo no mobile).
+const AgentCanvas = lazy(() =>
+  import('@/panels/AgentCanvas').then((m) => ({ default: m.AgentCanvas })),
+);
 import { ChatPanel } from '@/panels/ChatPanel';
 import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
 import { HumansPanel } from '@/panels/HumansPanel';
@@ -319,26 +324,34 @@ export default function App() {
         )}
 
         <main className="relative overflow-hidden rounded-lg border bg-white shadow-sm">
-          <AgentCanvas
-            agents={agents}
-            selected={selected}
-            onSelect={(n) => setSelected((prev) => (prev === n ? null : n))}
-            onHumanSelect={(id) => {
-              if (id === humanId) {
-                setMyChatsOpen((o) => !o);
-              } else if (humansOpen && humansPreselected === id) {
-                setHumansOpen(false);
-                setHumansPreselected(null);
-              } else {
-                setHumansPreselected(id);
-                setHumansOpen(true);
-              }
-            }}
-            workingAgent={chatStreaming ? selected : null}
-            meHumanId={humanId}
-            humansTick={humansTick}
-            controlsRef={canvasControls}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                carregando o canvas…
+              </div>
+            }
+          >
+            <AgentCanvas
+              agents={agents}
+              selected={selected}
+              onSelect={(n) => setSelected((prev) => (prev === n ? null : n))}
+              onHumanSelect={(id) => {
+                if (id === humanId) {
+                  setMyChatsOpen((o) => !o);
+                } else if (humansOpen && humansPreselected === id) {
+                  setHumansOpen(false);
+                  setHumansPreselected(null);
+                } else {
+                  setHumansPreselected(id);
+                  setHumansOpen(true);
+                }
+              }}
+              workingAgent={chatStreaming ? selected : null}
+              meHumanId={humanId}
+              humansTick={humansTick}
+              controlsRef={canvasControls}
+            />
+          </Suspense>
         </main>
 
         {!isMobile && (

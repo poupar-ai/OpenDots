@@ -19,10 +19,10 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use domain_humans::{
-    append_human_chat, create_human, delete_human, get_human_summary, human_summary, list_humans,
-    load_humans, read_human_chat, summarize_human_chats, touch_human, update_human,
-    Clock as HumansClock, CreateInput, Error as HumansError, SystemClock as HumansSystemClock,
-    UpdateInput, HUMAN_LOCATIONS,
+    append_human_chat, clear_human_chat, create_human, delete_human, get_human_summary,
+    human_summary, list_humans, load_humans, read_human_chat, summarize_human_chats, touch_human,
+    update_human, Clock as HumansClock, CreateInput, Error as HumansError,
+    SystemClock as HumansSystemClock, UpdateInput, HUMAN_LOCATIONS,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -40,7 +40,33 @@ pub fn humans_router() -> Router<AppState> {
         .route("/api/humans/:id/login", post(login_handler))
         .route("/api/humans/:id/chats", get(chats_summary_handler))
         .route("/api/human-chat/history", get(human_chat_history_handler))
+        .route("/api/human-chat/clear", post(clear_chat_handler))
         .route("/api/human-handoff", post(handoff_handler))
+}
+
+/// Extrai e valida o Bearer JWT, retornando o id do humano autenticado
+/// (subject do token). É a fonte autoritativa de "quem sou eu" — garante
+/// que um humano só leia/limpe/escreva nas próprias conversas.
+fn authed_human(
+    tc: &crate::tenant::TenantContext,
+    headers: &HeaderMap,
+) -> Result<String, Response> {
+    let bearer = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "));
+    let Some(token) = bearer else {
+        return Err(json_error(
+            StatusCode::UNAUTHORIZED,
+            "Authorization: Bearer <JWT> obrigatório — faça login",
+        ));
+    };
+    match crate::agent_keys::verify_jwt(token, |id| {
+        crate::human_keys::lookup_human_pubkey(&tc.mem_dir, id)
+    }) {
+        Ok(c) => Ok(c.agent),
+        Err(e) => Err(json_error(StatusCode::UNAUTHORIZED, &format!("token inválido: {e}"))),
+    }
 }
 
 /// `POST /api/human-handoff` — envia mensagem de um humano pra outro.
@@ -84,20 +110,10 @@ async fn handoff_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let bearer = headers
-        .get("authorization")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.strip_prefix("Bearer "));
-    let Some(token) = bearer else {
-        return json_error(StatusCode::UNAUTHORIZED, "Authorization: Bearer <JWT> obrigatório — faça login");
+    let from = match authed_human(&tc, &headers) {
+        Ok(id) => id,
+        Err(resp) => return resp,
     };
-    let claims = match crate::agent_keys::verify_jwt(token, |id| {
-        crate::human_keys::lookup_human_pubkey(&tc.mem_dir, id)
-    }) {
-        Ok(c) => c,
-        Err(e) => return json_error(StatusCode::UNAUTHORIZED, &format!("token inválido: {e}")),
-    };
-
     let v: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
@@ -107,14 +123,14 @@ async fn handoff_handler(
     let (Some(to), Some(message)) = (to, message) else {
         return json_error(StatusCode::BAD_REQUEST, "missing to/message");
     };
-    // `from` autoritativo é o subject do token (claims.agent). Se o body
-    // declarar outro, é tentativa de impersonação.
-    let from = claims.agent.as_str();
+    // `from` autoritativo é o subject do token. Se o body declarar outro, é
+    // tentativa de impersonação.
     if let Some(body_from) = v.get("from").and_then(Value::as_str) {
         if body_from != from {
             return json_error(StatusCode::FORBIDDEN, "from não bate com o token (impersonação?)");
         }
     }
+    let from = from.as_str();
 
     let clock = HumansSystemClock;
     let entry = json!({
@@ -184,9 +200,11 @@ async fn create_handler(
     let description = v.get("description").and_then(Value::as_str);
     let important = v.get("important").and_then(Value::as_str);
     let notes = v.get("notes").and_then(Value::as_str);
+    let email = v.get("email").and_then(Value::as_str);
 
     let input = CreateInput {
         name,
+        email,
         description,
         skills: v.get("skills"),
         important,
@@ -323,21 +341,30 @@ async fn chats_summary_handler(
 
 #[derive(Debug, Deserialize)]
 struct ChatHistoryQuery {
-    me: Option<String>,
+    // `me` agora vem do token (não do query) — mantido aqui só por compat de
+    // clients antigos que ainda enviam o param; é ignorado.
+    #[serde(default, rename = "me")]
+    _me: Option<String>,
     #[serde(rename = "with")]
     with_id: Option<String>,
 }
 
 async fn human_chat_history_handler(
-    State(st): State<AppState>,
+    Extension(tc): Extension<crate::tenant::TenantContext>,
+    headers: HeaderMap,
     Query(q): Query<ChatHistoryQuery>,
 ) -> Response {
-    let me = q.me.as_deref().filter(|s| !s.is_empty());
-    let with_id = q.with_id.as_deref().filter(|s| !s.is_empty());
-    let (Some(me), Some(with_id)) = (me, with_id) else {
-        return json_error(StatusCode::BAD_REQUEST, "need me & with");
+    // `me` é SEMPRE o subject do token — ignora qualquer `me` do query. Assim
+    // um humano só lê conversas das quais ele participa (nunca de terceiros).
+    let me = match authed_human(&tc, &headers) {
+        Ok(id) => id,
+        Err(resp) => return resp,
     };
-    let messages = read_human_chat(&st.mem_dir, me, with_id);
+    let with_id = q.with_id.as_deref().filter(|s| !s.is_empty());
+    let Some(with_id) = with_id else {
+        return json_error(StatusCode::BAD_REQUEST, "need with");
+    };
+    let messages = read_human_chat(&tc.mem_dir, &me, with_id);
     json_response(
         StatusCode::OK,
         json!({
@@ -346,5 +373,29 @@ async fn human_chat_history_handler(
             "messages": messages,
         }),
     )
+}
+
+/// `POST /api/human-chat/clear` — limpa a conversa entre o humano autenticado
+/// e `with`. NÃO apaga humano. Só participa quem está na conversa (me vem do
+/// token), então ninguém limpa o chat de terceiros.
+async fn clear_chat_handler(
+    Extension(tc): Extension<crate::tenant::TenantContext>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let me = match authed_human(&tc, &headers) {
+        Ok(id) => id,
+        Err(resp) => return resp,
+    };
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
+    };
+    let with = v.get("with").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let Some(with) = with else {
+        return json_error(StatusCode::BAD_REQUEST, "need with");
+    };
+    let cleared = clear_human_chat(&tc.mem_dir, &me, with);
+    json_response(StatusCode::OK, json!({ "ok": true, "cleared": cleared }))
 }
 

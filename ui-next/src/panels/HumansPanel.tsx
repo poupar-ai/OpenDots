@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, X, Users, Ghost, Trash2, ChevronLeft } from 'lucide-react';
+import { Send, X, Users, Ghost, Eraser, ChevronLeft } from 'lucide-react';
 import { ActionIcon, Avatar, Badge } from '@/ui';
 import { CopyButton } from '@/components/CopyButton';
 import { MessageBubble } from '@/components/chat';
@@ -9,7 +9,7 @@ import {
   listHumans,
   humanChatHistory,
   humanHandoff,
-  deleteHuman,
+  clearHumanChat,
   type HumanProfile,
   type HumanChatMsg,
 } from '@/lib/humans';
@@ -90,18 +90,15 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
     finally { setSending(false); }
   }
 
-  async function removeHuman(id: string, name: string) {
+  async function clearChat() {
+    if (!selected || !selectedHuman) return;
     const ok = window.confirm(
-      `Excluir o perfil de ${name}? O histórico de conversa não é apagado.`,
+      `Limpar a conversa com ${selectedHuman.name}? As mensagens serão apagadas (pra ambos). O perfil não é excluído.`,
     );
     if (!ok) return;
     try {
-      await deleteHuman(id);
-      if (selected === id) {
-        setSelected(null);
-        setMessages([]);
-      }
-      await refreshHumans();
+      await clearHumanChat(selected);
+      await refreshChat();
     } catch {}
   }
 
@@ -129,32 +126,18 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
                 </p>
               )}
               {humans.map((h) => (
-                <div
+                <button
                   key={h.id}
+                  onClick={() => setSelected(h.id)}
                   className={cn(
-                    'group flex items-center border-b hover:bg-slate-50',
+                    'flex w-full items-center gap-2 border-b px-3 py-3 text-left text-sm hover:bg-slate-50',
                     selected === h.id && 'bg-primary/5',
                   )}
                 >
-                  <button
-                    onClick={() => setSelected(h.id)}
-                    className="flex flex-1 items-center gap-2 px-3 py-3 text-left text-sm"
-                  >
-                    <span className={cn('h-2 w-2 rounded-full', h.online ? 'bg-emerald-500' : 'bg-slate-300')} />
-                    <span className="flex-1 truncate font-medium">{h.name}</span>
-                    {!h.online && <Ghost className="h-3 w-3 text-slate-400" aria-label="shadow ativa" />}
-                  </button>
-                  <span className="mr-1.5 shrink-0 opacity-0 group-hover:opacity-100">
-                    <ActionIcon
-                      variant="subtle"
-                      color="danger"
-                      onClick={() => void removeHuman(h.id, h.name)}
-                      label={`excluir ${h.name}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </ActionIcon>
-                  </span>
-                </div>
+                  <span className={cn('h-2 w-2 rounded-full', h.online ? 'bg-emerald-500' : 'bg-slate-300')} />
+                  <span className="flex-1 truncate font-medium">{h.name}</span>
+                  {!h.online && <Ghost className="h-3 w-3 text-slate-400" aria-label="shadow ativa" />}
+                </button>
               ))}
             </div>
           </aside>
@@ -183,11 +166,11 @@ export function HumansPanel({ meId, preselectedId = null, onClose }: Props) {
                   <span className="ml-auto">
                     <ActionIcon
                       variant="subtle"
-                      color="danger"
-                      onClick={() => void removeHuman(selectedHuman.id, selectedHuman.name)}
-                      label="excluir perfil"
+                      color="gray"
+                      onClick={() => void clearChat()}
+                      label="limpar conversa"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Eraser className="h-4 w-4" />
                     </ActionIcon>
                   </span>
                 </header>

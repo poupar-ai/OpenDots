@@ -40,6 +40,7 @@ export function HumanOnboarding({ onDone }: Props) {
 
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
   const [skills, setSkills] = useState('');
   const [important, setImportant] = useState('');
@@ -100,6 +101,7 @@ export function HumanOnboarding({ onDone }: Props) {
       const h = await createHuman({
         name: name.trim(),
         password,
+        email: email.trim() || undefined,
         description: description.trim() || undefined,
         skills: skillsList,
         important: important.trim() || undefined,
@@ -213,6 +215,15 @@ export function HumanOnboarding({ onDone }: Props) {
                     value={password}
                     onChange={setPassword}
                     placeholder="defina uma senha"
+                  />
+                </Field>
+
+                <Field label="Email" hint="(opcional — usado p/ login futuro)">
+                  <TextInput
+                    type="email"
+                    value={email}
+                    onChange={setEmail}
+                    placeholder="voce@exemplo.com"
                   />
                 </Field>
 

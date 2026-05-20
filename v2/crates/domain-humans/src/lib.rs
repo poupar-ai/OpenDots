@@ -401,6 +401,7 @@ pub fn human_summary(h: &Value, now_ms: i64) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), h.get("id").cloned().unwrap_or(Value::Null));
     m.insert("name".into(), h.get("name").cloned().unwrap_or(Value::Null));
+    m.insert("email".into(), h.get("email").cloned().unwrap_or(Value::Null));
     m.insert(
         "description".into(),
         h.get("description")
@@ -507,6 +508,7 @@ fn sanitize_string_array(v: Option<&Value>, max_items: usize, max_len: usize) ->
 #[derive(Debug, Clone, Default)]
 pub struct CreateInput<'a> {
     pub name: &'a str,
+    pub email: Option<&'a str>,
     pub description: Option<&'a str>,
     pub skills: Option<&'a Value>,
     pub important: Option<&'a str>,
@@ -543,6 +545,15 @@ pub fn create_human(mem_dir: &Path, input: &CreateInput, clock: &dyn Clock) -> R
     let mut h = Map::new();
     h.insert("id".into(), Value::String(id.clone()));
     h.insert("name".into(), Value::String(name.to_string()));
+    h.insert(
+        "email".into(),
+        input
+            .email
+            .map(|e| e.trim().to_lowercase())
+            .filter(|e| !e.is_empty())
+            .map(|e| Value::String(slice_utf16(&e, 200)))
+            .unwrap_or(Value::Null),
+    );
     h.insert(
         "description".into(),
         Value::String(slice_utf16(input.description.unwrap_or(""), 4000)),
@@ -915,6 +926,16 @@ pub fn append_human_chat(mem_dir: &Path, a: &str, b: &str, entry: &Value) {
     };
     line.push('\n');
     let _ = f.write_all(line.as_bytes());
+}
+
+/// Limpa a conversa entre dois humanos (trunca o arquivo do par). Retorna
+/// `true` se havia algo pra limpar / o arquivo existia. Não apaga humano.
+pub fn clear_human_chat(mem_dir: &Path, a: &str, b: &str) -> bool {
+    let path = human_chat_path(mem_dir, a, b);
+    if !path.exists() {
+        return false;
+    }
+    fs::write(&path, b"").is_ok()
 }
 
 /// Paridade com `handleHumanChatsSummary`. Scan de `agent_chats/*.jsonl` e

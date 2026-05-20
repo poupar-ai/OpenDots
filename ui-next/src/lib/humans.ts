@@ -44,6 +44,7 @@ export interface HumanCreateInput {
   name: string;
   /** Senha do humano — backend guarda só o hash (PBKDF2) no cofre. */
   password?: string;
+  email?: string;
   description?: string;
   skills?: string[];
   important?: string;
@@ -212,11 +213,31 @@ export async function humanChatsSummary(id: string): Promise<HumanChatsSummary> 
   return r.json();
 }
 
-export async function humanChatHistory(me: string, withHuman: string): Promise<HumanChatMsg[]> {
-  const r = await fetch(
-    `/api/human-chat/history?me=${encodeURIComponent(me)}&with=${encodeURIComponent(withHuman)}`,
-  );
+export async function humanChatHistory(_me: string, withHuman: string): Promise<HumanChatMsg[]> {
+  // `me` é derivado do token no backend (segurança) — não confia no query.
+  const token = getHumanToken();
+  const r = await fetch(`/api/human-chat/history?with=${encodeURIComponent(withHuman)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const j = await r.json();
   return j.messages || [];
+}
+
+/** Limpa a conversa entre o humano logado (token) e `withHuman`. Não apaga
+ * o humano. Só funciona pra conversas das quais você participa. */
+export async function clearHumanChat(withHuman: string): Promise<void> {
+  const token = getHumanToken();
+  const r = await fetch('/api/human-chat/clear', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ with: withHuman }),
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || `HTTP ${r.status}`);
+  }
 }

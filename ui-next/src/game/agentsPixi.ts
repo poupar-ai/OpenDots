@@ -950,8 +950,12 @@ export class AgentCanvas {
   private clampAndApplyCamera() {
     if (!this.office) return;
     const { width: worldW, height: worldH } = this.office.getWorldSize();
+    // No mobile os controles flutuantes (▲▼ + chat) ficam sobre o rodapé do
+    // canvas. Damos uma "área segura" extra de scroll pra baixo pra que o
+    // último andar consiga subir acima desses botões e fique totalmente visível.
+    const bottomSafe = this.width <= 768 ? 120 : 0;
     const maxX = Math.max(0, worldW - this.width);
-    const maxY = Math.max(0, worldH - this.height);
+    const maxY = Math.max(0, worldH - this.height + bottomSafe);
     this.cameraX = clamp(this.cameraX, 0, maxX);
     this.cameraY = clamp(this.cameraY, 0, maxY);
     this.worldContainer.x = -this.cameraX;

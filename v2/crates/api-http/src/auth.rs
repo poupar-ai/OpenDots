@@ -12,7 +12,7 @@
 
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, Response as HttpResponse, StatusCode};
+use axum::http::{HeaderMap, Method, Response as HttpResponse, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 
@@ -47,6 +47,52 @@ fn unauthorized(msg: &str) -> Response {
 
 fn require_token_enabled() -> bool {
     std::env::var("PROJECT_MEM_REQUIRE_TOKEN").ok().as_deref() == Some("1")
+}
+
+fn forbidden(msg: &str) -> Response {
+    let body = format!(r#"{{"error":"{msg}"}}"#);
+    HttpResponse::builder()
+        .status(StatusCode::FORBIDDEN)
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+/// Origin-guard pra rotas de ESCRITA (POST/PUT/PATCH/DELETE). Defende contra
+/// CSRF/cross-origin quando o servidor está bindado na LAN: uma página em
+/// outro site não consegue mandar requests mutáveis pra cá.
+///
+/// - GET/HEAD/OPTIONS passam direto (read-only / preflight).
+/// - `Sec-Fetch-Site: cross-site` → bloqueia (sinal forte e moderno do browser).
+/// - `Origin` presente e fora da allowlist → bloqueia (fallback p/ browsers
+///   sem Sec-Fetch-Site). A allowlist inclui a porta da API e a do Vite dev.
+/// - Sem Origin nem Sec-Fetch-Site (curl, agentes via pmem) → passa.
+///
+/// Desligável com `PROJECT_MEM_GUARD_ORIGIN=0` (default: ligado).
+pub async fn origin_guard_middleware(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let mutating = matches!(
+        *req.method(),
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    );
+    let disabled = std::env::var("PROJECT_MEM_GUARD_ORIGIN").ok().as_deref() == Some("0");
+    if mutating && !disabled {
+        let headers = req.headers();
+        if let Some(sfs) = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()) {
+            if sfs.eq_ignore_ascii_case("cross-site") {
+                return forbidden("cross-site bloqueado");
+            }
+        }
+        if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+            if !crate::vault_routes::allowed_origins(&state).contains(&origin.to_lowercase()) {
+                return forbidden("cross-origin bloqueado");
+            }
+        }
+    }
+    next.run(req).await
 }
 
 pub async fn auth_middleware(

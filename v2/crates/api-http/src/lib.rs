@@ -349,6 +349,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(handoff_routes::handoff_router())
         .merge(data_route::data_router())
         .fallback(serve_static)
+        // Origin-guard nas rotas de escrita (CSRF/cross-origin) + auth/tenant.
+        .layer(middleware::from_fn_with_state(state.clone(), auth::origin_guard_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), auth::auth_middleware))
         .with_state(state)
 }

@@ -47,42 +47,51 @@ pub fn vault_router() -> Router<AppState> {
 
 // ── Guard ───────────────────────────────────────────────────────────────────
 
-fn allowed_hosts(st: &AppState) -> HashSet<String> {
+/// Porta do Vite dev server (proxy /api → API). Incluída nas allowlists pra
+/// o fluxo de desenvolvimento (UI em :5173 proxiando pra cá) não ser barrado.
+const DEV_PROXY_PORT: u16 = 5173;
+
+/// Hosts permitidos (anti DNS-rebinding). Inclui a porta da API e a do Vite
+/// dev. `pub(crate)` pra ser reusada pelo middleware global de origin-guard.
+pub(crate) fn allowed_hosts(st: &AppState) -> HashSet<String> {
     let mut out = HashSet::new();
-    let port = st.port;
-    out.insert(format!("localhost:{port}"));
-    out.insert(format!("127.0.0.1:{port}"));
     let cfg = st.network_cfg.lock().unwrap().clone();
-    match cfg.bind.as_str() {
-        "lan" => {
-            for ip in crate::list_lan_ips() {
-                out.insert(format!("{}:{}", ip.address, port));
+    for port in [st.port, DEV_PROXY_PORT] {
+        out.insert(format!("localhost:{port}"));
+        out.insert(format!("127.0.0.1:{port}"));
+        match cfg.bind.as_str() {
+            "lan" => {
+                for ip in crate::list_lan_ips() {
+                    out.insert(format!("{}:{}", ip.address, port));
+                }
             }
+            "custom" if !cfg.custom_host.is_empty() => {
+                out.insert(format!("{}:{}", cfg.custom_host, port));
+            }
+            _ => {}
         }
-        "custom" if !cfg.custom_host.is_empty() => {
-            out.insert(format!("{}:{}", cfg.custom_host, port));
-        }
-        _ => {}
     }
     out
 }
 
-fn allowed_origins(st: &AppState) -> HashSet<String> {
-    let port = st.port;
+/// Origins permitidos (anti CSRF/cross-origin). Mesma cobertura de portas.
+pub(crate) fn allowed_origins(st: &AppState) -> HashSet<String> {
     let mut out = HashSet::new();
-    out.insert(format!("http://localhost:{port}"));
-    out.insert(format!("http://127.0.0.1:{port}"));
     let cfg = st.network_cfg.lock().unwrap().clone();
-    match cfg.bind.as_str() {
-        "lan" => {
-            for ip in crate::list_lan_ips() {
-                out.insert(format!("http://{}:{}", ip.address, port));
+    for port in [st.port, DEV_PROXY_PORT] {
+        out.insert(format!("http://localhost:{port}"));
+        out.insert(format!("http://127.0.0.1:{port}"));
+        match cfg.bind.as_str() {
+            "lan" => {
+                for ip in crate::list_lan_ips() {
+                    out.insert(format!("http://{}:{}", ip.address, port));
+                }
             }
+            "custom" if !cfg.custom_host.is_empty() => {
+                out.insert(format!("http://{}:{}", cfg.custom_host, port));
+            }
+            _ => {}
         }
-        "custom" if !cfg.custom_host.is_empty() => {
-            out.insert(format!("http://{}:{}", cfg.custom_host, port));
-        }
-        _ => {}
     }
     out
 }

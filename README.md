@@ -431,6 +431,75 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 > - [`docs/permissoes-granulares.md`](docs/permissoes-granulares.md) — como
 >   evoluir o `authorize()` pra RBAC/ABAC.
 
+### Segurança (auditoria 2026-05-20)
+
+> Postura padrão hoje: `PROJECT_MEM_REQUIRE_HUMAN` on (escritas exigem JWT), mas
+> `authorize()` libera tudo a qualquer principal autenticado; **GETs não exigem
+> auth**; `REQUIRE_TOKEN` off; bind padrão `lan` (`0.0.0.0`). Confirmado SEGURO:
+> sem command-injection no spawn (argv, sem shell), sem SSRF (não há cliente HTTP
+> de saída), sem XSS (react-markdown sem `rehype-raw`), `alg=none` impossível.
+
+**Crítico**
+- **`authorize()` é no-op** (`api-http/src/auth.rs:89-91`): só checa
+  `is_authenticated()`. Qualquer JWT (humano *ou agente*) chama toda rota mutável
+  (`/api/db/restore`, `/api/scope`, `/api/mcps`, `/api/agents/:n/vault`…). É o
+  amplificador dos demais. → autorização real por principal/recurso; barrar
+  agente de mutar manifesto/scope/MCP.
+- **`PUT /api/scope` + `POST /api/mcps` → `.mcp.json` em dir arbitrário → RCE**
+  (`scope_routes.rs:89-127`, `mcp_routes.rs:151-178`, `:311+`): `project_root`
+  sem allowlist + MCP `stdio` com `command` arbitrário; o Claude Code auto-executa
+  o `.mcp.json` materializado. → allowlist de `project_root`; tratar `command`
+  stdio como privilegiado.
+- **Auto-escalada do agente**: agente spawna com `Bash`+`curl *`
+  (`chat_send_routes.rs:157-167`), origin-guard libera `curl` (sem `Origin`,
+  `auth.rs:160`), `authorize()` libera tudo, e **`get_secrets_for_agent` ignora o
+  unlock do cofre** (`adapter-vault-file/src/lib.rs:555-583`) → agente faz
+  `curl` pra própria API, se concede todos os secrets e exfiltra no próximo spawn.
+- **Frontend vaza Bearer cross-origin** (`ui-next/src/lib/apiAuth.ts:23`):
+  anexa o token a *qualquer* URL contendo a substring `/api/` (inclui
+  `https://evil.com/api/x`). → ancorar em `window.location.origin` +
+  `pathname.startsWith('/api/')` (fix de 1 linha).
+
+**Alto**
+- **`is_public_write` por sufixo/prefixo** (`auth.rs:96-102`): `ends_with("/login")`
+  e `starts_with("/api/auth/server-token")`. → match exato / guard por-rota.
+- **`bash_allow` aceita `*`** sem validação (`domain-agents/src/scope.rs`
+  `sanitize_scope`); a denylist global (`chat_send_routes.rs:74-108`) não é
+  fronteira. → validar padrões contra gramática allowlist.
+- **Injeção de env perigoso** (`chat_send_routes.rs:210-260`, `:963/:965`): secret
+  chamado `LD_PRELOAD`/`PATH`/`NODE_OPTIONS` no `secrets` do agente sobrescreve o
+  env do servidor. → denylist de nomes reservados em `build_agent_env`.
+- **Path traversal em GETs não autenticados**: `agent` em `/api/chat/history` e
+  `/stream` (`chat_routes.rs:113+`) e log (`agents_routes.rs:928`); `id` em
+  `/api/pipelines/install` (`pipelines_routes.rs:67`) e `ref` em `/api/seeds/apply`
+  (`seeds_routes.rs:93`). → aplicar o regex `^[a-z0-9_-]+$` que os GET-by-id já usam.
+
+**Médio (segurança)**
+- **`storage=db` grava secret literal em texto plano** no `.mcp.json` (raiz do
+  projeto, 0644, fora do `.gitignore`) e em `mcps.json` (`mcp_routes.rs:121-178`)
+  → risco de commit. Bloquear literal com `storage=db` (forçar `vault`), escrever
+  0600, gerenciar gitignore.
+- **"Cofre trancado" enganoso**: device key em texto plano, senha não deriva a
+  chave, `change_password` não re-cifra, `get_secrets_for_agent` ignora lock
+  (`adapter-vault-file/src/lib.rs`).
+- **Secrets de MCP vault-backed exibidos em texto plano** no `McpForm.tsx:91` (via
+  `getMcp`) — sem máscara/reveal-gate.
+- **Plugin Node**: `mem_dir` guiado por `cwd`/`file_path` não-confiáveis do hook
+  (`plugin/scripts/lib.cjs:13-29`, `observe.cjs:147`).
+- **Restore não revalida `entry.path` do manifest** (`db_routes.rs:271`) —
+  zip-slip latente (vira live com upload).
+- **Server token com PRNG fraco** (`auth_routes.rs` `simple_uuid_v4`) + compare
+  não-constante (`auth.rs:188`) — relevante só com `REQUIRE_TOKEN=1`.
+
+**Baixo / info**
+- `exp` sem teto e claim `ver` não validado; EdDSA usa `verify` (não
+  `verify_strict`); JWT humano/agente sem claim `typ`/`aud` (confusão de realm).
+- PBKDF2 100k rounds (OWASP ≥600k); senha mínima 4 chars.
+- `/api/_dev/mint_token` auto-provisiona identidade — só com `PROJECT_MEM_DEV_MODE=1`.
+- Garantir `agent_keys/` e `human_keys/` (`.priv`) no `.gitignore`.
+- Prompt-injection via observações reinjetadas; MCP server carrega JSONL inteiro
+  (DoS local); `install.cjs` não-atômico; colisão de chave de cofre `foo-bar`↔`foo_bar`.
+
 ### Médio
 
 - **9 painéis ainda no legado `@/components/ui/*`** (migrar pra `@/ui`):

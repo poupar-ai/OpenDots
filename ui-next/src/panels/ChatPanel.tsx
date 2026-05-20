@@ -624,6 +624,7 @@ export function ChatPanel({
           <ActionIcon
             variant="subtle"
             color="primary"
+            size="lg"
             disabled={!input.trim() || sending || improve?.phase === 'loading'}
             onClick={runImprove}
             label="melhorar ortografia e clareza (sem mudar intenção)"
@@ -637,6 +638,7 @@ export function ChatPanel({
           <ActionIcon
             variant="filled"
             color="primary"
+            size="lg"
             disabled={!input.trim() || sending}
             onClick={submit}
             label="enviar"

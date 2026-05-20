@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock, MessageCircle, X, PanelLeft } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock, MessageCircle, X, PanelLeft, Plug } from 'lucide-react';
 import { useData } from '@/hooks/useData';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
@@ -26,6 +26,7 @@ import { VaultPanel } from '@/panels/VaultPanel';
 import { NetworkPanel } from '@/panels/NetworkPanel';
 import { SubagentPanel } from '@/panels/SubagentPanel';
 import { CronPanel } from '@/panels/CronPanel';
+import { McpRegistryPanel } from '@/panels/McpRegistryPanel';
 import { ActionIcon, Badge, Box, Drawer, Group, colorVar } from '@/ui';
 import { MainMenu, type MenuItem } from '@/components/MainMenu';
 import { AgentPicker } from '@/components/AgentPicker';
@@ -57,6 +58,7 @@ export default function App() {
   const [networkOpen, setNetworkOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [cronOpen, setCronOpen] = useState(false);
+  const [mcpsOpen, setMcpsOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [prefCollapsed, setPrefCollapsed] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
@@ -137,6 +139,7 @@ export default function App() {
       { id: 'rede', label: 'rede', title: 'rede — bind do servidor (localhost/LAN/IP)', icon: <Network className="h-4 w-4" />, iconColor: 'info', onClick: () => setNetworkOpen(true) },
       { id: 'subagents', label: 'subagents', title: 'subagents — workstreams paralelos disparados por agents', icon: <Activity className="h-4 w-4" />, iconColor: 'primary', onClick: () => setSubagentsOpen(true) },
       { id: 'cron', label: 'cron', title: 'agendamentos — jobs recorrentes via cron', icon: <Clock className="h-4 w-4" />, iconColor: 'success', onClick: () => setCronOpen(true) },
+      { id: 'mcps', label: 'mcps', title: 'servidores MCP — cadastrar/compartilhar (conecta via .mcp.json)', icon: <Plug className="h-4 w-4" />, iconColor: 'info', onClick: () => setMcpsOpen(true) },
     ];
     if (human) {
       items.push({ id: 'humanos', label: 'humanos', title: 'falar com outros humanos', icon: <Users className="h-4 w-4" />, onClick: () => setHumansOpen(true) });
@@ -210,6 +213,7 @@ export default function App() {
       {cronOpen && (
         <CronPanel onClose={() => setCronOpen(false)} agents={agents} />
       )}
+      {mcpsOpen && <McpRegistryPanel onClose={() => setMcpsOpen(false)} />}
       {networkOpen && (
         <NetworkPanel onClose={() => setNetworkOpen(false)} />
       )}

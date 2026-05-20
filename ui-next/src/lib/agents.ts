@@ -1,4 +1,5 @@
 import type { Autonomy, AutonomyLevel, AgentType, Gender } from '@/lib/types';
+import type { RegisteredMcp } from '@/lib/mcps';
 
 export interface UpdateAutonomyPayload {
   level: AutonomyLevel;
@@ -138,6 +139,8 @@ export interface McpsList {
   global: string[];
   project: string[];
   referenced: string[];
+  /** MCPs cadastrados no projeto (catálogo próprio, com def + storage). */
+  registered: RegisteredMcp[];
   all: string[];
 }
 

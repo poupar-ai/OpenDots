@@ -15,7 +15,6 @@
 //! - `GET    /api/agents/log?agent=X`      — tail do log do agente
 //! - `GET    /api/agents/work?agent=X`     — observations filtradas
 
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -52,7 +51,6 @@ pub fn agents_router() -> Router<AppState> {
         .route("/api/agents/:name/mcps", put(mcps_handler))
         .route("/api/agents/:name/status", get(status_handler))
         .route("/api/agents/:name/rotate_keypair", post(rotate_keypair_handler))
-        .route("/api/mcps", get(mcps_list_handler))
         .route("/api/docs/:doc", put(doc_save_handler))
 }
 
@@ -850,67 +848,7 @@ async fn mcps_handler(
     }
 }
 
-// ── GET /api/mcps ───────────────────────────────────────────────────────────
-
-async fn mcps_list_handler(State(st): State<AppState>) -> Response {
-    let mut global: Vec<String> = Vec::new();
-    let mut project: Vec<String> = Vec::new();
-
-    if let Ok(home) = std::env::var("HOME") {
-        let cfg_path = PathBuf::from(home).join(".claude.json");
-        if let Ok(raw) = fs::read_to_string(&cfg_path) {
-            if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-                if let Some(servers) = v.get("mcpServers").and_then(Value::as_object) {
-                    global = servers.keys().cloned().collect();
-                }
-                let proj = v
-                    .get("projects")
-                    .and_then(|p| p.get(st.project_root.display().to_string().as_str()));
-                if let Some(proj) = proj {
-                    if let Some(servers) = proj.get("mcpServers").and_then(Value::as_object) {
-                        project = servers.keys().cloned().collect();
-                    }
-                }
-            }
-        }
-    }
-
-    let mut referenced: Vec<String> = Vec::new();
-    if let Some(manifest) = load_manifest(&st.mem_dir) {
-        if let Some(agents) = manifest.get("agents").and_then(Value::as_object) {
-            let mut seen = BTreeSet::new();
-            for a in agents.values() {
-                if let Some(mcps) = a.get("mcps").and_then(Value::as_array) {
-                    for m in mcps {
-                        if let Some(s) = m.as_str() {
-                            if seen.insert(s.to_string()) {
-                                referenced.push(s.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let mut all_set: Vec<String> = Vec::new();
-    let mut seen = BTreeSet::new();
-    for s in global.iter().chain(project.iter()).chain(referenced.iter()) {
-        if seen.insert(s.clone()) {
-            all_set.push(s.clone());
-        }
-    }
-
-    json_response(
-        StatusCode::OK,
-        json!({
-            "global": global,
-            "project": project,
-            "referenced": referenced,
-            "all": all_set,
-        }),
-    )
-}
+// (GET /api/mcps migrou pra `mcp_routes` — agora inclui o registro do projeto.)
 
 // ── PUT /api/docs/:doc ──────────────────────────────────────────────────────
 

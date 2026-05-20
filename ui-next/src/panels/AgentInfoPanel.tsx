@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Modal, Stack, Group, Text, Textarea, Chip, ActionIcon, Badge as UiBadge, Button as UiButton } from '@/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import type { RegisteredMcp } from '@/lib/mcps';
+import { McpForm } from '@/panels/McpForm';
 import { CopyButton } from '@/components/CopyButton';
 import { AgentFace } from '@/components/AgentFace';
 import { cn } from '@/lib/utils';
 import type { AgentCfg, AgentLogSummary, AutonomyLevel, Manifest } from '@/lib/types';
 import {
   Eye, ArrowRight, ArrowLeft, AlertCircle, Activity, Sliders, X, Save, Cpu, Sprout,
-  FileText, Pencil, Plug, Trash2, Hammer, Terminal, FilePen, ChevronDown,
+  FileText, Pencil, Plug, Plus, Trash2, Hammer, Terminal, FilePen, ChevronDown,
   Zap, TrendingUp, Clock, Shield, ShieldAlert, ShieldCheck, KeyRound, Lock,
 } from 'lucide-react';
 import {
@@ -1317,19 +1321,50 @@ interface McpsEditorProps {
 
 function McpsEditor({ name, current, onClose }: McpsEditorProps) {
   const [draft, setDraft] = useState<string>((current || []).join(', '));
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [registered, setRegistered] = useState<RegisteredMcp[]>([]);
+  const [others, setOthers] = useState<string[]>([]);
+  // nomes que têm conexão REAL: registrados (→ .mcp.json) ou definidos no ~/.claude.json.
+  const [connectable, setConnectable] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // sub-modal de cadastro/edição da DEF do servidor. null = fechado;
+  // { name: null } = novo; { name: 'x' } = editar.
+  const [mcpForm, setMcpForm] = useState<{ name: string | null } | null>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
-  useEffect(() => {
-    let alive = true;
+  const reload = () => {
     listMcps()
-      .then((r) => { if (alive) setSuggestions(r.all || []); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
+      .then((r) => {
+        const reg = r.registered || [];
+        setRegistered(reg);
+        const regNames = reg.map((m) => m.name);
+        // sugestões "soltas" = tudo que aparece no catálogo mas não está no registry
+        setOthers((r.all || []).filter((n) => !regNames.includes(n)));
+        // conexão real = registrado OU presente no ~/.claude.json (global/projeto).
+        // "referenced" (citado por outro agente) NÃO conta — pode ser órfão também.
+        setConnectable(new Set([...regNames, ...(r.global || []), ...(r.project || [])]));
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  };
+  useEffect(reload, []);
 
-  const parsed = draft.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+  const splitList = (v: string) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+  const parsed = splitList(draft);
+  const has = (n: string) => parsed.includes(n);
+  // atribuídos sem definição de servidor → entram no allowlist mas não conectam.
+  const orphans = loaded ? parsed.filter((n) => !connectable.has(n)) : [];
+
+  const toggle = (n: string) => {
+    const cur = splitList(draft);
+    const next = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n];
+    setDraft(next.join(', '));
+  };
+  const add = (n: string) => {
+    const cur = splitList(draft);
+    if (!cur.includes(n)) setDraft([...cur, n].join(', '));
+  };
 
   const save = async () => {
     setErr(null);
@@ -1345,65 +1380,125 @@ function McpsEditor({ name, current, onClose }: McpsEditorProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Plug className="h-4 w-4" /> MCPs de {name}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              servidores MCP que o agente pode acessar quando invocado
-            </p>
+    <>
+    <Modal
+      opened
+      onClose={onClose}
+      fullScreen={isMobile}
+      size="md"
+      title={
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Plug className="h-4 w-4" /> MCPs de {name}
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs">
+          <Text size="xs" muted>servidores MCP que o agente pode acessar quando invocado</Text>
+        </div>
+      }
+    >
+      <Stack gap="sm">
+        <div>
           <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-            MCPs <span className="text-slate-400">(separe por vírgula ou quebra de linha)</span>
+            MCPs <span className="font-normal normal-case text-slate-400">(separe por vírgula ou quebra de linha)</span>
           </label>
-          <input
-            list="mcps-editor-suggestions"
+          <Textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={setDraft}
             placeholder="ex: resend, supabase"
-            className="mb-2 w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
+            minRows={2}
           />
-          <datalist id="mcps-editor-suggestions">
-            {suggestions.map((m) => <option key={m} value={m} />)}
-          </datalist>
-          {parsed.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {parsed.map((m) => (
-                <span key={m} className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0 font-mono text-xs text-violet-700">
-                  {m}
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <Text size="xs" muted>registrados no projeto (clique p/ adicionar, lápis p/ editar a def)</Text>
+            <UiButton size="compact-xs" variant="light" leftIcon={<Plus className="h-3 w-3" />} onClick={() => setMcpForm({ name: null })}>
+              novo
+            </UiButton>
+          </div>
+          {registered.length === 0 ? (
+            <Text size="xs" muted>Nenhum MCP registrado. Use "novo" pra criar a conexão real.</Text>
+          ) : (
+            <Group gap="xs">
+              {registered.map((m) => (
+                <span key={m.name} className="inline-flex items-center gap-0.5 rounded-full bg-slate-50 pr-0.5">
+                  <Chip checked={has(m.name)} onChange={() => toggle(m.name)} variant="light">
+                    <span className="inline-flex items-center gap-1">
+                      {m.name}
+                      <UiBadge color={m.storage === 'vault' ? 'warning' : 'info'} variant="light" size="sm">
+                        {m.storage === 'vault' ? 'cofre' : 'banco'}
+                      </UiBadge>
+                    </span>
+                  </Chip>
+                  <ActionIcon size="sm" variant="subtle" color="gray" label={`editar ${m.name}`} onClick={() => setMcpForm({ name: m.name })}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </ActionIcon>
                 </span>
               ))}
-            </div>
-          )}
-          <p className="text-xs text-slate-500">
-            sugestões vêm de <code className="rounded bg-slate-100 px-1">~/.claude.json</code> (global + projeto) e
-            de MCPs já referenciados em outros agentes. você pode digitar um nome novo — basta confirmar.
-          </p>
-          {err && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-              {err}
-            </div>
+            </Group>
           )}
         </div>
-        <footer className="flex justify-end gap-2 border-t px-4 py-3">
-          <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
+
+        {others.length > 0 && (
+          <div>
+            <Text size="xs" muted style={{ marginBottom: 4 }}>de ~/.claude.json e outros agentes</Text>
+            <Group gap="xs">
+              {others.map((n) => (
+                <Chip key={n} checked={has(n)} onChange={() => toggle(n)} variant="light" color="gray">{n}</Chip>
+              ))}
+            </Group>
+          </div>
+        )}
+
+        <Text size="xs" muted>
+          MCPs <strong>registrados</strong> são materializados no <code>.mcp.json</code> do projeto
+          (conexão real) e a lista por-agente vira o allowlist <code>--allowed-tools</code> no spawn —
+          então o agente só acessa os que estiverem aqui. Pode digitar um nome novo — basta confirmar.
+        </Text>
+
+        {orphans.length > 0 && (
+          <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
+            <Text size="xs" style={{ color: '#92400e' }}>
+              <strong>{orphans.join(', ')}</strong> {orphans.length > 1 ? 'não têm' : 'não tem'} conexão real:{' '}
+              {orphans.length > 1 ? 'não estão' : 'não está'} no registry nem no <code>~/.claude.json</code>.
+              {' '}Vão pro allowlist do agente, mas não conectam até serem registrados em "Servidores MCP".
+            </Text>
+          </div>
+        )}
+
+        {err && <Text size="xs" color="danger">{err}</Text>}
+
+        <Group justify="flex-end" gap="xs">
+          <UiButton size="sm" variant="default" color="gray" onClick={onClose} disabled={saving}>
             cancelar
-          </Button>
-          <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
-            <Save className="h-3.5 w-3.5" />
+          </UiButton>
+          <UiButton size="sm" onClick={save} loading={saving} leftIcon={<Save className="h-3.5 w-3.5" />}>
             {saving ? 'salvando…' : 'salvar'}
-          </Button>
-        </footer>
-      </div>
-    </div>
+          </UiButton>
+        </Group>
+      </Stack>
+    </Modal>
+
+    {mcpForm && (
+      <Modal
+        opened
+        onClose={() => setMcpForm(null)}
+        fullScreen={isMobile}
+        size="md"
+        title={<Text fw={600}>{mcpForm.name ? `Editar MCP: ${mcpForm.name}` : 'Registrar MCP'}</Text>}
+      >
+        <McpForm
+          editName={mcpForm.name}
+          onCancel={() => setMcpForm(null)}
+          onSaved={(savedName) => {
+            // registrou/editou a def → recarrega catálogo e já atribui ao agente.
+            setMcpForm(null);
+            add(savedName);
+            reload();
+          }}
+        />
+      </Modal>
+    )}
+    </>
   );
 }
 

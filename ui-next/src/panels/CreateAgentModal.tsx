@@ -41,7 +41,7 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
   const [tools, setTools] = useState('Read, Grep, Glob');
   const [mcps, setMcps] = useState('');
   const [canTalk, setCanTalk] = useState('manager');
-  const [, setMcpSuggestions] = useState<string[]>([]);
+  const [mcpSuggestions, setMcpSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -55,6 +55,12 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
   }, []);
 
   const splitList = (v: string) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+
+  // Adiciona um MCP do catálogo ao campo (sem duplicar).
+  const addMcp = (n: string) => {
+    const cur = splitList(mcps);
+    if (!cur.includes(n)) setMcps([...cur, n].join(', '));
+  };
 
   const nameClean = name.trim().toLowerCase();
   const nameValid = /^[a-z0-9_-]+$/.test(nameClean);
@@ -163,6 +169,20 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
 
         <Field label="MCPs" hint="(separe por vírgula)">
           <TextInput value={mcps} onChange={setMcps} placeholder="ex: resend, supabase" />
+          {mcpSuggestions.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {mcpSuggestions.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => addMcp(m)}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                >
+                  + {m}
+                </button>
+              ))}
+            </div>
+          )}
         </Field>
 
         <Field label="Fala com" hint="(can_talk_to, vírgula)">

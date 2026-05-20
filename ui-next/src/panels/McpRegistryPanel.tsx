@@ -214,8 +214,12 @@ export function McpRegistryPanel({ onClose }: Props) {
               <Field label="Args" hint="separados por espaço">
                 <TextInput value={form.args} onChange={(v) => set({ args: v })} placeholder="-y @resend/mcp-send" />
               </Field>
-              <Field label="Env" hint="CHAVE=valor por linha">
-                <Textarea value={form.env} onChange={(v) => set({ env: v })} placeholder="RESEND_API_KEY=re_..." minRows={2} />
+              <Field label="Env" hint="CHAVE=valor por linha — use ${SECRET} p/ referenciar um secret do cofre">
+                <Textarea value={form.env} onChange={(v) => set({ env: v })} placeholder="RESEND_API_KEY=${RESEND_API_KEY}" minRows={2} />
+                <Text size="xs" muted style={{ marginTop: 4 }}>
+                  Valor literal vai plano pro .mcp.json. Pra não expor, ponha o secret no Cofre
+                  e referencie como <code>${'{'}NOME{'}'}</code> — o agente resolve no spawn (ACL).
+                </Text>
               </Field>
             </>
           ) : (

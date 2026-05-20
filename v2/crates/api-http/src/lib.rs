@@ -258,6 +258,13 @@ impl AppState {
             }
         }
 
+        // MCPs registrados → re-materializa no .mcp.json do projeto. Cobre
+        // restore/edição manual/troca de project_root. Idempotente.
+        let n_mcp = mcp_routes::materialize_all(&mem_dir, &project_root, &vault);
+        if n_mcp > 0 {
+            eprintln!("mcp: {n_mcp} servidor(es) materializado(s) no .mcp.json");
+        }
+
         let runner = agent_runner::build_runner(
             mem_dir.clone(),
             project_root.clone(),

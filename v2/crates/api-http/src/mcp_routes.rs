@@ -179,14 +179,18 @@ fn materialize(project_root: &Path, name: &str, entry: Option<Value>) -> std::io
 
 /// Resolve a def completa de um MCP do registry (db = inline; vault = lê o
 /// secret). Retorna `None` se não existe; `Err` se vault necessário e falhou.
-fn full_def(st: &AppState, name: &str) -> Result<Option<Value>, String> {
-    let reg = load_registry(&st.mem_dir);
+fn full_def_parts(
+    mem_dir: &Path,
+    vault: &std::sync::Arc<dyn core_ports::VaultStore>,
+    name: &str,
+) -> Result<Option<Value>, String> {
+    let reg = load_registry(mem_dir);
     let Some(entry) = reg.get("mcps").and_then(|m| m.get(name)) else {
         return Ok(None);
     };
     let storage = entry.get("storage").and_then(Value::as_str).unwrap_or("db");
     if storage == "vault" {
-        match st.vault.get_secret(&st.mem_dir, &vault_secret_name(name)) {
+        match vault.get_secret(mem_dir, &vault_secret_name(name)) {
             Ok(Some(s)) => serde_json::from_str::<Value>(&s)
                 .map(Some)
                 .map_err(|e| format!("def do MCP no cofre inválida: {e}")),
@@ -196,6 +200,36 @@ fn full_def(st: &AppState, name: &str) -> Result<Option<Value>, String> {
     } else {
         Ok(Some(entry.clone()))
     }
+}
+
+fn full_def(st: &AppState, name: &str) -> Result<Option<Value>, String> {
+    full_def_parts(&st.mem_dir, &st.vault, name)
+}
+
+/// Re-materializa TODOS os MCPs registrados no `.mcp.json` do projeto. Chamado
+/// no startup pra cobrir: `.mcp.json` apagado/restaurado, editado à mão, ou
+/// `project_root` trocado (materializa no path atual). Idempotente. MCPs no
+/// cofre são pulados se o cofre estiver trancado (re-materializam depois).
+pub(crate) fn materialize_all(
+    mem_dir: &Path,
+    project_root: &Path,
+    vault: &std::sync::Arc<dyn core_ports::VaultStore>,
+) -> usize {
+    let reg = load_registry(mem_dir);
+    let Some(mcps) = reg.get("mcps").and_then(Value::as_object) else {
+        return 0;
+    };
+    let mut n = 0;
+    for name in mcps.keys() {
+        let def = match full_def_parts(mem_dir, vault, name) {
+            Ok(Some(d)) => d,
+            _ => continue, // vault trancado / ausente → pula
+        };
+        if materialize(project_root, name, Some(mcp_json_entry(&def))).is_ok() {
+            n += 1;
+        }
+    }
+    n
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────

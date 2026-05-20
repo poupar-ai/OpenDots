@@ -61,7 +61,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 bytes = "1"
 mime_guess = "2"
-time = { version = "=0.3.36", default-features = false, features = ["std", "macros", "parsing"] }
+time = { version = "=0.3.47", default-features = false, features = ["std", "macros", "parsing"] }
 
 [profile.release]
 lto = true

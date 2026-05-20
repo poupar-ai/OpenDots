@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, Brain } from 'lucide-react';
@@ -21,6 +21,8 @@ export interface MessageBubbleProps {
   humanName?: string | null;
   agentType?: string;
   agentProfession?: string;
+  /** Avatar custom do lado esquerdo (ex.: outro humano). Sobrepõe o AgentFace. */
+  avatar?: ReactNode;
 }
 
 function initials(name: string): string {
@@ -41,6 +43,7 @@ export const MessageBubble = memo(function MessageBubble({
   humanName,
   agentType,
   agentProfession,
+  avatar,
 }: MessageBubbleProps) {
   const isUser = msg.role === 'user';
   const thinking = msg.streaming && msg.phase === 'thinking';
@@ -54,6 +57,8 @@ export const MessageBubble = memo(function MessageBubble({
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
             <Brain className="h-3.5 w-3.5 text-amber-600" />
           </div>
+        ) : avatar ? (
+          avatar
         ) : agentType ? (
           <AgentFace
             type={agentType}

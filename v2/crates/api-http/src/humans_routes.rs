@@ -19,10 +19,10 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
 use domain_humans::{
-    create_human, delete_human, get_human_summary, human_summary, list_humans, load_humans,
-    read_human_chat, summarize_human_chats, touch_human, update_human, Clock as HumansClock,
-    CreateInput, Error as HumansError, SystemClock as HumansSystemClock, UpdateInput,
-    HUMAN_LOCATIONS,
+    append_human_chat, create_human, delete_human, get_human_summary, human_summary, list_humans,
+    load_humans, read_human_chat, summarize_human_chats, touch_human, update_human,
+    Clock as HumansClock, CreateInput, Error as HumansError, SystemClock as HumansSystemClock,
+    UpdateInput, HUMAN_LOCATIONS,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -39,6 +39,38 @@ pub fn humans_router() -> Router<AppState> {
         .route("/api/humans/:id/heartbeat", post(heartbeat_handler))
         .route("/api/humans/:id/chats", get(chats_summary_handler))
         .route("/api/human-chat/history", get(human_chat_history_handler))
+        .route("/api/human-handoff", post(handoff_handler))
+}
+
+/// `POST /api/human-handoff` — envia mensagem de um humano pra outro.
+/// Body: `{ from, to, message }`. Faz append no log do par e marca o
+/// remetente como visto. (Shadow-turn de IA quando offline fica pra depois.)
+async fn handoff_handler(
+    Extension(tc): Extension<crate::tenant::TenantContext>,
+    body: Bytes,
+) -> Response {
+    let v: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
+    };
+    let from = v.get("from").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let to = v.get("to").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let message = v.get("message").and_then(Value::as_str).filter(|s| !s.is_empty());
+    let (Some(from), Some(to), Some(message)) = (from, to, message) else {
+        return json_error(StatusCode::BAD_REQUEST, "missing from/to/message");
+    };
+
+    let clock = HumansSystemClock;
+    let entry = json!({
+        "from": from,
+        "to": to,
+        "content": message,
+        "ts": clock.now_iso(),
+    });
+    append_human_chat(&tc.mem_dir, from, to, &entry);
+    let _ = touch_human(&tc.mem_dir, from, &clock);
+
+    json_response(StatusCode::OK, json!({ "ok": true }))
 }
 
 async fn list_handler(State(st): State<AppState>) -> Response {

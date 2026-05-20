@@ -197,6 +197,20 @@ async fn create_handler(
         return json_error(StatusCode::BAD_REQUEST, "senha obrigatória (mín. 4 caracteres)");
     };
 
+    // O hash da senha é guardado no cofre — ele precisa existir e estar
+    // destrancado ANTES de criar o humano. Checa primeiro pra não deixar um
+    // perfil órfão (criado sem senha) quando o cofre está locked/uninit.
+    match st.vault.status(&tc.mem_dir) {
+        Ok(s) if !s.initialized => {
+            return json_error(StatusCode::LOCKED, "crie o cofre primeiro — a senha do humano é guardada nele");
+        }
+        Ok(s) if s.locked => {
+            return json_error(StatusCode::LOCKED, "destranque o cofre primeiro — a senha do humano é guardada nele");
+        }
+        Ok(_) => {}
+        Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, &format!("cofre: {e}")),
+    }
+
     let description = v.get("description").and_then(Value::as_str);
     let important = v.get("important").and_then(Value::as_str);
     let notes = v.get("notes").and_then(Value::as_str);

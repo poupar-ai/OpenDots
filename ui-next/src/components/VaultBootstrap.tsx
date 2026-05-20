@@ -1,92 +1,103 @@
 import { useEffect, useState } from 'react';
 import { KeyRound } from 'lucide-react';
-import {
-  Alert,
-  Box,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  Title,
-} from '@/ui';
-import { getVaultStatus } from '@/lib/vault';
+import { Button, Group, Modal, Stack, Text, TextInput, Title } from '@/ui';
+import { getVaultStatus, initVault, unlockVault } from '@/lib/vault';
 
 interface Props {
-  /** Chamado quando o usuário clica em "Criar cofre" — abre o VaultPanel. */
-  onOpenVault: () => void;
+  /** Avisa o App quando o cofre está pronto (inicializado + destrancado). */
+  onReady: (ready: boolean) => void;
 }
 
+type Phase = 'checking' | 'create' | 'unlock' | 'ready';
+
 /**
- * Detecta se o cofre não está inicializado ao montar a UI e mostra um
- * modal explicando que ele é necessário pra recursos como identidade
- * de agentes (keypair). Não bloqueia o app — o usuário pode dispensar
- * por essa sessão se quiser.
- *
- * O check roda uma vez (mount). Re-aparece em refresh enquanto vault
- * estiver sem init. Quando o user cria via VaultPanel, o estado é
- * `initialized=true` e o modal não aparece mais.
+ * Gate OBRIGATÓRIO do cofre — bloqueia o app até o cofre estar inicializado e
+ * destrancado, porque a senha dos humanos é guardada nele. Sem isso, criar
+ * perfil falha (e deixa órfão). Não é dispensável: cria ou destranca inline.
  */
-export function VaultBootstrap({ onOpenVault }: Props) {
-  const [needed, setNeeded] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+export function VaultBootstrap({ onReady }: Props) {
+  const [phase, setPhase] = useState<Phase>('checking');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const s = await getVaultStatus();
-        if (alive && !s.initialized) setNeeded(true);
+        if (!alive) return;
+        if (!s.initialized) setPhase('create');
+        else if (s.locked) setPhase('unlock');
+        else { setPhase('ready'); onReady(true); }
       } catch {
-        // Servidor inacessível — não força nada. UI principal já vai
-        // dar feedback de "sem conexão" no fluxo normal.
+        // Servidor inacessível — não trava o app (o fluxo normal já dá
+        // feedback de offline). Libera e deixa seguir.
+        if (alive) { setPhase('ready'); onReady(true); }
       }
     })();
-    return () => {
-      alive = false;
-    };
-  }, []);
+    return () => { alive = false; };
+  }, [onReady]);
 
-  if (!needed || dismissed) return null;
+  if (phase === 'checking' || phase === 'ready') return null;
+
+  const creating = phase === 'create';
+
+  const submit = async () => {
+    setErr(null);
+    if (pw.length < 4) { setErr('mín. 4 caracteres'); return; }
+    if (creating && pw !== pw2) { setErr('as senhas não conferem'); return; }
+    setBusy(true);
+    try {
+      if (creating) await initVault(pw);
+      else await unlockVault(pw);
+      setPhase('ready');
+      onReady(true);
+    } catch (e: any) {
+      setErr(e?.message || 'falhou');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Modal
       opened
-      onClose={() => setDismissed(true)}
-      size="md"
+      onClose={() => {}}
+      withCloseButton={false}
+      size="sm"
       title={
         <Group gap="xs">
           <KeyRound size={18} />
-          <Title order={5}>Cofre não criado</Title>
+          <Title order={5}>{creating ? 'Criar o cofre' : 'Destrancar o cofre'}</Title>
         </Group>
       }
     >
-      <Stack gap="md">
-        <Text>
-          Esse projeto ainda não tem cofre. O cofre guarda secrets (chaves de
-          API, tokens) e identidades de agentes (chave privada Ed25519). Sem
-          ele, agentes não conseguem assinar handoffs e secrets de provider
-          não ficam disponíveis.
-        </Text>
-        <Alert color="info">
-          Você pode criar agora pela UI (recomendado) — ou pular por essa
-          sessão. Se pular, recursos que dependem do cofre vão falhar com
-          mensagem orientando a criar.
-        </Alert>
-        <Group justify="space-between">
-          <Button variant="subtle" color="gray" onClick={() => setDismissed(true)}>
-            pular por agora
-          </Button>
-          <Button
-            onClick={() => {
-              setDismissed(true);
-              onOpenVault();
-            }}
-          >
-            criar cofre agora
-          </Button>
-        </Group>
-      </Stack>
+      <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <Stack gap="md">
+          <Text size="sm" muted>
+            {creating
+              ? 'O cofre guarda secrets e a senha dos humanos (só o hash). Defina uma senha-mestra — ela é obrigatória antes de criar qualquer perfil.'
+              : 'O cofre está trancado. Informe a senha-mestra pra destrancar e poder entrar/criar perfis.'}
+          </Text>
+          <TextInput
+            type="password"
+            value={pw}
+            onChange={setPw}
+            placeholder={creating ? 'senha-mestra do cofre' : 'senha-mestra'}
+          />
+          {creating && (
+            <TextInput type="password" value={pw2} onChange={setPw2} placeholder="confirme a senha" />
+          )}
+          {err && <Text size="xs" color="danger">{err}</Text>}
+          <Group justify="flex-end">
+            <Button type="submit" loading={busy} disabled={busy || pw.length < 4}>
+              {creating ? 'Criar cofre' : 'Destrancar'}
+            </Button>
+          </Group>
+        </Stack>
+      </form>
     </Modal>
   );
 }

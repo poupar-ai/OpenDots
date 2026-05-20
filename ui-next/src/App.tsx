@@ -48,6 +48,7 @@ export default function App() {
   const [architectOpen, setArchitectOpen] = useState(false);
   const [protectionsOpen, setProtectionsOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultReady, setVaultReady] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [cronOpen, setCronOpen] = useState(false);
@@ -138,11 +139,13 @@ export default function App() {
     return items;
   }, [human]);
 
-  const showOnboarding = !humanId;
+  // Cofre é obrigatório ANTES do humano (a senha do humano vira hash no
+  // cofre). Onboarding só aparece com o cofre pronto.
+  const showOnboarding = !humanId && vaultReady;
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      <VaultBootstrap onOpenVault={() => setVaultOpen(true)} />
+      <VaultBootstrap onReady={setVaultReady} />
       {showOnboarding && (
         <HumanOnboarding
           onDone={(id) => {

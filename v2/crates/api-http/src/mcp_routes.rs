@@ -360,6 +360,10 @@ async fn register_handler(State(st): State<AppState>, body: Bytes) -> Response {
                 &format!("falha ao salvar no cofre (destrancado?): {e}"),
             );
         }
+    } else {
+        // Re-registro mudando vault→db: apaga o secret órfão pra não deixar
+        // a def antiga (possivelmente sensível) parada no cofre. No-op se não existir.
+        let _ = st.vault.delete_secret(&st.mem_dir, &vault_secret_name(&name));
     }
     let mut reg = load_registry(&st.mem_dir);
     if let Some(m) = reg.get_mut("mcps").and_then(Value::as_object_mut) {

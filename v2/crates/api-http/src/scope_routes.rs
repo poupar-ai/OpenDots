@@ -87,6 +87,7 @@ async fn get_suggestions(Extension(tc): Extension<TenantContext>) -> Response {
 }
 
 async fn put_scope(
+    State(st): State<AppState>,
     Extension(tc): Extension<TenantContext>,
     body: Bytes,
 ) -> Response {
@@ -115,12 +116,17 @@ async fn put_scope(
     if let Err(e) = write_scope_project_root(&tc.mem_dir, &path) {
         return json_error(StatusCode::INTERNAL_SERVER_ERROR, &format!("falha ao gravar: {e}"));
     }
+    // Pré-materializa os MCPs registrados no .mcp.json do NOVO project_root,
+    // pra que ele já fique pronto antes do restart (st.project_root só passa a
+    // apontar pro novo escopo no próximo boot — ver startup materialize_all).
+    let n_mcp = crate::mcp_routes::materialize_all(&tc.mem_dir, &path, &st.vault);
     json_response(
         StatusCode::OK,
         json!({
             "ok": true,
             "project_root": path.to_string_lossy(),
             "restart_required": true,
+            "mcps_materialized": n_mcp,
             "tenant": tc.id,
         }),
     )

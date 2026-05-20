@@ -457,7 +457,6 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
   obrigatório hoje; reavaliar quando integrar auth externo (ex.: Firebase).
 - **Snapshot/restore**: upload via multipart é "fase futura"
   (`db_routes.rs`).
-- **Dependabot**: vulnerabilidades nas deps do repo a tratar.
 
 ---
 

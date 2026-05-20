@@ -435,12 +435,6 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 - **Bundle único de ~1.2MB (mobile sofre).** `ui-next/vite.config.ts` sem
   `manualChunks`/code-split — Pixi/WebGL (canvas) vão no bundle principal.
   → `React.lazy` no `AgentCanvas`/Pixi + `manualChunks` pra separar vendor.
-- **Rotas de escrita sem guard de origin/host (exceto vault).** Só
-  `vault_routes` tem `guard()`. `POST /api/humans`, `/api/chat`,
-  `/api/humans/:id` (CRUD), `/api/scope` etc. não checam origin — com bind LAN,
-  qualquer dispositivo/página posta. → Aplicar o guard de origin/host nas rotas
-  mutáveis (o handoff já exige JWT).
-
 ### Médio
 
 - **9 painéis ainda no legado `@/components/ui/*`** (migrar pra `@/ui`):

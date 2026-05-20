@@ -107,7 +107,14 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
         </div>
       }
     >
-      <div className="space-y-3">
+      <div
+        className="flex flex-col"
+        style={isMobile ? { maxHeight: 'calc(100dvh - 7rem)' } : undefined}
+      >
+        <div
+          className="soft-scroll space-y-3 overflow-y-auto pr-1"
+          style={isMobile ? { flex: 1 } : undefined}
+        >
         <Field label="Nome" hint='(minúsculas, números, "-", "_")'>
           <TextInput
             value={name}
@@ -167,21 +174,25 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
             {err}
           </div>
         )}
+        </div>
 
-        <Group justify="flex-end" gap="xs">
-          <Button size="sm" variant="default" color="gray" onClick={onClose} disabled={saving}>
-            cancelar
-          </Button>
-          <Button
-            size="sm"
-            onClick={save}
-            disabled={!canSave}
-            loading={saving}
-            leftIcon={<Save className="h-3.5 w-3.5" />}
-          >
-            {saving ? 'criando…' : 'criar'}
-          </Button>
-        </Group>
+        {/* Rodapé fixo — botões sempre visíveis (não rolam com o form). */}
+        <div className="mt-3 border-t bg-white pt-3">
+          <Group justify="flex-end" gap="xs">
+            <Button size="sm" variant="default" color="gray" onClick={onClose} disabled={saving}>
+              cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={save}
+              disabled={!canSave}
+              loading={saving}
+              leftIcon={<Save className="h-3.5 w-3.5" />}
+            >
+              {saving ? 'criando…' : 'criar'}
+            </Button>
+          </Group>
+        </div>
       </div>
     </Modal>
   );

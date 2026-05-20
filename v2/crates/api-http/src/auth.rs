@@ -36,6 +36,76 @@ fn resolve_tenant(_headers: &HeaderMap, state: &AppState) -> TenantContext {
     TenantContext::default_for(&state.mem_dir)
 }
 
+// ── Principal + autorização ──────────────────────────────────────────────────
+
+/// Quem está fazendo a request. Resolvido do Bearer JWT (humano ou agente).
+/// Fica numa extension pra handlers/futuras checagens de permissão lerem.
+#[derive(Clone, Debug)]
+pub enum Principal {
+    Human(String),
+    Agent(String),
+    Anonymous,
+}
+
+impl Principal {
+    pub fn is_authenticated(&self) -> bool {
+        !matches!(self, Principal::Anonymous)
+    }
+    pub fn id(&self) -> Option<&str> {
+        match self {
+            Principal::Human(s) | Principal::Agent(s) => Some(s),
+            Principal::Anonymous => None,
+        }
+    }
+}
+
+/// Resolve o Principal a partir do Bearer JWT: tenta como humano (pubkey no
+/// humans.json), depois como agente (pubkey no agents.json). Sem token válido
+/// → Anonymous.
+fn resolve_principal(headers: &HeaderMap, mem_dir: &std::path::Path) -> Principal {
+    let Some(token) = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+    else {
+        return Principal::Anonymous;
+    };
+    if let Ok(c) = crate::agent_keys::verify_jwt(token, |id| {
+        crate::human_keys::lookup_human_pubkey(mem_dir, id)
+    }) {
+        return Principal::Human(c.agent);
+    }
+    if let Ok(c) = crate::agent_keys::verify_jwt(token, |name| {
+        crate::agent_keys::lookup_pubkey(mem_dir, name)
+    }) {
+        return Principal::Agent(c.agent);
+    }
+    Principal::Anonymous
+}
+
+/// PONTO ÚNICO de autorização. Hoje: qualquer principal autenticado pode tudo.
+/// Futuro: RBAC/ABAC aqui — checar se `principal` pode `action` em `resource`.
+pub fn authorize(principal: &Principal, _action: &str, _resource: &str) -> bool {
+    principal.is_authenticated()
+}
+
+/// Rotas de escrita que NÃO exigem auth (bootstrap — não há token ainda):
+/// criar/destrancar cofre, login do humano, criar o 1º humano (registro),
+/// e o status/geração do server-token.
+fn is_public_write(path: &str) -> bool {
+    path == "/api/vault/init"
+        || path == "/api/vault/unlock"
+        || path == "/api/humans"
+        || path.ends_with("/login")
+        || path.starts_with("/api/auth/server-token")
+}
+
+fn require_human_enabled() -> bool {
+    // Ligado por padrão (projeto novo, sem legado). Desligar com
+    // PROJECT_MEM_REQUIRE_HUMAN=0.
+    std::env::var("PROJECT_MEM_REQUIRE_HUMAN").ok().as_deref() != Some("0")
+}
+
 fn unauthorized(msg: &str) -> Response {
     let body = format!(r#"{{"error":"{msg}"}}"#);
     HttpResponse::builder()
@@ -118,6 +188,28 @@ pub async fn auth_middleware(
             _ => return unauthorized("Authorization: Bearer <token> ausente ou inválido"),
         }
     }
+
+    // Resolve quem é o caller (humano/agente/anon) e anexa pra os handlers e
+    // futuras checagens de permissão.
+    let principal = resolve_principal(req.headers(), &state.mem_dir);
+
+    // Enforcement OPT-IN de auth por humano/agente nas rotas de escrita.
+    // Default OFF (não trava nada); ligar com PROJECT_MEM_REQUIRE_HUMAN=1.
+    if require_human_enabled() {
+        let path = req.uri().path().to_string();
+        let method = req.method().clone();
+        let mutating = matches!(
+            method,
+            Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+        );
+        if mutating
+            && !is_public_write(&path)
+            && !authorize(&principal, method.as_str(), &path)
+        {
+            return unauthorized("autenticação necessária: Authorization: Bearer <JWT>");
+        }
+    }
+    req.extensions_mut().insert(principal);
 
     let tenant = resolve_tenant(req.headers(), &state);
     req.extensions_mut().insert(tenant);

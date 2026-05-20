@@ -2,8 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MantineProvider, createTheme } from '@mantine/core';
 import App from './App';
+import { installApiAuth } from './lib/apiAuth';
 import '@mantine/core/styles.css';
 import './index.css';
+
+// Anexa o Bearer do humano logado em todas as chamadas /api (auth por token).
+installApiAuth();
 
 // Tema Mantine — base do redesign. Mantém paleta próxima ao slate/indigo
 // que o resto da UI usa (Tailwind) pra coexistência sem choque visual

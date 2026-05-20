@@ -424,6 +424,13 @@ Os dois podem coexistir — servem propósitos diferentes.
 
 Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto.
 
+> Planejamento de longo prazo:
+> - [`docs/evolucao-e-integracoes.md`](docs/evolucao-e-integracoes.md) —
+>   compatibilidade (não quebrar quem já usa) + ports pra integrar SQS/SNS,
+>   Google Drive/S3, multi-provider de IA, conectores de serviços.
+> - [`docs/permissoes-granulares.md`](docs/permissoes-granulares.md) — como
+>   evoluir o `authorize()` pra RBAC/ABAC.
+
 ### Alto valor
 
 - **Search index só reconstrói se vazio → drift silencioso.**

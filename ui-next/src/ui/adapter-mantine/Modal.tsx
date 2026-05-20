@@ -8,12 +8,21 @@ export interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Ocupa a tela inteira — útil pra responsividade no mobile. */
   fullScreen?: boolean;
+  /** Mostra o botão de fechar (X). Default true. */
+  withCloseButton?: boolean;
   children: ReactNode;
 }
 
-export function Modal({ opened, onClose, title, size = 'md', fullScreen, children }: ModalProps) {
+export function Modal({ opened, onClose, title, size = 'md', fullScreen, withCloseButton, children }: ModalProps) {
   return (
-    <MModal opened={opened} onClose={onClose} title={title} size={size} fullScreen={fullScreen}>
+    <MModal
+      opened={opened}
+      onClose={onClose}
+      title={title}
+      size={size}
+      fullScreen={fullScreen}
+      withCloseButton={withCloseButton}
+    >
       {children}
     </MModal>
   );

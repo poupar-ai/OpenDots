@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Dice5, UserPlus, LogIn } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button, Chip, Group, Modal, Select, Text, Textarea, TextInput } from '@/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   createHuman,
   listHumans,
@@ -47,6 +47,7 @@ export function HumanOnboarding({ onDone }: Props) {
   const [skin, setSkin] = useState<HumanSkin>(() => randomSkin());
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     let alive = true;
@@ -105,211 +106,182 @@ export function HumanOnboarding({ onDone }: Props) {
 
   if (humans === null) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-        <div className="rounded-xl border bg-white px-6 py-5 text-sm text-muted-foreground shadow-2xl">
-          Carregando…
-        </div>
-      </div>
+      <Modal opened onClose={() => {}} withCloseButton={false} size="sm" title="Carregando…">
+        <Text size="sm" muted>Buscando perfis…</Text>
+      </Modal>
     );
   }
 
   const hasExisting = humans.length > 0;
+  const loginMode = mode === 'login' && hasExisting;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      {mode === 'login' && hasExisting ? (
-        <form
-          onSubmit={login}
-          className="w-full max-w-md rounded-xl border bg-white p-6 shadow-2xl"
-        >
-          <h2 className="text-lg font-semibold">Entrar</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Selecione seu perfil. Sem senha — ambiente local.
-          </p>
-
-          <label className="mt-5 block text-xs">
-            <span className="mb-1 block font-medium text-slate-700">Perfil</span>
-            <select
+    <Modal
+      opened
+      onClose={() => {}}
+      withCloseButton={false}
+      fullScreen={isMobile}
+      size="lg"
+      title={
+        <div className="flex items-center gap-2 text-base font-semibold">
+          {loginMode ? (
+            <><LogIn className="h-4 w-4" /> Entrar</>
+          ) : (
+            <><UserPlus className="h-4 w-4" /> Quem é você?</>
+          )}
+        </div>
+      }
+    >
+      {loginMode ? (
+        <form onSubmit={login} className="space-y-4">
+          <Text size="xs" muted>Selecione seu perfil. Sem senha — ambiente local.</Text>
+          <Field label="Perfil">
+            <Select
               value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {humans.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="mt-6 flex items-center justify-between gap-2">
+              onChange={(v) => setSelectedId(v || '')}
+              data={humans.map((h) => ({ value: h.id, label: h.name }))}
+              placeholder="escolha um perfil"
+            />
+          </Field>
+          <Group justify="space-between" gap="xs">
             <Button
               type="button"
-              variant="outline"
+              variant="default"
+              color="gray"
               size="sm"
-              className="gap-1.5"
+              leftIcon={<UserPlus className="h-3.5 w-3.5" />}
               onClick={() => setMode('create')}
             >
-              <UserPlus className="h-3.5 w-3.5" /> criar novo
+              criar novo
             </Button>
-            <Button type="submit" className="gap-1.5" disabled={!selectedId}>
-              <LogIn className="h-4 w-4" /> Entrar
+            <Button type="submit" size="sm" disabled={!selectedId} leftIcon={<LogIn className="h-4 w-4" />}>
+              Entrar
             </Button>
-          </div>
+          </Group>
         </form>
       ) : (
         <form
           onSubmit={submitCreate}
-          className="w-full max-w-xl rounded-xl border bg-white p-6 shadow-2xl"
+          className="flex flex-col"
+          style={isMobile ? { maxHeight: 'calc(100dvh - 7rem)' } : undefined}
         >
-          <h2 className="text-lg font-semibold">Quem é você?</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Seu perfil ajuda os agentes (e os outros humanos) a entender de onde você
-            está falando. Pode editar depois.
-          </p>
+          <div
+            className="soft-scroll space-y-4 overflow-y-auto pr-1"
+            style={isMobile ? { flex: 1 } : undefined}
+          >
+            <Text size="xs" muted>
+              Seu perfil ajuda os agentes (e os outros humanos) a entender de onde você está
+              falando. Pode editar depois.
+            </Text>
 
-          <div className="mt-5 grid grid-cols-[1fr_auto] gap-5">
-            <div className="space-y-4">
-              <Field label="Nome" required>
-                <Input
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex.: Tiago"
-                  maxLength={80}
-                />
-              </Field>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_auto]">
+              <div className="space-y-4">
+                <Field label="Nome" required>
+                  <TextInput value={name} onChange={setName} placeholder="Ex.: Tiago" />
+                </Field>
 
-              <Field label="Quem você é">
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ex.: fundador, decide produto e arquitetura."
-                  rows={2}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </Field>
+                <Field label="Quem você é">
+                  <Textarea
+                    value={description}
+                    onChange={setDescription}
+                    placeholder="Ex.: fundador, decide produto e arquitetura."
+                    minRows={2}
+                  />
+                </Field>
 
-              <Field label="Onde você fica no escritório">
-                <select
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value as HumanLocation)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Field label="Onde você fica no escritório">
+                  <Select
+                    value={location}
+                    onChange={(v) => setLocation((v as HumanLocation) || 'devs')}
+                    data={HUMAN_LOCATIONS.map((l) => ({ value: l.id, label: l.label }))}
+                  />
+                </Field>
+
+                <Field label="Sexo">
+                  <Group gap="xs">
+                    {GENDER_OPTIONS.map((g) => (
+                      <Chip key={g.id} checked={gender === g.id} onChange={() => setGender(g.id)} variant="light">
+                        {g.label}
+                      </Chip>
+                    ))}
+                  </Group>
+                </Field>
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <Text size="xs" muted>Seu personagem</Text>
+                <div className="rounded-lg border bg-slate-50 p-3">
+                  <SkinPreview skin={skin} gender={gender} />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  color="gray"
+                  leftIcon={<Dice5 className="h-3.5 w-3.5" />}
+                  onClick={() => setSkin(randomSkin())}
                 >
-                  {HUMAN_LOCATIONS.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                  aleatório
+                </Button>
 
-              <Field label="Sexo">
-                <div className="grid grid-cols-3 gap-1.5">
-                  {GENDER_OPTIONS.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setGender(g.id)}
-                      className={`rounded-md border px-2 py-1.5 text-xs font-medium transition ${
-                        gender === g.id
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-slate-200 bg-white hover:bg-slate-50'
-                      }`}
-                    >
-                      {g.label}
-                    </button>
-                  ))}
+                <div className="mt-1 w-full">
+                  <Text size="xs" muted>Tom de pele</Text>
+                  <div className="mt-1 grid grid-cols-5 gap-1.5">
+                    {SKIN_TONES.map((t) => {
+                      const selected = skin.skinTone === t.hex;
+                      const hex = '#' + t.hex.toString(16).padStart(6, '0');
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          title={t.label}
+                          aria-label={t.label}
+                          onClick={() => setSkin({ ...skin, skinTone: t.hex })}
+                          style={{ backgroundColor: hex }}
+                          className={`h-6 w-6 rounded-full border-2 transition ${
+                            selected
+                              ? 'border-indigo-600 ring-2 ring-indigo-200'
+                              : 'border-slate-300 hover:border-slate-500'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
-              </Field>
-            </div>
 
-            <div className="flex flex-col items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">Seu personagem</span>
-              <div className="rounded-lg border bg-slate-50 p-3">
-                <SkinPreview skin={skin} gender={gender} />
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => setSkin(randomSkin())}
-              >
-                <Dice5 className="h-3.5 w-3.5" /> aleatório
-              </Button>
-
-              <div className="mt-1 w-full">
-                <span className="mb-1 block text-xs font-medium text-slate-600">
-                  Tom de pele
-                </span>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {SKIN_TONES.map((t) => {
-                    const selected = skin.skinTone === t.hex;
-                    const hex = '#' + t.hex.toString(16).padStart(6, '0');
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        title={t.label}
-                        aria-label={t.label}
-                        onClick={() => setSkin({ ...skin, skinTone: t.hex })}
-                        style={{ backgroundColor: hex }}
-                        className={`h-6 w-6 rounded-full border-2 transition ${
-                          selected
-                            ? 'border-indigo-600 ring-2 ring-indigo-200'
-                            : 'border-slate-300 hover:border-slate-500'
-                        }`}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="mt-2 w-full">
-                <span className="mb-1 block text-xs font-medium text-slate-600">
-                  Roupa
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {OUTFIT_OPTIONS.map((o) => {
-                    const current = skin.outfit ?? 'pants';
-                    const selected = current === o.id;
-                    return (
-                      <button
-                        key={o.id}
-                        type="button"
-                        onClick={() => setSkin({ ...skin, outfit: o.id })}
-                        className={`rounded-md border px-2 py-1.5 text-xs font-medium transition ${
-                          selected
-                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                            : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    );
-                  })}
+                <div className="mt-2 w-full">
+                  <Text size="xs" muted>Roupa</Text>
+                  <div className="mt-1">
+                  <Group gap="xs">
+                    {OUTFIT_OPTIONS.map((o) => {
+                      const current = skin.outfit ?? 'pants';
+                      return (
+                        <Chip
+                          key={o.id}
+                          checked={current === o.id}
+                          onChange={() => setSkin({ ...skin, outfit: o.id })}
+                          variant="light"
+                        >
+                          {o.label}
+                        </Chip>
+                      );
+                    })}
+                  </Group>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-4 space-y-4">
             <Field label="Skills (separe por vírgula)">
-              <Input
-                value={skills}
-                onChange={(e) => setSkills(e.target.value)}
-                placeholder="python, produto, arquitetura"
-              />
+              <TextInput value={skills} onChange={setSkills} placeholder="python, produto, arquitetura" />
             </Field>
 
             <Field label="O que você considera importante">
-              <textarea
+              <Textarea
                 value={important}
-                onChange={(e) => setImportant(e.target.value)}
+                onChange={setImportant}
                 placeholder="Ex.: zero over-engineering. Código curto resolve melhor."
-                rows={2}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                minRows={2}
               />
             </Field>
 
@@ -317,35 +289,41 @@ export function HumanOnboarding({ onDone }: Props) {
               label="Quando eu estiver offline, nunca compartilhar (vírgula)"
               hint="Seu shadow responde com base no histórico — nunca citando esses assuntos."
             >
-              <Input
+              <TextInput
                 value={neverShare}
-                onChange={(e) => setNeverShare(e.target.value)}
+                onChange={setNeverShare}
                 placeholder="salários, senhas, contratos em andamento"
               />
             </Field>
+
+            {err && <p className="text-xs text-red-600">{err}</p>}
           </div>
 
-          {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
-
-          <div className="mt-6 flex items-center justify-between gap-2">
-            {hasExisting ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setMode('login')}
-              >
-                <LogIn className="h-3.5 w-3.5" /> já tenho um perfil
+          {/* Rodapé fixo — ações sempre visíveis. */}
+          <div className="mt-3 border-t bg-white pt-3">
+            <Group justify="space-between" gap="xs">
+              {hasExisting ? (
+                <Button
+                  type="button"
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  leftIcon={<LogIn className="h-3.5 w-3.5" />}
+                  onClick={() => setMode('login')}
+                >
+                  já tenho um perfil
+                </Button>
+              ) : (
+                <span />
+              )}
+              <Button type="submit" size="sm" disabled={submitting || !name.trim()} loading={submitting}>
+                {submitting ? 'Salvando…' : 'Entrar'}
               </Button>
-            ) : <span />}
-            <Button type="submit" disabled={submitting || !name.trim()}>
-              {submitting ? 'Salvando…' : 'Entrar'}
-            </Button>
+            </Group>
           </div>
         </form>
       )}
-    </div>
+    </Modal>
   );
 }
 
@@ -429,13 +407,13 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block text-xs">
+    <div className="block text-xs">
       <span className="mb-1 block font-medium text-slate-700">
         {label}
         {required && <span className="text-red-500"> *</span>}
       </span>
       {children}
       {hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}
-    </label>
+    </div>
   );
 }

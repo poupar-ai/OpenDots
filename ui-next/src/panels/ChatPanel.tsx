@@ -618,7 +618,7 @@ export function ChatPanel({
             }}
             placeholder={humanName ? `${humanName} → ${agent}…` : `Conversar com ${agent}…`}
             rows={3}
-            className="chat-ta flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none"
+            className="chat-ta min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none"
             style={{ minHeight: 72 }}
           />
           <ActionIcon

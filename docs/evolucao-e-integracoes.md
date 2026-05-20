@@ -12,31 +12,55 @@ Drive/S3), tokens de IA multi-provider e APIs de serviços externos.
 
 ---
 
+## Regras de compatibilidade (VIGENTES — seguir sempre)
+
+Estas já valem (alicerce implementado). Toda mudança futura respeita:
+
+1. **API — `unversioned == v1`.** As rotas atuais (`/api/...`) são a v1 implícita
+   e só mudam de forma **aditiva** (campo/rota novo ok; renomear/remover/trocar
+   significado de uma rota existente = quebra). Breaking → cria `/api/v2/...` e
+   **deixa as v1 congeladas** (cliente velho segue, novo migra). Nunca mudar o
+   shape de uma rota já publicada "por baixo".
+2. **JSON de estado — `schema_version`.** Ausência == v1 (baseline). Use
+   `core_paths::schema::{read_version, stamp, CURRENT}`. `humans.json` já é
+   carimbado; arquivos legados que já tinham `version` (`agents.json`,
+   `config.json`, `graph.json`) seguem com o campo deles. Migração é **lazy**
+   (no `load`), só quando um shape mudar — e nunca remove/renomeia campo sem ela.
+3. **JSONL — aditivo.** Logs append-only (`observations.jsonl`,
+   `agent_chats/*.jsonl`, `messages/*.jsonl`): um campo novo por linha é sempre
+   seguro; **um reader nunca pode exigir um campo novo** (trata ausência como
+   default). Campo deprecado fica (não apaga) por uma janela.
+4. **JWT — claim `ver`.** Tokens carregam `ver` (`agent_keys::CLAIMS_VER`,
+   default 1). Mudança de formato/algoritmo ramifica por `ver` em vez de
+   invalidar tudo.
+
+---
+
 ## A) Riscos de compatibilidade (resolver ANTES de ter usuários reais)
 
-### A1. API sem versionamento — **alto**
-Não há `/api/vN`. Qualquer mudança de shape quebra clientes (UI embarcada hoje,
-mas integrações externas no futuro). → Adotar **`/api/v1`** (ou header
-`X-API-Version`) e fixar contrato: **mudanças só aditivas** dentro de uma versão;
-breaking → nova versão, antiga mantida por um período.
+### A1. API sem versionamento — **convenção adotada (ver Regras vigentes)**
+Decisão: começar **sem prefixo** (rotas atuais = v1 implícita, aditivas) e só
+criar `/api/v2/...` quando houver breaking real / API pública externa. Prefixar
+agora seria prematuro (sem cliente externo, UI acoplada). Nada a fazer no código
+até lá — só seguir a regra aditiva.
 
-### A2. Versionamento de dados ad-hoc — **alto**
-Hoje cada arquivo versiona por conta própria (graph.json `version:2`,
-`config.json`, autonomy `version:1`) e nem todos têm. → Padronizar
-**`schema_version`** em todo arquivo de estado (humans.json, agents.json,
-manifest, observations) + **migração lazy no read** (upgrade no load, como o
-vault já faz no unlock). Regra: **nunca renomear/remover campo sem migração**;
-adicionar campo é sempre seguro (readers ignoram desconhecidos).
+### A2. Versionamento de dados — **baseline feito ✅**
+Helper `core_paths::schema` criado; `humans.json` carimba `schema_version`;
+arquivos que já tinham `version` (agents/config/graph) seguem com o deles.
+**Migração lazy ainda não escrita** (de propósito — nasce no 1º shape que mudar,
+no `load` correspondente). Regra vigente: nunca renomear/remover campo sem
+migração.
 
 ### A3. Contrato dos JSONL — **médio**
 JSONL append-only é naturalmente aditivo, mas falta o contrato escrito.
 → Documentar "campos são aditivos; um reader nunca exige campo novo". Marcar
 campos deprecados (sem apagar) por uma janela.
 
-### A4. Token/JWT sem versão — **médio**
-Claims do JWT (humano/agente) não têm `ver`. Mudar o formato/algoritmo
-invalidaria tokens em uso. → Adicionar `ver` nos claims + plano de rotação de
-chave (regenerar keypair invalida JWTs — `agents_routes.rs:105` já alerta).
+### A4. Token/JWT sem versão — **`ver` feito ✅ (resta rotação)**
+Claim `ver` adicionado (`agent_keys::CLAIMS_VER`, default 1) — mudar
+formato/algoritmo agora ramifica por `ver`. **Falta** plano de rotação de chave
+(regenerar keypair invalida JWTs — `agents_routes.rs:105` já alerta) — quando
+necessário.
 
 ### A5. `authorize()` binário — **médio**
 Ver `docs/permissoes-granulares.md`. Subir pra RBAC depois é aditivo (campo

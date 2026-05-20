@@ -79,12 +79,23 @@ pub fn hex_to_bytes(s: &str) -> Result<[u8; 32], KeyError> {
 
 const HEADER_B64: &str = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9"; // {"alg":"EdDSA","typ":"JWT"}
 
+/// Versão do formato do claim. Permite evoluir o JWT sem invalidar tokens
+/// antigos cegamente — futuro: verificar/migrar conforme `ver`.
+pub const CLAIMS_VER: u32 = 1;
+
+fn default_claims_ver() -> u32 {
+    1
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     /// Nome do agente — ID autoritativo do `from` num handoff.
     pub agent: String,
     /// Unix epoch seconds — expiração. Validade típica: 10 min.
     pub exp: u64,
+    /// Versão do formato do claim (default 1 p/ tokens pré-versionamento).
+    #[serde(default = "default_claims_ver")]
+    pub ver: u32,
 }
 
 fn now_secs() -> u64 {
@@ -100,6 +111,7 @@ pub fn sign_jwt(priv_bytes: &[u8; 32], agent: &str, ttl_seconds: u64) -> String 
     let claims = Claims {
         agent: agent.to_string(),
         exp: now_secs() + ttl_seconds,
+        ver: CLAIMS_VER,
     };
     let payload_json = serde_json::to_string(&claims).unwrap_or_else(|_| "{}".into());
     let payload_b64 = B64.encode(payload_json.as_bytes());

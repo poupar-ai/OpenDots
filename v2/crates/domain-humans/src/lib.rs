@@ -365,14 +365,19 @@ pub fn load_humans(mem_dir: &Path) -> Value {
     let mut out = Map::new();
     out.insert("humans".into(), humans);
     out.insert("default_id".into(), default_id);
-    Value::Object(out)
+    let mut result = Value::Object(out);
+    // Preserva a versão do arquivo (default 1); persiste no próximo save.
+    core_paths::schema::stamp(&mut result, core_paths::schema::read_version(&v));
+    result
 }
 
 fn default_humans() -> Value {
     let mut out = Map::new();
     out.insert("humans".into(), Value::Object(Map::new()));
     out.insert("default_id".into(), Value::Null);
-    Value::Object(out)
+    let mut result = Value::Object(out);
+    core_paths::schema::stamp(&mut result, core_paths::schema::CURRENT);
+    result
 }
 
 /// Grava `humans.json` com indent 2 (paridade `JSON.stringify(data, null, 2)`).

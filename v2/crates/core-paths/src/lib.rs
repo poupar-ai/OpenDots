@@ -77,6 +77,8 @@ pub use claude_md::{
 pub mod stdin;
 pub use stdin::{get_cwd, read_stdin, read_stdin_from_str};
 
+pub mod schema;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;

@@ -679,6 +679,7 @@ dependencies = [
 name = "domain-humans"
 version = "0.1.0"
 dependencies = [
+ "core-paths",
  "serde_json",
  "tempfile",
  "thiserror",

@@ -298,6 +298,11 @@ export class HumanSprite extends Container {
     this.landAnim = 18;
   }
 
+  /** Escala base responsiva (maior em telas estreitas). */
+  public setBaseScale(s: number) {
+    this.scale.set(s);
+  }
+
   private drawBadgeBg() {
     const m = this.badge.width + 10;
     this.badgeBg.clear();

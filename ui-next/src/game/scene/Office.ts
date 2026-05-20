@@ -354,18 +354,41 @@ export class Office extends Container {
     this.drawCelestialInWindows();
   }
 
-  private computeWorldSize() {
+  // Quantas salas cabem lado a lado na largura atual. Telas estreitas
+  // (celular) → poucas por linha → o prédio cresce em altura.
+  private roomsPerRow(): number {
+    const w = this.viewportW || this.MIN_ROOM_W;
+    return Math.max(1, Math.floor(w / this.MIN_ROOM_W));
+  }
+
+  // Linhas visuais do prédio, de cima pra baixo. Cada andar lógico
+  // (departamento) é quebrado em chunks de `roomsPerRow` — assim o layout
+  // é responsivo: largura sempre cabe na viewport (sem scroll horizontal)
+  // e o excedente empilha pra baixo (mais andares = prédio mais alto).
+  private buildVisualRows(): Room[][] {
     const byFloor = new Map<number, Room[]>();
     for (const r of this.rooms.values()) {
       if (!byFloor.has(r.floor)) byFloor.set(r.floor, []);
       byFloor.get(r.floor)!.push(r);
     }
-    this.numFloors = byFloor.size;
-    let maxFloorMin = 0;
-    for (const rooms of byFloor.values()) {
-      maxFloorMin = Math.max(maxFloorMin, rooms.length * this.MIN_ROOM_W);
+    const per = this.roomsPerRow();
+    const floorIdxs = [...byFloor.keys()].sort((a, b) => b - a); // desc: maior andar no topo
+    const rows: Room[][] = [];
+    for (const fIdx of floorIdxs) {
+      const list = byFloor.get(fIdx)!;
+      list.sort((a, b) => a.id.localeCompare(b.id));
+      for (let i = 0; i < list.length; i += per) {
+        rows.push(list.slice(i, i + per));
+      }
     }
-    this.worldW = Math.max(this.viewportW, maxFloorMin || this.viewportW);
+    return rows;
+  }
+
+  private computeWorldSize() {
+    const rows = this.buildVisualRows();
+    this.numFloors = rows.length;
+    // Largura sempre = viewport → câmera fica com maxX=0 → só rola ↑/↓.
+    this.worldW = this.viewportW;
     if (this.numFloors === 0) {
       this.worldH = this.viewportH;
     } else {
@@ -586,29 +609,22 @@ export class Office extends Container {
     this.positions.clear();
     if (this.rooms.size === 0 || this.worldW === 0 || this.worldH === 0) return;
 
-    const byFloor = new Map<number, Room[]>();
-    for (const r of this.rooms.values()) {
-      if (!byFloor.has(r.floor)) byFloor.set(r.floor, []);
-      byFloor.get(r.floor)!.push(r);
-    }
+    const rows = this.buildVisualRows();
 
-    const floorIdxs = [...byFloor.keys()].sort((a, b) => b - a); // decrescente: maior andar no topo
-    const maxFloor = floorIdxs[0] ?? 0;
-
-    for (const fIdx of floorIdxs) {
-      const list = byFloor.get(fIdx)!;
-      list.sort((a, b) => a.id.localeCompare(b.id));
-
-      const slotIdxFromTop = maxFloor - fIdx; // 0 = topo (logo abaixo do telhado)
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      const list = rows[rowIdx];
+      const slotIdxFromTop = rowIdx; // 0 = topo (logo abaixo do telhado)
       const ceilY = this.SKY_H + this.ROOF_H + slotIdxFromTop * this.FLOOR_H;
       const floorY = ceilY + this.FLOOR_H - this.SLAB_H;
 
+      // Larguras proporcionais ao nº de agentes, somando exatamente worldW —
+      // garante que a linha cabe na viewport (zero overflow horizontal).
       const totalWeight = list.reduce((s, r) => s + Math.max(1.3, r.agents.length), 0);
       let x = 0;
       for (let i = 0; i < list.length; i++) {
         const r = list[i];
         const weight = Math.max(1.3, r.agents.length) / totalWeight;
-        const width = Math.max(this.MIN_ROOM_W, Math.floor(this.worldW * weight));
+        const width = Math.floor(this.worldW * weight);
         r.x = x;
         r.width = width;
         r.ceilingY = ceilY;
@@ -618,9 +634,9 @@ export class Office extends Container {
         this.drawRoom(r, isLast, isFirst);
         x += width;
       }
-      // ajusta última sala pra fechar até worldW
+      // ajusta última sala pra fechar exatamente até worldW (resíduo de floor)
       const last = list[list.length - 1];
-      if (last && last.x + last.width < this.worldW) {
+      if (last && last.x + last.width !== this.worldW) {
         last.width = this.worldW - last.x;
         this.drawRoom(last, true, list.length === 1);
       }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { X, Save, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Save, UserPlus } from 'lucide-react';
+import { Button, Chip, Group, Modal, Text, TextInput } from '@/ui';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import type { AgentType, Gender } from '@/lib/types';
 import { createAgent, listMcps } from '@/lib/agents';
 
@@ -12,23 +13,22 @@ const GENDER_OPTIONS: { id: Gender; label: string }[] = [
   { id: 'other', label: 'Outro' },
 ];
 
-const MODEL_SUGGESTIONS = [
-  'opus',
-  'sonnet',
-  'haiku',
-  'opus-4.7',
-  'sonnet-4.6',
-  'haiku-4.5',
-  'claude-opus-4-7',
-  'claude-sonnet-4-6',
-];
-
-const TOOL_SUGGESTIONS = ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'WebFetch', 'WebSearch'];
-
 interface Props {
   existingNames: string[];
   onClose: () => void;
   onCreated?: (name: string) => void;
+}
+
+/** Label curto reaproveitado pelos campos do form. */
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
+        {label} {hint && <span className="font-normal normal-case text-slate-400">{hint}</span>}
+      </label>
+      {children}
+    </div>
+  );
 }
 
 export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
@@ -41,9 +41,10 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
   const [tools, setTools] = useState('Read, Grep, Glob');
   const [mcps, setMcps] = useState('');
   const [canTalk, setCanTalk] = useState('manager');
-  const [mcpSuggestions, setMcpSuggestions] = useState<string[]>([]);
+  const [, setMcpSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
     let alive = true;
@@ -53,14 +54,18 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
     return () => { alive = false; };
   }, []);
 
-  const splitList = (v: string) =>
-    v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+  const splitList = (v: string) => v.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
 
   const nameClean = name.trim().toLowerCase();
   const nameValid = /^[a-z0-9_-]+$/.test(nameClean);
   const nameTaken = existingNames.includes(nameClean);
+  const canSave = !!nameClean && nameValid && !nameTaken && !saving;
 
-  const canSave = nameClean && nameValid && !nameTaken && !saving;
+  const nameError = name && !nameValid
+    ? 'nome inválido'
+    : nameTaken
+      ? `já existe um agente "${nameClean}"`
+      : null;
 
   const save = async () => {
     if (!canSave) return;
@@ -88,174 +93,96 @@ export function CreateAgentModal({ existingNames, onClose, onCreated }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <UserPlus className="h-4 w-4" /> Novo agente
-            </div>
-            <p className="text-xs text-muted-foreground">
-              cria manifest + arquivo de mini-contexto. edite depois pelo painel.
-            </p>
+    <Modal
+      opened
+      onClose={onClose}
+      fullScreen={isMobile}
+      size="lg"
+      title={
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <UserPlus className="h-4 w-4" /> Novo agente
           </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <div className="soft-scroll flex-1 overflow-y-auto p-4 text-xs space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-              Nome <span className="text-slate-400">(minúsculas, números, "-", "_")</span>
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ex: frontend_reviewer"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
-            />
-            {name && !nameValid && (
-              <p className="mt-1 text-xs text-red-600">nome inválido</p>
-            )}
-            {nameTaken && (
-              <p className="mt-1 text-xs text-red-600">já existe um agente "{nameClean}"</p>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">Tipo</label>
-            <div className="grid grid-cols-5 gap-1">
-              {AGENT_TYPES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setType(t)}
-                  className={`rounded border px-1 py-1 text-xs font-medium transition ${
-                    type === t ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">Sexo</label>
-            <div className="grid grid-cols-3 gap-1">
-              {GENDER_OPTIONS.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => setGender(g.id)}
-                  className={`rounded border px-1 py-1 text-xs font-medium transition ${
-                    gender === g.id ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-[70px_1fr] gap-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">Emoji</label>
-              <input
-                value={emoji}
-                onChange={(e) => setEmoji(e.target.value)}
-                placeholder="🤖"
-                maxLength={4}
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-center text-base focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">Modelo</label>
-              <input
-                list="create-model-suggestions"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="sonnet-4.6"
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
-              />
-              <datalist id="create-model-suggestions">
-                {MODEL_SUGGESTIONS.map((m) => <option key={m} value={m} />)}
-              </datalist>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-              Papel (role) <span className="text-slate-400">— 1 frase</span>
-            </label>
-            <input
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="ex: revisa PRs de frontend antes de merge"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-              Ferramentas <span className="text-slate-400">(separe por vírgula)</span>
-            </label>
-            <input
-              list="tool-suggestions"
-              value={tools}
-              onChange={(e) => setTools(e.target.value)}
-              placeholder="Read, Grep, Glob"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
-            />
-            <datalist id="tool-suggestions">
-              {TOOL_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
-            </datalist>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-              MCPs <span className="text-slate-400">(separe por vírgula)</span>
-            </label>
-            <input
-              list="create-mcp-suggestions"
-              value={mcps}
-              onChange={(e) => setMcps(e.target.value)}
-              placeholder="ex: resend, supabase"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
-            />
-            <datalist id="create-mcp-suggestions">
-              {mcpSuggestions.map((m) => <option key={m} value={m} />)}
-            </datalist>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-600">
-              Fala com <span className="text-slate-400">(can_talk_to, vírgula)</span>
-            </label>
-            <input
-              value={canTalk}
-              onChange={(e) => setCanTalk(e.target.value)}
-              placeholder="manager"
-              className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs focus:border-indigo-400 focus:outline-none"
-            />
-          </div>
-
-          {err && (
-            <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-              {err}
-            </div>
-          )}
+          <Text size="xs" muted>cria manifest + mini-contexto. edite depois pelo painel.</Text>
         </div>
-        <footer className="flex justify-end gap-2 border-t px-4 py-3">
-          <Button size="sm" variant="outline" onClick={onClose} disabled={saving}>
+      }
+    >
+      <div className="space-y-3">
+        <Field label="Nome" hint='(minúsculas, números, "-", "_")'>
+          <TextInput
+            value={name}
+            onChange={setName}
+            placeholder="ex: frontend_reviewer"
+            error={nameError}
+          />
+        </Field>
+
+        <Field label="Tipo">
+          <Group gap="xs">
+            {AGENT_TYPES.map((t) => (
+              <Chip key={t} checked={type === t} onChange={() => setType(t)} variant="light">
+                {t}
+              </Chip>
+            ))}
+          </Group>
+        </Field>
+
+        <Field label="Sexo">
+          <Group gap="xs">
+            {GENDER_OPTIONS.map((g) => (
+              <Chip key={g.id} checked={gender === g.id} onChange={() => setGender(g.id)} variant="light">
+                {g.label}
+              </Chip>
+            ))}
+          </Group>
+        </Field>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[90px_1fr]">
+          <Field label="Emoji">
+            <TextInput value={emoji} onChange={(v) => setEmoji(v.slice(0, 4))} placeholder="🤖" />
+          </Field>
+          <Field label="Modelo">
+            <TextInput value={model} onChange={setModel} placeholder="sonnet-4.6" />
+          </Field>
+        </div>
+
+        <Field label="Papel (role)" hint="— 1 frase">
+          <TextInput value={role} onChange={setRole} placeholder="ex: revisa PRs de frontend antes de merge" />
+        </Field>
+
+        <Field label="Ferramentas" hint="(separe por vírgula)">
+          <TextInput value={tools} onChange={setTools} placeholder="Read, Grep, Glob" />
+        </Field>
+
+        <Field label="MCPs" hint="(separe por vírgula)">
+          <TextInput value={mcps} onChange={setMcps} placeholder="ex: resend, supabase" />
+        </Field>
+
+        <Field label="Fala com" hint="(can_talk_to, vírgula)">
+          <TextInput value={canTalk} onChange={setCanTalk} placeholder="manager" />
+        </Field>
+
+        {err && (
+          <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+            {err}
+          </div>
+        )}
+
+        <Group justify="flex-end" gap="xs">
+          <Button size="sm" variant="default" color="gray" onClick={onClose} disabled={saving}>
             cancelar
           </Button>
-          <Button size="sm" onClick={save} disabled={!canSave} className="gap-1.5">
-            <Save className="h-3.5 w-3.5" />
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={!canSave}
+            loading={saving}
+            leftIcon={<Save className="h-3.5 w-3.5" />}
+          >
             {saving ? 'criando…' : 'criar'}
           </Button>
-        </footer>
+        </Group>
       </div>
-    </div>
+    </Modal>
   );
 }

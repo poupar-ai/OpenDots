@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import {
-  FileText, Database, AlertTriangle, ScrollText, X, Save, Pencil, Plus,
+  FileText, Database, AlertTriangle, ScrollText, Save, Pencil, Plus,
   FolderGit2, BookText, Boxes, Code2, ChevronDown, CircleCheck, CircleDashed,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Badge, Button, NavLink, Paper, Text, colorVar } from '@/ui';
+import type { Color } from '@/ui';
 import { cn } from '@/lib/utils';
 import type { ServerData, AgentType } from '@/lib/types';
 import { saveDoc, type DocName } from '@/lib/docs';
+import { DocEditor } from '@/panels/DocEditor';
 import { CreateAgentModal } from '@/panels/CreateAgentModal';
 
 interface Props {
@@ -22,12 +24,12 @@ const DOC_HINTS: Record<DocName, string> = {
   'CODE_INDEX.md': 'índice gerado do código',
 };
 
-const TYPE_META: Record<AgentType, { label: string; color: string; bg: string }> = {
-  core:        { label: 'Core',        color: '#6366f1', bg: 'bg-indigo-50' },
-  specialist:  { label: 'Specialists', color: '#0ea5e9', bg: 'bg-sky-50' },
-  integrator:  { label: 'Integrators', color: '#a855f7', bg: 'bg-purple-50' },
-  motor:       { label: 'Motors',      color: '#f97316', bg: 'bg-orange-50' },
-  firefighter: { label: 'Firefighters', color: '#ef4444', bg: 'bg-red-50' },
+const TYPE_META: Record<AgentType, { label: string; color: string }> = {
+  core:        { label: 'Core',         color: '#6366f1' },
+  specialist:  { label: 'Specialists',  color: '#0ea5e9' },
+  integrator:  { label: 'Integrators',  color: '#a855f7' },
+  motor:       { label: 'Motors',       color: '#f97316' },
+  firefighter: { label: 'Firefighters', color: '#ef4444' },
 };
 
 const TYPE_ORDER: AgentType[] = ['core', 'specialist', 'integrator', 'motor', 'firefighter'];
@@ -59,8 +61,8 @@ export function ModulesPanel({ data }: Props) {
 
   if (!data) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        carregando…
+      <div className="flex h-32 items-center justify-center">
+        <Text size="sm" muted>carregando…</Text>
       </div>
     );
   }
@@ -78,52 +80,30 @@ export function ModulesPanel({ data }: Props) {
 
   return (
     <div className="space-y-4 pb-4">
-      <div className="rounded-xl border bg-white p-3.5 shadow-sm">
+      <Paper padding="sm" radius="lg" withBorder shadow="xs">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <FolderGit2 className="h-4.5 w-4.5 text-primary" />
-          </div>
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+            style={{ background: colorVar('primary', 1), color: colorVar('primary', 6) }}
+          >
+            <FolderGit2 className="h-[18px] w-[18px]" />
+          </span>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold leading-tight">
-              {data.project.name}
-            </h2>
-            <p
-              className="truncate font-mono text-xs text-muted-foreground"
-              title={data.project.root}
-            >
+            <Text size="sm" fw={600}>{data.project.name}</Text>
+            <p className="truncate font-mono text-xs text-muted-foreground" title={data.project.root}>
               {data.project.root.replace(/^.*\//, '…/')}
             </p>
           </div>
         </div>
-      </div>
+      </Paper>
 
       <div>
         <SectionLabel>Memória</SectionLabel>
         <div className="grid grid-cols-2 gap-2">
-          <StatCard
-            icon={<FileText className="h-4 w-4" />}
-            tone="indigo"
-            label="sessões"
-            value={stats.sessions}
-          />
-          <StatCard
-            icon={<ScrollText className="h-4 w-4" />}
-            tone="sky"
-            label="observações"
-            value={stats.observations}
-          />
-          <StatCard
-            icon={<Database className="h-4 w-4" />}
-            tone="emerald"
-            label="decisões"
-            value={stats.decisions}
-          />
-          <StatCard
-            icon={<AlertTriangle className="h-4 w-4" />}
-            tone="amber"
-            label="gotchas"
-            value={stats.gotchas}
-          />
+          <StatCard icon={<FileText className="h-4 w-4" />} tone="primary" label="sessões" value={stats.sessions} />
+          <StatCard icon={<ScrollText className="h-4 w-4" />} tone="info" label="observações" value={stats.observations} />
+          <StatCard icon={<Database className="h-4 w-4" />} tone="success" label="decisões" value={stats.decisions} />
+          <StatCard icon={<AlertTriangle className="h-4 w-4" />} tone="warning" label="gotchas" value={stats.gotchas} />
         </div>
       </div>
 
@@ -134,7 +114,7 @@ export function ModulesPanel({ data }: Props) {
         open={docsOpen}
         onToggle={() => setDocsOpen((o) => !o)}
       >
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {docs.map((d) => (
             <DocRow
               key={d.name}
@@ -154,55 +134,44 @@ export function ModulesPanel({ data }: Props) {
         open={agentsOpen}
         onToggle={() => setAgentsOpen((o) => !o)}
         action={
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setCreateAgentOpen(true);
-            }}
-            className="flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
-            title="criar novo agente"
-          >
-            <Plus className="h-3 w-3" /> novo
-          </button>
+          <span onClick={(e) => e.stopPropagation()}>
+            <Button
+              size="compact-xs"
+              variant="light"
+              color="primary"
+              leftIcon={<Plus className="h-3 w-3" />}
+              onClick={() => setCreateAgentOpen(true)}
+              title="criar novo agente"
+            >
+              novo
+            </Button>
+          </span>
         }
       >
         <div className="space-y-1">
           {TYPE_ORDER.filter((t) => (agentCounts.byType[t] || 0) > 0).map((t) => (
-            <TypeRow
-              key={t}
-              type={t}
-              count={agentCounts.byType[t] || 0}
-              total={agentCounts.total}
-            />
+            <TypeRow key={t} type={t} count={agentCounts.byType[t] || 0} total={agentCounts.total} />
           ))}
         </div>
       </Section>
 
       {stats.codeIndex && (
-        <div className="rounded-xl border bg-white p-3 shadow-sm">
+        <Paper padding="sm" radius="lg" withBorder shadow="xs">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Code2 className="h-3.5 w-3.5" /> Code Index
           </div>
           <div className="flex items-baseline justify-between">
             <div>
-              <div className="text-lg font-semibold tabular-nums leading-none">
-                {fmtCompact(stats.codeIndex.files)}
-              </div>
-              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">
-                arquivos
-              </div>
+              <div className="text-lg font-semibold tabular-nums leading-none">{fmtCompact(stats.codeIndex.files)}</div>
+              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">arquivos</div>
             </div>
             <div className="h-8 w-px bg-border" />
             <div>
-              <div className="text-lg font-semibold tabular-nums leading-none">
-                {fmtCompact(stats.codeIndex.symbols)}
-              </div>
-              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">
-                símbolos
-              </div>
+              <div className="text-lg font-semibold tabular-nums leading-none">{fmtCompact(stats.codeIndex.symbols)}</div>
+              <div className="mt-0.5 text-xs uppercase tracking-wide text-muted-foreground">símbolos</div>
             </div>
           </div>
-        </div>
+        </Paper>
       )}
 
       {editDoc && (
@@ -210,6 +179,7 @@ export function ModulesPanel({ data }: Props) {
           name={editDoc.name}
           current={editDoc.content}
           hint={DOC_HINTS[editDoc.name]}
+          onSave={saveDoc}
           onClose={() => setEditDoc(null)}
         />
       )}
@@ -250,30 +220,19 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+    <Paper padding={0} radius="lg" withBorder shadow="xs" className="overflow-hidden">
       <div
         className="flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors hover:bg-slate-50/70"
         onClick={onToggle}
       >
         <span className="text-muted-foreground">{icon}</span>
-        <h3 className="flex-1 text-xs font-semibold uppercase tracking-wide">
-          {label}
-        </h3>
-        {badge != null && (
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-            {badge}
-          </span>
-        )}
+        <h3 className="flex-1 text-xs font-semibold uppercase tracking-wide">{label}</h3>
+        {badge != null && <Badge color="gray" variant="light" size="sm">{badge}</Badge>}
         {action}
-        <ChevronDown
-          className={cn(
-            'h-3.5 w-3.5 text-muted-foreground transition-transform',
-            !open && '-rotate-90',
-          )}
-        />
+        <ChevronDown className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', !open && '-rotate-90')} />
       </div>
       {open && <div className="border-t bg-slate-50/30 p-2">{children}</div>}
-    </div>
+    </Paper>
   );
 }
 
@@ -284,31 +243,21 @@ function StatCard({
   value,
 }: {
   icon: React.ReactNode;
-  tone: 'indigo' | 'sky' | 'emerald' | 'amber';
+  tone: Color;
   label: string;
   value: number | undefined;
 }) {
-  const toneMap: Record<string, { bg: string; fg: string }> = {
-    indigo: { bg: 'bg-indigo-50', fg: 'text-indigo-700' },
-    sky: { bg: 'bg-sky-50', fg: 'text-sky-700' },
-    emerald: { bg: 'bg-emerald-50', fg: 'text-emerald-700' },
-    amber: { bg: 'bg-amber-50', fg: 'text-amber-700' },
-  };
-  const t = toneMap[tone];
   return (
-    <div className="rounded-xl border bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-center justify-between">
-        <div className={cn('flex h-7 w-7 items-center justify-center rounded-lg', t.bg, t.fg)}>
-          {icon}
-        </div>
-      </div>
-      <div className="mt-2 text-xl font-semibold tabular-nums leading-none">
-        {fmtCompact(value ?? 0)}
-      </div>
-      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-    </div>
+    <Paper padding="sm" radius="lg" withBorder shadow="xs" className="transition-shadow hover:shadow-md">
+      <span
+        className="flex h-7 w-7 items-center justify-center rounded-lg"
+        style={{ background: colorVar(tone, 1), color: colorVar(tone, 7) }}
+      >
+        {icon}
+      </span>
+      <div className="mt-2 text-xl font-semibold tabular-nums leading-none">{fmtCompact(value ?? 0)}</div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+    </Paper>
   );
 }
 
@@ -324,29 +273,19 @@ function DocRow({
   onOpen: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <NavLink
+      label={<span className="font-mono text-xs font-medium">{label}</span>}
+      description={hint}
       onClick={onOpen}
-      className="group flex w-full items-center gap-2.5 rounded-lg bg-white px-2.5 py-2 text-left transition-colors hover:bg-indigo-50/50"
-      title={present ? 'abrir pra editar' : 'criar e editar'}
-    >
-      <span className="shrink-0">
-        {present ? (
+      leftIcon={
+        present ? (
           <CircleCheck className="h-4 w-4 text-emerald-500" />
         ) : (
           <CircleDashed className="h-4 w-4 text-slate-300" />
-        )}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate font-mono text-xs font-medium text-slate-800 group-hover:text-indigo-700">
-            {label}
-          </span>
-        </div>
-        <p className="truncate text-xs text-muted-foreground">{hint}</p>
-      </div>
-      <Pencil className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+        )
+      }
+      rightSection={<Pencil className="h-3.5 w-3.5 text-slate-400" />}
+    />
   );
 }
 
@@ -369,96 +308,14 @@ function TypeRow({
           style={{ background: meta.color, boxShadow: `0 0 0 2px ${meta.color}20` }}
           aria-hidden
         />
-        <span className="flex-1 truncate text-xs font-medium text-slate-800">
-          {meta.label}
-        </span>
-        <span className="font-mono text-xs tabular-nums text-slate-600">
-          {count}
-        </span>
+        <span className="flex-1 truncate text-xs font-medium text-slate-800">{meta.label}</span>
+        <span className="font-mono text-xs tabular-nums text-slate-600">{count}</span>
       </div>
       <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
         <span
           className="block h-full rounded-full transition-all"
           style={{ width: `${pct}%`, background: meta.color, opacity: 0.75 }}
         />
-      </div>
-    </div>
-  );
-}
-
-interface DocEditorProps {
-  name: DocName;
-  current: string;
-  hint: string;
-  onClose: () => void;
-}
-
-function DocEditor({ name, current, hint, onClose }: DocEditorProps) {
-  const [content, setContent] = useState<string>(current);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const dirty = content !== current;
-
-  const save = async () => {
-    setErr(null);
-    setSaving(true);
-    try {
-      await saveDoc(name, content);
-      onClose();
-    } catch (e: any) {
-      setErr(e?.message || 'falha ao salvar');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const tryClose = () => {
-    if (saving) return;
-    if (dirty && !confirm(`Descartar alterações em ${name}?`)) return;
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="h-4 w-4" /> {name}
-            </div>
-            <p className="text-xs text-muted-foreground">{hint}</p>
-          </div>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={tryClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </header>
-        <div className="flex-1 overflow-hidden p-4">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            spellCheck={false}
-            className="h-[60vh] w-full resize-none rounded border border-slate-200 bg-white p-3 font-mono text-xs leading-snug focus:border-indigo-400 focus:outline-none"
-            placeholder={current ? '' : `# ${name.replace('.md', '')}\n\n...`}
-          />
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-            <span>{content.length} chars · markdown</span>
-            {dirty && <span className="text-amber-600">alterações não salvas</span>}
-          </div>
-          {err && (
-            <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-              {err}
-            </div>
-          )}
-        </div>
-        <footer className="flex justify-end gap-2 border-t px-4 py-3">
-          <Button size="sm" variant="outline" onClick={tryClose} disabled={saving}>
-            cancelar
-          </Button>
-          <Button size="sm" onClick={save} disabled={saving || !dirty} className="gap-1.5">
-            <Save className="h-3.5 w-3.5" />
-            {saving ? 'salvando…' : 'salvar'}
-          </Button>
-        </footer>
       </div>
     </div>
   );

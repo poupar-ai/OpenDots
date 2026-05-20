@@ -15,6 +15,8 @@ export interface ButtonProps {
   rightIcon?: ReactNode;
   fullWidth?: boolean;
   type?: 'button' | 'submit' | 'reset';
+  /** Tooltip nativo + accessible name (pass-through pro DOM). */
+  title?: string;
 }
 
 export function Button({

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock } from 'lucide-react';
+import { Brain, LogOut, Users, Package, Workflow, BookOpen, Code2, Sparkles, Sun, Moon, ShieldAlert, KeyRound, Network, Activity, Clock, MessageCircle, X, PanelLeft } from 'lucide-react';
 import { useData } from '@/hooks/useData';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { updateHuman } from '@/lib/humans';
 import { useTheme } from '@/hooks/useTheme';
 import { ModulesPanel } from '@/panels/ModulesPanel';
-import { AgentCanvas } from '@/panels/AgentCanvas';
+import { AgentCanvas, type CanvasControls } from '@/panels/AgentCanvas';
 import { ChatPanel } from '@/panels/ChatPanel';
 import { AgentInfoPanel } from '@/panels/AgentInfoPanel';
 import { HumansPanel } from '@/panels/HumansPanel';
@@ -20,8 +21,9 @@ import { VaultPanel } from '@/panels/VaultPanel';
 import { NetworkPanel } from '@/panels/NetworkPanel';
 import { SubagentPanel } from '@/panels/SubagentPanel';
 import { CronPanel } from '@/panels/CronPanel';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { ActionIcon, Badge, Box, Drawer, Group, colorVar } from '@/ui';
+import { MainMenu, type MenuItem } from '@/components/MainMenu';
+import { AgentPicker } from '@/components/AgentPicker';
 import { HumanOnboarding } from '@/components/HumanOnboarding';
 import { VaultBootstrap } from '@/components/VaultBootstrap';
 
@@ -51,6 +53,10 @@ export default function App() {
   const [cronOpen, setCronOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [prefCollapsed, setPrefCollapsed] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const canvasControls = useRef<CanvasControls | null>(null);
   const { data, err, refresh } = useData(10000, chatStreaming);
   const { humanId, human, setCurrent } = useCurrentHuman();
   const { theme, toggle: toggleTheme } = useTheme();
@@ -82,6 +88,12 @@ export default function App() {
     }
   }, [selected, prefCollapsed]);
 
+  // No celular não há painel de chat fixo — selecionar um agente (canvas ou
+  // picker) abre o chat em tela cheia automaticamente.
+  useEffect(() => {
+    if (isMobile && selected) setMobileChatOpen(true);
+  }, [isMobile, selected]);
+
   const toggleChatCollapsed = () => {
     setChatCollapsed((prev) => {
       const next = !prev;
@@ -104,6 +116,27 @@ export default function App() {
     () => (selected && agents ? agents.contexts[selected] || '' : ''),
     [selected, agents],
   );
+
+  // Menu principal — data-driven. Pra adicionar uma entrada nova, basta
+  // mais um objeto aqui: aparece inline no desktop e no Drawer no mobile.
+  const menuItems = useMemo<MenuItem[]>(() => {
+    const items: MenuItem[] = [
+      { id: 'arquiteto', label: 'arquiteto', title: 'arquiteto: desenha um time customizado', icon: <Sparkles className="h-4 w-4" />, onClick: () => setArchitectOpen(true) },
+      { id: 'time', label: 'time', title: 'instalar time de agentes a partir de templates', icon: <Package className="h-4 w-4" />, onClick: () => setSeedsOpen(true) },
+      { id: 'pipelines', label: 'pipelines', title: 'rodar fluxos reproduzíveis com checkpoints', icon: <Workflow className="h-4 w-4" />, onClick: () => setPipelinesOpen(true) },
+      { id: 'praticas', label: 'práticas', title: 'biblioteca de best-practices', icon: <BookOpen className="h-4 w-4" />, onClick: () => setBestPracticesOpen(true) },
+      { id: 'ide', label: 'ide', title: 'exportar agentes pro formato de cada IDE', icon: <Code2 className="h-4 w-4" />, onClick: () => setIdeExportOpen(true) },
+      { id: 'protecoes', label: 'proteções', title: 'proteções — motor de intent destrutivo', icon: <ShieldAlert className="h-4 w-4" />, iconColor: 'danger', onClick: () => setProtectionsOpen(true) },
+      { id: 'cofre', label: 'cofre', title: 'cofre — secrets/envs encriptados', icon: <KeyRound className="h-4 w-4" />, iconColor: 'warning', onClick: () => setVaultOpen(true) },
+      { id: 'rede', label: 'rede', title: 'rede — bind do servidor (localhost/LAN/IP)', icon: <Network className="h-4 w-4" />, iconColor: 'info', onClick: () => setNetworkOpen(true) },
+      { id: 'subagents', label: 'subagents', title: 'subagents — workstreams paralelos disparados por agents', icon: <Activity className="h-4 w-4" />, iconColor: 'primary', onClick: () => setSubagentsOpen(true) },
+      { id: 'cron', label: 'cron', title: 'agendamentos — jobs recorrentes via cron', icon: <Clock className="h-4 w-4" />, iconColor: 'success', onClick: () => setCronOpen(true) },
+    ];
+    if (human) {
+      items.push({ id: 'humanos', label: 'humanos', title: 'falar com outros humanos', icon: <Users className="h-4 w-4" />, onClick: () => setHumansOpen(true) });
+    }
+    return items;
+  }, [human]);
 
   const showOnboarding = !humanId;
 
@@ -196,155 +229,91 @@ export default function App() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {err && <Badge variant="destructive">offline</Badge>}
-          {chatStreaming && <Badge variant="success">chat ao vivo</Badge>}
-          {data && <Badge variant="outline">{data.stats?.sessions || 0} sessões</Badge>}
-          <Button
-            size="icon"
-            variant="outline"
-            className="ml-2"
+        <Group gap="sm" wrap="nowrap">
+          {/* Badges de status — escondem em telas estreitas pra dar espaço. */}
+          <Box visibleFrom="sm">
+            <Group gap="xs" wrap="nowrap">
+              {err && <Badge color="danger" variant="filled">offline</Badge>}
+              {chatStreaming && <Badge color="success" variant="filled">chat ao vivo</Badge>}
+              {data && <Badge color="gray" variant="outline">{data.stats?.sessions || 0} sessões</Badge>}
+            </Group>
+          </Box>
+
+          {/* Mobile: acesso ao painel lateral (Módulos / Info do agente). */}
+          {isMobile && (
+            <ActionIcon
+              variant="default"
+              color="gray"
+              onClick={() => setPanelOpen(true)}
+              label="abrir painel de módulos e info"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </ActionIcon>
+          )}
+
+          <ActionIcon
+            variant="default"
+            color="gray"
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'mudar para tema claro' : 'mudar para tema escuro'}
-            aria-label="alternar tema"
+            label={theme === 'dark' ? 'mudar para tema claro' : 'mudar para tema escuro'}
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setArchitectOpen(true)}
-            title="arquiteto: desenha um time customizado"
-          >
-            <Sparkles className="h-4 w-4" /> arquiteto
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setSeedsOpen(true)}
-            title="instalar time de agentes a partir de templates"
-          >
-            <Package className="h-4 w-4" /> time
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setPipelinesOpen(true)}
-            title="rodar fluxos reproduzíveis com checkpoints"
-          >
-            <Workflow className="h-4 w-4" /> pipelines
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setBestPracticesOpen(true)}
-            title="biblioteca de best-practices"
-          >
-            <BookOpen className="h-4 w-4" /> práticas
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setIdeExportOpen(true)}
-            title="exportar agentes pro formato de cada IDE"
-          >
-            <Code2 className="h-4 w-4" /> ide
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setProtectionsOpen(true)}
-            title="proteções — motor de intent destrutivo"
-          >
-            <ShieldAlert className="h-4 w-4 text-red-600" /> proteções
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setVaultOpen(true)}
-            title="cofre — secrets/envs encriptados"
-          >
-            <KeyRound className="h-4 w-4 text-amber-600" /> cofre
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setNetworkOpen(true)}
-            title="rede — bind do servidor (localhost/LAN/IP)"
-          >
-            <Network className="h-4 w-4 text-sky-600" /> rede
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setSubagentsOpen(true)}
-            title="subagents — workstreams paralelos disparados por agents"
-          >
-            <Activity className="h-4 w-4 text-indigo-600" /> subagents
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setCronOpen(true)}
-            title="agendamentos — jobs recorrentes via cron"
-          >
-            <Clock className="h-4 w-4 text-emerald-600" /> cron
-          </Button>
+          </ActionIcon>
+
+          <MainMenu items={menuItems} />
+
           {human && (
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => setHumansOpen(true)}
-              title="falar com outros humanos"
-            >
-              <Users className="h-4 w-4" /> humanos
-            </Button>
-          )}
-          {human && (
-            <div className="ml-1 flex items-center gap-2 rounded-full border bg-white py-1 pl-1 pr-3 text-sm">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+            <Group gap="xs" wrap="nowrap">
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+                style={{ background: colorVar('primary', 6), color: 'white' }}
+              >
                 {humanInitials(human.name)}
               </span>
-              <span className="font-medium">{human.name}</span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
+              <Box visibleFrom="sm">
+                <span className="text-sm font-medium">{human.name}</span>
+              </Box>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
                 onClick={() => setCurrent(null)}
-                aria-label="sair"
-                title="trocar humano"
+                label="trocar humano"
               >
                 <LogOut className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+              </ActionIcon>
+            </Group>
           )}
-        </div>
+        </Group>
       </header>
 
       <div
         className={`grid flex-1 gap-3 overflow-hidden p-3 ${
-          chatCollapsed
-            ? 'grid-cols-[300px_1fr_48px]'
-            : 'grid-cols-[300px_1fr_460px]'
+          isMobile
+            ? 'grid-cols-1'
+            : chatCollapsed
+              ? 'grid-cols-[300px_1fr_48px]'
+              : 'grid-cols-[300px_1fr_460px]'
         }`}
       >
-        <aside className="soft-scroll overflow-y-auto pr-1">
-          {selected && agentCfg ? (
-            <AgentInfoPanel
-              name={selected}
-              cfg={agentCfg}
-              context={agentContext}
-              count={agents?.counts[selected]}
-              lastInvoked={agents?.recent[selected]}
-              manifest={agents?.manifest}
-              logSummary={agents?.logs?.[selected]}
-              onSelect={setSelected}
-              onDeleted={() => setSelected(null)}
-            />
-          ) : (
-            <ModulesPanel data={data} />
-          )}
-        </aside>
+        {!isMobile && (
+          <aside className="soft-scroll overflow-y-auto pr-1">
+            {selected && agentCfg ? (
+              <AgentInfoPanel
+                name={selected}
+                cfg={agentCfg}
+                context={agentContext}
+                count={agents?.counts[selected]}
+                lastInvoked={agents?.recent[selected]}
+                manifest={agents?.manifest}
+                logSummary={agents?.logs?.[selected]}
+                onSelect={setSelected}
+                onDeleted={() => setSelected(null)}
+              />
+            ) : (
+              <ModulesPanel data={data} />
+            )}
+          </aside>
+        )}
 
         <main className="relative overflow-hidden rounded-lg border bg-white shadow-sm">
           <AgentCanvas
@@ -365,23 +334,169 @@ export default function App() {
             workingAgent={chatStreaming ? selected : null}
             meHumanId={humanId}
             humansTick={humansTick}
+            controlsRef={canvasControls}
           />
         </main>
 
-        <aside className="overflow-hidden rounded-lg border bg-white shadow-sm">
-          <ChatPanel
-            agent={selected}
-            agentCfg={agentCfg}
-            allAgents={agents?.manifest.agents ?? null}
-            humanId={humanId}
-            humanName={human?.name || null}
-            onClose={() => setSelected(null)}
-            onStreamingChange={setChatStreaming}
-            collapsed={chatCollapsed}
-            onToggleCollapse={toggleChatCollapsed}
-          />
-        </aside>
+        {!isMobile && (
+          <aside className="overflow-hidden rounded-lg border bg-white shadow-sm">
+            <ChatPanel
+              agent={selected}
+              agentCfg={agentCfg}
+              allAgents={agents?.manifest.agents ?? null}
+              humanId={humanId}
+              humanName={human?.name || null}
+              onClose={() => setSelected(null)}
+              onStreamingChange={setChatStreaming}
+              collapsed={chatCollapsed}
+              onToggleCollapse={toggleChatCollapsed}
+            />
+          </aside>
+        )}
       </div>
+
+      {/* Mobile: painel lateral (Módulos / Info do agente) via drawer. */}
+      {isMobile && (
+        <Drawer
+          opened={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          title={selected && agentCfg ? selected : 'Módulos'}
+          position="left"
+          size="sm"
+        >
+          {selected && agentCfg ? (
+            <AgentInfoPanel
+              name={selected}
+              cfg={agentCfg}
+              context={agentContext}
+              count={agents?.counts[selected]}
+              lastInvoked={agents?.recent[selected]}
+              manifest={agents?.manifest}
+              logSummary={agents?.logs?.[selected]}
+              onSelect={(n) => {
+                setSelected(n);
+                setPanelOpen(false);
+              }}
+              onDeleted={() => {
+                setSelected(null);
+                setPanelOpen(false);
+              }}
+            />
+          ) : (
+            <ModulesPanel data={data} />
+          )}
+        </Drawer>
+      )}
+
+      {/* Mobile: controles ▲▼ (rolam o prédio) + balão flutuante do chat. */}
+      {isMobile && !mobileChatOpen && (
+        <div className="fixed bottom-5 right-5 z-40 flex items-center gap-3">
+          <div className="flex gap-2">
+            <PanFab dir={-1} controls={canvasControls} label="rolar para cima" />
+            <PanFab dir={1} controls={canvasControls} label="rolar para baixo" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileChatOpen(true)}
+            aria-label="abrir chat"
+            className="relative flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition active:scale-95"
+            style={{ background: colorVar('primary', 6), color: 'white' }}
+          >
+            <MessageCircle className="h-6 w-6" />
+            {chatStreaming && (
+              <span className="absolute right-1 top-1 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-white" />
+            )}
+          </button>
+        </div>
+      )}
+      {isMobile && mobileChatOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          {/* Barra de fechar — sempre presente, mesmo sem agente selecionado. */}
+          <div className="flex items-center gap-2 border-b bg-white px-2 py-2">
+            <button
+              type="button"
+              onClick={() => setMobileChatOpen(false)}
+              aria-label="fechar chat"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 active:scale-95"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <span className="flex-1 truncate text-sm font-semibold">
+              {selected || 'Selecione um agente'}
+            </span>
+            {selected && (
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="rounded-full px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+              >
+                trocar
+              </button>
+            )}
+          </div>
+          <div className="min-h-0 flex-1">
+            {selected ? (
+              <ChatPanel
+                agent={selected}
+                agentCfg={agentCfg}
+                allAgents={agents?.manifest.agents ?? null}
+                humanId={humanId}
+                humanName={human?.name || null}
+                onStreamingChange={setChatStreaming}
+              />
+            ) : (
+              <AgentPicker
+                agents={agents?.manifest.agents ?? null}
+                onSelect={setSelected}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Botão flutuante de pan vertical (segurar = rolar contínuo). Ícone em SVG. */
+function PanFab({
+  dir,
+  controls,
+  label,
+}: {
+  dir: -1 | 1;
+  controls: React.MutableRefObject<CanvasControls | null>;
+  label: string;
+}) {
+  const press = () => controls.current?.setVerticalPan(dir);
+  const release = () => controls.current?.setVerticalPan(0);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        press();
+      }}
+      onPointerUp={release}
+      onPointerLeave={release}
+      onPointerCancel={release}
+      className="flex h-11 w-11 select-none items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-lg backdrop-blur transition active:scale-90 active:bg-white"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="22"
+        height="22"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ transform: dir === 1 ? 'rotate(180deg)' : undefined }}
+        aria-hidden
+      >
+        <path d="M6 15l6-6 6 6" />
+      </svg>
+    </button>
   );
 }

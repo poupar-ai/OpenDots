@@ -483,14 +483,27 @@ export class AgentSprite extends Container {
     this.drawBadgeBg();
   }
 
+  // Escala base (responsiva): em telas estreitas o agente cresce pra não
+  // "flutuar" perdido na sala larga. A seleção multiplica por 1.1 em cima disso.
+  private baseScale = 1;
+  private isSelected = false;
+  private applyScale() {
+    this.scale.set(this.baseScale * (this.isSelected ? 1.1 : 1));
+  }
+  public setBaseScale(s: number) {
+    if (this.baseScale === s) return;
+    this.baseScale = s;
+    this.applyScale();
+  }
+
   // Wrappers que resolvem estados com base em prioridade (igual Spine Boy)
   public setSelected(sel: boolean) {
+    this.isSelected = sel;
+    this.applyScale();
     if (sel) {
-      this.scale.set(1.1);
       // talk só assume se nada de maior prioridade estiver ativo
       if (STATE_PRIORITY[this.state] <= STATE_PRIORITY.talk) this.playAnimation('talk');
     } else {
-      this.scale.set(1);
       if (this.state === 'talk') this.playAnimation('idle');
     }
   }

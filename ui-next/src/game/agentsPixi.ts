@@ -38,15 +38,14 @@ const SPRING_K = 0.06;    // intensidade da mola pro alvo
 const DAMPING = 0.82;     // amortecimento por frame
 const REPEL_R = 40;       // raio de repulsão entre agentes
 const REPEL_K = 0.08;     // intensidade da repulsão
+const AGENT_MIN_SEP = 46; // distância mínima centro-a-centro (padding rígido — nunca grudam/sobrepõem)
+const AGENT_SEP_ITERS = 3; // iterações de resolução posicional por frame
 const WALL_BOUNCE = 0.3;  // coeficiente de restituição nas paredes
 const THROW_CAP = 22;     // velocidade máxima ao arremessar
 // gravidade para humanos (arrastar-e-soltar do alto faz cair)
 const HUMAN_GRAVITY = 0.7;
 const HUMAN_FALL_SPEED_MAX = 28;
 const HUMAN_DROP_THRESHOLD = 4; // px abaixo do piso já dispara queda
-// separação entre humanos — impede sobreposição no chão
-const HUMAN_MIN_SEP = 30;
-const HUMAN_SEP_VERTICAL = 44; // considera "mesmo piso" se |dy| <= este valor
 
 interface FlowArrow {
   from: string;
@@ -216,6 +215,7 @@ export class AgentCanvas {
   private height = 420;
   private cameraX = 0;
   private cameraY = 0;
+  private panInputY = 0; // -1 = sobe, +1 = desce (controles flutuantes)
   private userHasPanned = false;
   private resizeObs: ResizeObserver | null = null;
   private workingName: string | null = null;
@@ -329,6 +329,7 @@ export class AgentCanvas {
       this.office.resize(this.width, this.height);
       this.clampAndApplyCamera();
       this.relayout();
+      this.applySpriteScale();
       this.focusCameraOnMeIfIdle();
     });
     this.resizeObs.observe(el);
@@ -434,6 +435,7 @@ export class AgentCanvas {
         }
       });
     }
+    this.applySpriteScale();
     this.focusCameraOnMeIfIdle();
   }
 
@@ -602,6 +604,7 @@ export class AgentCanvas {
     this.applyAlpha();
     this.buildFlow();
     this.sortLayer();
+    this.applySpriteScale();
   }
 
   private applyAlpha() {
@@ -630,6 +633,23 @@ export class AgentCanvas {
       return a.y - b.y;
     });
     for (const n of list) this.layer.addChild(n.sprite);
+  }
+
+  // Escala responsiva dos personagens: em telas estreitas (celular) as salas
+  // ficam largas e o sprite no tamanho 1 parece pequeno/flutuando — então
+  // crescemos o char. Ramp suave de 1 (>=768px) até ~1.55 (<=380px).
+  private uiScale(): number {
+    const w = this.width || 1024;
+    if (w >= 768) return 1;
+    if (w <= 380) return 1.55;
+    const t = (w - 380) / (768 - 380);
+    return 1.55 + t * (1 - 1.55);
+  }
+
+  private applySpriteScale() {
+    const s = this.uiScale();
+    for (const n of this.nodes.values()) n.sprite.setBaseScale(s);
+    for (const h of this.humanNodes.values()) h.sprite.setBaseScale(s);
   }
 
   private relayout() {
@@ -835,11 +855,18 @@ export class AgentCanvas {
     if (!this.drag) return;
     const node = this.nodes.get(this.drag.name);
     if (!node) return;
-    const { width: worldW, height: worldH } = this.office.getWorldSize();
+    // Limites do DEPARTAMENTO (sala) do agente — ele nunca sai dali, nem
+    // arrastado. Fallback pras margens do mundo se a sala não existir.
+    const world = this.office.getWorldSize();
+    const bounds = this.office.getRoomBounds(node.name);
+    const minX = bounds ? bounds.x1 : MARGIN_X;
+    const maxX = bounds ? bounds.x2 : world.width - MARGIN_X;
+    const minY = bounds ? bounds.ceilingY + 40 : MARGIN_TOP;
+    const maxY = bounds ? bounds.floorY - 30 : world.height - MARGIN_BOTTOM;
     const wx = gx + this.cameraX;
     const wy = gy + this.cameraY;
-    const nx = clamp(wx + this.drag.offX, MARGIN_X, worldW - MARGIN_X);
-    const ny = clamp(wy + this.drag.offY, MARGIN_TOP, worldH - MARGIN_BOTTOM);
+    const nx = clamp(wx + this.drag.offX, minX, maxX);
+    const ny = clamp(wy + this.drag.offY, minY, maxY);
     if (!this.drag.moved) {
       const dx = nx - node.x;
       const dy = ny - node.y;
@@ -961,6 +988,19 @@ export class AgentCanvas {
     h.pinned = true;
   }
 
+  // Controle externo de pan vertical (botões flutuantes ▲▼ no mobile).
+  // dir: -1 sobe, +1 desce, 0 para. Enquanto !=0, o tick rola continuamente.
+  public setVerticalPan(dir: -1 | 0 | 1) {
+    this.panInputY = dir;
+  }
+
+  /** Salto discreto vertical (um toque). Útil pra clique único nos controles. */
+  public nudgeVertical(dir: -1 | 1) {
+    this.cameraY += dir * this.height * 0.4;
+    this.userHasPanned = true;
+    this.clampAndApplyCamera();
+  }
+
   private tick(t: Ticker) {
     const dt = Math.min(t.deltaTime, 2);
     this.office?.tick(t);
@@ -981,6 +1021,13 @@ export class AgentCanvas {
         this.userHasPanned = true;
         this.clampAndApplyCamera();
       }
+    }
+
+    // Pan vertical pelos controles flutuantes (▲▼ no mobile, segurar = contínuo).
+    if (this.panInputY !== 0) {
+      this.cameraY += this.panInputY * this.KEY_PAN_SPEED * dt;
+      this.userHasPanned = true;
+      this.clampAndApplyCamera();
     }
 
     const nodes = [...this.nodes.values()];
@@ -1023,7 +1070,9 @@ export class AgentCanvas {
       node.x += node.vx * dt;
       node.y += node.vy * dt;
 
-      const bounds = node.pinned ? null : this.office.getRoomBounds(node.name);
+      // Sempre confina o agente à sua sala (departamento) — mesmo pinado, ele
+      // nunca escapa do próprio andar/sala.
+      const bounds = this.office.getRoomBounds(node.name);
       const world = this.office.getWorldSize();
       const minX = bounds ? bounds.x1 : MARGIN_X;
       const maxX = bounds ? bounds.x2 : world.width - MARGIN_X;
@@ -1060,32 +1109,91 @@ export class AgentCanvas {
       }
     }
 
-    // separação horizontal: humanos parados no mesmo piso não se sobrepõem.
-    // Aplicamos um push simétrico; drag/fall ignoram (drag tem prioridade, queda
-    // resolve na próxima iteração).
-    const grounded = [...this.humanNodes.values()].filter(
-      (h) => !h.dragging && !h.falling,
-    );
-    const worldW = this.office.getWorldSize().width;
-    for (let i = 0; i < grounded.length; i++) {
-      for (let j = i + 1; j < grounded.length; j++) {
-        const a = grounded[i];
-        const b = grounded[j];
-        if (Math.abs(a.y - b.y) > HUMAN_SEP_VERTICAL) continue;
-        const dx = b.x - a.x;
-        const adx = Math.abs(dx);
-        if (adx >= HUMAN_MIN_SEP) continue;
-        const overlap = HUMAN_MIN_SEP - adx;
-        const dir = dx === 0 ? (a.id < b.id ? 1 : -1) : Math.sign(dx);
-        const half = overlap / 2 + 0.01;
-        a.x = clamp(a.x - dir * half, MARGIN_X, worldW - MARGIN_X);
-        b.x = clamp(b.x + dir * half, MARGIN_X, worldW - MARGIN_X);
-        a.sprite.position.set(a.x, a.y);
-        b.sprite.position.set(b.x, b.y);
-        this.scheduleSeparationSave(a);
-        this.scheduleSeparationSave(b);
+    // Separação RÍGIDA UNIFICADA — agentes E humanos seguem a MESMA física de
+    // colisão: nunca se sobrepõem (entre si nem entre tipos) e mantêm o padding
+    // mínimo, escalado por uiScale. Agentes flutuam (clamp na sala, 2D); humanos
+    // ficam plantados (clamp de Y no piso a cada passo → o empurrão vira deslize
+    // lateral). Resolvido em algumas iterações pra convergir.
+    interface Body {
+      x: number; y: number; vx: number; vy: number;
+      isHuman: boolean; agent?: AgentNode; human?: HumanNode;
+    }
+    const bodies: Body[] = [];
+    for (const n of nodes) {
+      if (n.dragging) continue;
+      bodies.push({ x: n.x, y: n.y, vx: n.vx, vy: n.vy, isHuman: false, agent: n });
+    }
+    for (const h of this.humanNodes.values()) {
+      if (h.dragging || h.falling) continue;
+      bodies.push({ x: h.x, y: h.y, vx: 0, vy: 0, isHuman: true, human: h });
+    }
+    const minSep = AGENT_MIN_SEP * this.uiScale();
+    const world = this.office.getWorldSize();
+    const movedHumans = new Set<HumanNode>();
+    const bodyId = (b: Body) => (b.isHuman ? b.human!.id : b.agent!.name);
+    for (let iter = 0; iter < AGENT_SEP_ITERS; iter++) {
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          const a = bodies[i];
+          const b = bodies[j];
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          let d = Math.hypot(dx, dy);
+          if (d >= minSep) continue;
+          if (d < 0.001) {
+            dx = bodyId(a) < bodyId(b) ? -1 : 1;
+            dy = 0;
+            d = 1;
+          }
+          const nx = dx / d;
+          const ny = dy / d;
+          const half = (minSep - d) / 2 + 0.01;
+          a.x -= nx * half; a.y -= ny * half;
+          b.x += nx * half; b.y += ny * half;
+          if (a.isHuman) movedHumans.add(a.human!);
+          if (b.isHuman) movedHumans.add(b.human!);
+          // mata a velocidade no eixo de colisão (só agentes têm v de mola)
+          if (!a.isHuman) {
+            const avn = a.vx * nx + a.vy * ny;
+            if (avn > 0) { a.vx -= avn * nx; a.vy -= avn * ny; }
+          }
+          if (!b.isHuman) {
+            const bvn = b.vx * nx + b.vy * ny;
+            if (bvn < 0) { b.vx -= bvn * nx; b.vy -= bvn * ny; }
+          }
+        }
+      }
+      // re-clamp por tipo a cada iteração
+      for (const body of bodies) {
+        if (body.isHuman) {
+          body.x = clamp(body.x, MARGIN_X, world.width - MARGIN_X);
+          body.y = this.office.landingYAt(body.x, body.y); // mantém no piso
+        } else {
+          const n = body.agent!;
+          const bounds = n.pinned ? null : this.office.getRoomBounds(n.name);
+          const minX = bounds ? bounds.x1 : MARGIN_X;
+          const maxX = bounds ? bounds.x2 : world.width - MARGIN_X;
+          const minY = bounds ? bounds.ceilingY + 40 : MARGIN_TOP;
+          const maxY = bounds ? bounds.floorY - 30 : world.height - MARGIN_BOTTOM;
+          body.x = clamp(body.x, minX, maxX);
+          body.y = clamp(body.y, minY, maxY);
+        }
       }
     }
+    // grava posições resolvidas de volta nos nós e aplica nos sprites
+    for (const body of bodies) {
+      if (body.isHuman) {
+        const h = body.human!;
+        h.x = body.x; h.y = body.y;
+        h.sprite.position.set(h.x, h.y);
+      } else {
+        const n = body.agent!;
+        n.x = body.x; n.y = body.y;
+        n.vx = body.vx; n.vy = body.vy;
+        n.sprite.position.set(n.x, n.y);
+      }
+    }
+    for (const h of movedHumans) this.scheduleSeparationSave(h);
 
     for (const h of this.humanNodes.values()) {
       h.sprite.tick(t);

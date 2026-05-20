@@ -1,12 +1,11 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Send, X, Bot, Brain, User as UserIcon, Sparkles, Loader2, PanelRightClose, PanelRightOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { ActionIcon, Badge, Button, Loader } from '@/ui';
+import type { Color } from '@/ui';
 import { CopyButton } from '@/components/CopyButton';
 import { AgentFace } from '@/components/AgentFace';
-import { cn, fmtDayKey, fmtDayLabel, fmtTime } from '@/lib/utils';
+import { MessageBubble, DayDivider } from '@/components/chat';
+import { cn, fmtDayKey, fmtDayLabel } from '@/lib/utils';
 import type { AgentCfg } from '@/lib/types';
 import { useChat } from '@/hooks/useChat';
 import { listHumans, type HumanProfile } from '@/lib/humans';
@@ -55,12 +54,12 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const TYPE_BADGE: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'> = {
-  core: 'default',
-  specialist: 'secondary',
+const TYPE_BADGE: Record<string, Color> = {
+  core: 'primary',
+  specialist: 'gray',
   integrator: 'success',
   motor: 'warning',
-  firefighter: 'destructive',
+  firefighter: 'danger',
 };
 
 export function ChatPanel({
@@ -74,10 +73,43 @@ export function ChatPanel({
   collapsed = false,
   onToggleCollapse,
 }: Props) {
-  const { messages, send, sending, err, isStreaming, streamingPhase } = useChat(agent, humanId);
+  const { messages, send, sending, err, loading, isStreaming, streamingPhase } = useChat(agent, humanId);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Lazy-load por janela: renderiza só as N mais recentes e revela lotes
+  // antigos conforme o usuário rola pro topo — não sobrecarrega o DOM/markdown
+  // mesmo com históricos longos. (Forward-compatible com paginação de servidor.)
+  const BATCH = 30;
+  const [visibleCount, setVisibleCount] = useState(BATCH);
+  useEffect(() => { setVisibleCount(BATCH); }, [agent]);
+  const windowStart = Math.max(0, messages.length - visibleCount);
+  const hasOlder = windowStart > 0;
+  const windowed = useMemo(() => messages.slice(windowStart), [messages, windowStart]);
+
+  // Carregar-mais-antigas preservando a posição: guarda a altura antes de
+  // expandir a janela e reajusta scrollTop depois, pra não "pular".
+  const loadingOlderRef = useRef(false);
+  const prevScrollHeightRef = useRef<number | null>(null);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop <= 64 && hasOlder && !loadingOlderRef.current) {
+      loadingOlderRef.current = true;
+      prevScrollHeightRef.current = el.scrollHeight;
+      setVisibleCount((c) => Math.min(messages.length, c + BATCH));
+    }
+  };
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (loadingOlderRef.current && prevScrollHeightRef.current != null) {
+      el.scrollTop = el.scrollHeight - prevScrollHeightRef.current;
+      loadingOlderRef.current = false;
+      prevScrollHeightRef.current = null;
+    }
+  }, [visibleCount]);
 
   // Humanos pro autocomplete de @ — carrega uma vez por montagem.
   const [humans, setHumans] = useState<HumanProfile[]>([]);
@@ -173,11 +205,15 @@ export function ChatPanel({
     onStreamingChange?.(isStreaming);
   }, [isStreaming, onStreamingChange]);
 
+  // Auto-scroll pro fundo só quando chega mensagem nova ou troca de agente —
+  // depende de messages.length (não de `windowed`), então expandir a janela
+  // de mensagens antigas não dispara o pulo pro fim.
   useEffect(() => {
+    if (loadingOlderRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, agent]);
+  }, [messages.length, agent]);
 
   const autoResize = (ta: HTMLTextAreaElement | null) => {
     if (!ta) return;
@@ -210,7 +246,7 @@ export function ChatPanel({
       }
       runStart.length = 0;
     };
-    for (const m of messages) {
+    for (const m of windowed) {
       const k = fmtDayKey(m.ts);
       if (k !== lastKey) {
         flushRun();
@@ -237,7 +273,7 @@ export function ChatPanel({
     }
     flushRun();
     return items;
-  }, [messages]);
+  }, [windowed]);
 
   const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
   const toggleThread = (gid: string) => {
@@ -252,15 +288,9 @@ export function ChatPanel({
   if (collapsed) {
     return (
       <div className="flex h-full flex-col items-center gap-3 bg-white py-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={onToggleCollapse}
-          title="expandir chat"
-          aria-label="expandir chat"
-        >
+        <ActionIcon variant="subtle" color="gray" onClick={onToggleCollapse} label="expandir chat">
           <PanelRightOpen className="h-4 w-4" />
-        </Button>
+        </ActionIcon>
         {agent && agentCfg ? (
           <div className="flex flex-col items-center gap-2">
             <AgentFace
@@ -285,15 +315,9 @@ export function ChatPanel({
       <div className="flex h-full flex-col">
         {onToggleCollapse && (
           <div className="flex justify-end border-b bg-white p-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={onToggleCollapse}
-              aria-label="minimizar chat"
-              title="minimizar chat"
-            >
+            <ActionIcon variant="subtle" color="gray" onClick={onToggleCollapse} label="minimizar chat">
               <PanelRightClose className="h-4 w-4" />
-            </Button>
+            </ActionIcon>
           </div>
         )}
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
@@ -373,7 +397,7 @@ export function ChatPanel({
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-sm font-semibold">{agent}</h3>
             {agent && <CopyButton value={agent} label="copiar nome do agente" />}
-            <Badge variant={TYPE_BADGE[type]}>{type}</Badge>
+            <Badge color={TYPE_BADGE[type] ?? 'gray'} variant="light">{type}</Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">
             {humanName && <span className="text-slate-500">Você, {humanName} · </span>}
@@ -391,28 +415,40 @@ export function ChatPanel({
           </p>
         </div>
         {onToggleCollapse && (
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onToggleCollapse}
-            aria-label="minimizar chat"
-            title="minimizar chat"
-          >
+          <ActionIcon variant="subtle" color="gray" onClick={onToggleCollapse} label="minimizar chat">
             <PanelRightClose className="h-4 w-4" />
-          </Button>
+          </ActionIcon>
         )}
         {onClose && (
-          <Button size="icon" variant="ghost" onClick={onClose} aria-label="fechar">
+          <ActionIcon variant="subtle" color="gray" onClick={onClose} label="fechar">
             <X className="h-4 w-4" />
-          </Button>
+          </ActionIcon>
         )}
       </header>
 
       <div
         ref={scrollRef}
+        onScroll={onScroll}
         className="chat-scroll flex-1 space-y-2 overflow-y-auto bg-slate-50 px-4 py-4"
       >
-        {grouped.length === 0 && (
+        {hasOlder && (
+          <div className="flex justify-center py-1">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((c) => Math.min(messages.length, c + BATCH))}
+              className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm hover:bg-slate-50"
+            >
+              carregar mensagens anteriores
+            </button>
+          </div>
+        )}
+        {loading && grouped.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-xs text-muted-foreground">
+            <Loader size="md" color="primary" />
+            <p>Carregando conversa com {agent}…</p>
+          </div>
+        )}
+        {!loading && grouped.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center text-xs text-muted-foreground">
             <Bot className="mb-2 h-8 w-8 opacity-30" />
             <p>Nenhuma mensagem ainda. Pergunte algo ao {agent}.</p>
@@ -420,13 +456,7 @@ export function ChatPanel({
         )}
         {grouped.map((item, i) => {
           if (item.kind === 'day') {
-            return (
-              <div key={`d${i}`} className="flex justify-center py-2">
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
-                  {item.label}
-                </span>
-              </div>
-            );
+            return <DayDivider key={`d${i}`} label={item.label} />;
           }
           const inThread = item.threadId && item.threadSize > 1;
           const collapsed = inThread && collapsedThreads.has(item.threadId!);
@@ -449,7 +479,7 @@ export function ChatPanel({
                   {collapsed ? '▸' : '▾'} thread · {item.threadSize} msgs
                 </button>
               )}
-              <Bubble
+              <MessageBubble
                 msg={item.msg}
                 humanName={humanName}
                 agentType={agentCfg.type}
@@ -482,14 +512,14 @@ export function ChatPanel({
             </div>
             <div className="text-slate-900">{improve.improved}</div>
             <div className="mt-2 flex gap-2">
-              <Button type="button" size="sm" className="h-7 px-2.5 text-xs" onClick={acceptImprove}>
+              <Button type="button" size="compact-sm" onClick={acceptImprove}>
                 usar sugestão
               </Button>
               <Button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2.5 text-xs"
+                size="compact-sm"
+                variant="default"
+                color="gray"
                 onClick={() => setImprove(null)}
               >
                 descartar
@@ -591,31 +621,28 @@ export function ChatPanel({
             className="chat-ta flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none"
             style={{ minHeight: 72 }}
           />
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
+          <ActionIcon
+            variant="subtle"
+            color="primary"
             disabled={!input.trim() || sending || improve?.phase === 'loading'}
             onClick={runImprove}
-            className="h-9 w-9 shrink-0 rounded-full text-violet-600 hover:bg-violet-100 hover:text-violet-700"
-            aria-label="melhorar prompt"
-            title="melhorar ortografia e clareza (sem mudar intenção)"
+            label="melhorar ortografia e clareza (sem mudar intenção)"
           >
             {improve?.phase === 'loading' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-          </Button>
-          <Button
-            type="submit"
-            size="icon"
+          </ActionIcon>
+          <ActionIcon
+            variant="filled"
+            color="primary"
             disabled={!input.trim() || sending}
-            className="h-9 w-9 shrink-0 rounded-full"
-            aria-label="enviar"
+            onClick={submit}
+            label="enviar"
           >
             <Send className="h-4 w-4" />
-          </Button>
+          </ActionIcon>
         </div>
         <p className="mt-1.5 px-1 text-xs text-muted-foreground">
           Enter envia · Shift+Enter quebra linha · @ menciona agentes/humanos · ✨ melhora o texto
@@ -624,97 +651,3 @@ export function ChatPanel({
     </div>
   );
 }
-
-interface BubbleProps {
-  msg: {
-    role: 'user' | 'agent';
-    content: string;
-    ts: string;
-    streaming?: boolean;
-    phase?: 'thinking' | 'writing';
-    from?: string;
-  };
-  humanName?: string | null;
-  agentType?: string;
-  agentProfession?: string;
-}
-
-const Bubble = memo(function Bubble({
-  msg,
-  humanName,
-  agentType,
-  agentProfession,
-}: BubbleProps) {
-  const isUser = msg.role === 'user';
-  const thinking = msg.streaming && msg.phase === 'thinking';
-  const writing = msg.streaming && msg.phase === 'writing';
-  const userLabel = msg.from || humanName || 'Você';
-  const userInitials = initials(userLabel);
-  return (
-    <div className={cn('flex items-end gap-2', isUser ? 'justify-end' : 'justify-start')}>
-      {!isUser && (
-        thinking ? (
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100">
-            <Brain className="h-3.5 w-3.5 text-amber-600" />
-          </div>
-        ) : agentType ? (
-          <AgentFace
-            type={agentType}
-            profession={agentProfession}
-            size={28}
-            mood={writing ? 'happy' : 'neutral'}
-          />
-        ) : (
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-200">
-            <Bot className="h-3.5 w-3.5 text-slate-600" />
-          </div>
-        )
-      )}
-      <div
-        className={cn(
-          'prose-bubble relative max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm',
-          isUser
-            ? 'user rounded-br-sm bg-primary text-primary-foreground'
-            : 'rounded-bl-sm bg-white text-slate-800',
-          writing && 'streaming-cursor',
-        )}
-      >
-        {thinking ? (
-          <div className="flex items-center gap-1.5 py-0.5">
-            <span className="typing-dot" />
-            <span className="typing-dot" />
-            <span className="typing-dot" />
-            <span className="ml-1 text-xs text-slate-500">pensando</span>
-          </div>
-        ) : isUser ? (
-          <>
-            <div className="mb-0.5 text-xs font-semibold text-white/90">
-              {userLabel}
-            </div>
-            <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-          </>
-        ) : (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content || ' '}</ReactMarkdown>
-        )}
-        {!thinking && (
-          <div
-            className={cn(
-              'mt-1 text-right text-xs',
-              isUser ? 'text-white/70' : 'text-slate-400',
-            )}
-          >
-            {fmtTime(msg.ts)}
-          </div>
-        )}
-      </div>
-      {isUser && (
-        <div
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground ring-2 ring-primary/20"
-          title={userLabel}
-        >
-          {userInitials}
-        </div>
-      )}
-    </div>
-  );
-});

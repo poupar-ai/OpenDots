@@ -46,6 +46,18 @@ export type { CopyButtonProps } from './CopyButton';
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
 
+export { Burger } from './Burger';
+export type { BurgerProps } from './Burger';
+
+export { Drawer } from './Drawer';
+export type { DrawerProps } from './Drawer';
+
+export { NavLink } from './NavLink';
+export type { NavLinkProps } from './NavLink';
+
+export { Avatar } from './Avatar';
+export type { AvatarProps } from './Avatar';
+
 export { Radio, RadioGroup } from './Radio';
 export type { RadioProps, RadioGroupProps } from './Radio';
 

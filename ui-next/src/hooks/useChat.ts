@@ -16,29 +16,63 @@ export function useChat(agent: string | null, humanId: string | null = null) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const historyLenRef = useRef(0);
+
+  // Reset SÍNCRONO ao trocar de agente (durante o render, não em effect).
+  // Sem isso, o primeiro paint do novo agente ainda mostra as mensagens do
+  // anterior — é a causa do "às vezes exibe mensagem de outro agente". Este
+  // é o padrão recomendado do React pra resetar estado quando um prop muda.
+  const [prevAgent, setPrevAgent] = useState(agent);
+  if (agent !== prevAgent) {
+    setPrevAgent(agent);
+    setHistory([]);
+    setStream(null);
+    setErr(null);
+    historyLenRef.current = 0;
+    setLoading(!!agent);
+  }
 
   useEffect(() => {
     historyLenRef.current = history.length;
   }, [history]);
 
+  // Carga inicial EM LOTE via /api/chat/history (uma resposta JSON, instantâneo)
+  // em vez de esperar o histórico chegar gota a gota pelo SSE. Depois checa se
+  // o agente está respondendo em background (mostra "pensando"). Tudo guardado
+  // por `alive` pra ignorar respostas que chegam após troca de agente.
   useEffect(() => {
-    setStream(null);
-    setHistory([]);
-    setErr(null);
-    historyLenRef.current = 0;
-    if (!agent) return;
-    // Backend tokio::spawn sobrevive ao disconnect do SSE, então o agente
-    // pode estar respondendo em background quando o user reabre o chat.
-    // Mostra "pensando" até a resposta chegar pelo polling do SSE.
+    if (!agent) {
+      setLoading(false);
+      return;
+    }
     let alive = true;
+    setLoading(true);
     (async () => {
+      try {
+        const r = await fetch(`/api/chat/history?agent=${encodeURIComponent(agent)}`);
+        if (!alive) return;
+        if (r.ok) {
+          const j = await r.json();
+          if (!alive) return;
+          const msgs: ChatMsg[] = Array.isArray(j.messages) ? j.messages : [];
+          setHistory(msgs);
+          historyLenRef.current = msgs.length;
+        }
+      } catch {
+        /* mantém vazio; SSE ainda tenta preencher */
+      } finally {
+        if (alive) setLoading(false);
+      }
+
+      // Backend tokio::spawn sobrevive ao disconnect do SSE, então o agente
+      // pode estar respondendo em background quando o user reabre o chat.
       try {
         const r = await fetch(`/api/agents/${encodeURIComponent(agent)}/status`);
         if (!alive || !r.ok) return;
         const j = await r.json();
-        if (j.processing) {
+        if (alive && j.processing) {
           setStream({
             role: 'agent',
             content: '',
@@ -49,16 +83,17 @@ export function useChat(agent: string | null, humanId: string | null = null) {
         }
       } catch {}
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [agent]);
 
-  // Semi-streaming: abre SSE em /api/chat/stream enquanto o chat estiver idle.
-  // Servidor empurra msgs novas (handoffs, auto-turns) em até ~500ms. Fecha o
-  // stream enquanto o usuário está enviando (evita duplicar mensagens com o
-  // próprio POST /api/chat, que já adiciona ao history localmente).
+  // Semi-streaming: abre SSE em /api/chat/stream pros deltas ao vivo (handoffs,
+  // auto-turns) enquanto o chat estiver idle. Só abre DEPOIS da carga inicial
+  // (`!loading`) e a partir do índice já carregado, evitando re-baixar tudo e
+  // duplicar. Fecha enquanto envia (o POST /api/chat já adiciona localmente).
   useEffect(() => {
-    if (!agent) return;
-    if (sending || stream) return;
+    if (!agent || loading || sending || stream) return;
 
     const es = new EventSource(
       `/api/chat/stream?agent=${encodeURIComponent(agent)}&since_idx=${historyLenRef.current}`,
@@ -73,8 +108,6 @@ export function useChat(agent: string | null, humanId: string | null = null) {
           if (idx < cur.length) return cur; // já temos
           return [...cur, msg];
         });
-        // Se chegou resposta do agente (via polling do backend), o
-        // "pensando" mostrado ao reabrir o chat já cumpriu o papel — limpa.
         if (msg && msg.role === 'agent') {
           setStream(null);
         }
@@ -88,7 +121,7 @@ export function useChat(agent: string | null, humanId: string | null = null) {
     return () => {
       es.close();
     };
-  }, [agent, sending, stream]);
+  }, [agent, loading, sending, stream]);
 
   const send = useCallback(
     async (message: string) => {
@@ -182,6 +215,7 @@ export function useChat(agent: string | null, humanId: string | null = null) {
     sending,
     err,
     cancel,
+    loading,
     isStreaming: !!stream,
     streamingPhase: stream?.phase ?? null,
   };

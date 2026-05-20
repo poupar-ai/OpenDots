@@ -12,4 +12,4 @@
 // `adapter-mantine/tokens.ts` (único lugar com nomes do Mantine).
 
 export * from './adapter-mantine';
-export type { Color, Size, Variant, Radius, Spacing } from './types';
+export type { Color, Size, Variant, Radius, Spacing, Breakpoint } from './types';

@@ -18,3 +18,6 @@ export type Radius = 'none' | 'sm' | 'md' | 'lg' | 'full';
 
 /** Espaçamento — escala consistente. */
 export type Spacing = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+
+/** Breakpoint responsivo — usado por `visibleFrom`/`hiddenFrom`. */
+export type Breakpoint = 'xs' | 'sm' | 'md' | 'lg' | 'xl';

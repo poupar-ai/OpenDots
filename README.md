@@ -442,6 +442,7 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 - **Bundle único de ~1.2MB (mobile sofre).** `ui-next/vite.config.ts` sem
   `manualChunks`/code-split — Pixi/WebGL (canvas) vão no bundle principal.
   → `React.lazy` no `AgentCanvas`/Pixi + `manualChunks` pra separar vendor.
+
 ### Médio
 
 - **9 painéis ainda no legado `@/components/ui/*`** (migrar pra `@/ui`):

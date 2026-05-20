@@ -279,3 +279,15 @@
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30%           { transform: translateY(-3px); opacity: 1; }
 }
+
+/* Evita o auto-zoom do navegador mobile ao focar campos: iOS/Safari dá zoom
+   quando o font-size do campo é < 16px. Forçamos 16px só em telas pequenas. */
+@media (max-width: 768px) {
+  .mantine-InputBase-input,
+  .mantine-Input-input,
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}

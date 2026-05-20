@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KeyRound } from 'lucide-react';
-import { Button, Group, Modal, Stack, Text, TextInput, Title } from '@/ui';
+import { Alert, Button, Group, Modal, Stack, Text, TextInput, Title } from '@/ui';
 import { getVaultStatus, initVault, unlockVault } from '@/lib/vault';
 
 interface Props {
@@ -76,16 +76,27 @@ export function VaultBootstrap({ onReady }: Props) {
     >
       <form onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <Stack gap="md">
-          <Text size="sm" muted>
-            {creating
-              ? 'O cofre guarda secrets e a senha dos humanos (só o hash). Defina uma senha-mestra — ela é obrigatória antes de criar qualquer perfil.'
-              : 'O cofre está trancado. Informe a senha-mestra pra destrancar e poder entrar/criar perfis.'}
-          </Text>
+          {creating ? (
+            <Alert color="info">
+              <Text size="sm" fw={600}>O que é o cofre?</Text>
+              <Text size="sm">
+                Um cofre criptografado por projeto: guarda secrets (chaves de API,
+                tokens), as identidades dos agentes (chave Ed25519) e a senha dos
+                humanos (só o hash). É <b>obrigatório criar antes do primeiro perfil</b> —
+                a senha-mestra abaixo destranca tudo isso.
+              </Text>
+            </Alert>
+          ) : (
+            <Text size="sm" muted>
+              O cofre está trancado. Informe a senha-mestra pra destrancar e poder
+              entrar/criar perfis.
+            </Text>
+          )}
           <TextInput
             type="password"
             value={pw}
             onChange={setPw}
-            placeholder={creating ? 'senha-mestra do cofre' : 'senha-mestra'}
+            placeholder={creating ? 'defina a senha-mestra do cofre' : 'senha-mestra'}
           />
           {creating && (
             <TextInput type="password" value={pw2} onChange={setPw2} placeholder="confirme a senha" />

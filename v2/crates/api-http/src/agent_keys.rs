@@ -3,7 +3,7 @@
 //! - **Geração**: na criação do agente. Pública vai pro `agents.json`
 //!   (em hex), privada vai pro vault como secret `agent.<name>.privkey`.
 //! - **Spawn**: servidor lê a privada, monta JWT `{agent, exp}` (10 min),
-//!   passa pro processo do agente via env `PROJECT_MEM_AGENT_TOKEN`.
+//!   passa pro processo do agente via env `POUPAR_AGENT_TOKEN`.
 //! - **Handoff**: middleware lê Bearer, valida assinatura com a pública
 //!   do agente declarado no claim, usa `agent` do token como `from`
 //!   autoritativo (ignora body).
@@ -249,7 +249,7 @@ fn ensure_agent_keypair(mem_dir: &std::path::Path, agent: &str) -> Option<[u8; 3
 }
 
 /// Carrega (ou gera) a privada do agente e monta um JWT de 10min pronto
-/// pra ser injetado em `PROJECT_MEM_AGENT_TOKEN` do spawn.
+/// pra ser injetado em `POUPAR_AGENT_TOKEN` do spawn.
 ///
 /// Vault continua aceitando privada legada (compat) — agentes criados
 /// antes desta mudança têm a chave lá. Ordem de lookup:

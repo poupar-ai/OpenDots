@@ -8,8 +8,8 @@
 //! (`auth.rs`): nenhum handler precisa mudar.
 //!
 //! Layout futuro de mem_dir multi-tenant:
-//!   `<base>/<tenant_id>/.claude-project-memory/`
-//! Pro tenant `default` (caso atual), mantemos `<base>/.claude-project-memory/`
+//!   `<base>/<tenant_id>/.poupar/`
+//! Pro tenant `default` (caso atual), mantemos `<base>/.poupar/`
 //! pra não exigir migração de quem já está rodando.
 
 use std::path::{Path, PathBuf};
@@ -32,10 +32,10 @@ impl TenantContext {
     }
 
     /// Constrói pro tenant nomeado — usado quando multi-tenancy real
-    /// ativar. `<base>/<tenant_id>/.claude-project-memory/`.
+    /// ativar. `<base>/<tenant_id>/.poupar/`.
     pub fn for_named(base_mem_dir: &Path, tenant_id: &str) -> Self {
         // Quando multi-tenant ativar, base_mem_dir provavelmente vai ser
-        // um diretório-pai (ex.: `/var/lib/project-mem/tenants/`).
+        // um diretório-pai (ex.: `/var/lib/open-poupar/tenants/`).
         // Por hora essa fn não é chamada — fica como sinalização da forma.
         let _ = base_mem_dir;
         let _ = tenant_id;

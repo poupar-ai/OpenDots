@@ -2,17 +2,17 @@
 //!
 //! Porta Rust de `plugin/scripts/lib.cjs` — **apenas a parte de paths e
 //! diretórios**, que é a fundação usada por todo o resto do plugin
-//! project-mem (observações, grafo, sessões, cofre, bus de agentes).
+//! open-poupar (observações, grafo, sessões, cofre, bus de agentes).
 //!
 //! ## Por que existe este crate
 //!
 //! No `.cjs` original, todo script que quer ler/gravar memória começa
-//! resolvendo `<projectRoot>/.claude-project-memory` a partir do `cwd`
+//! resolvendo `<projectRoot>/.poupar` a partir do `cwd`
 //! vindo do Claude Code. Essa resolução:
 //!
 //! 1. Descobre a raiz do projeto via `git rev-parse --show-toplevel`
 //!    (com timeout e fallback para o próprio `cwd` se não houver repo).
-//! 2. Anexa a constante `.claude-project-memory`.
+//! 2. Anexa a constante `.poupar`.
 //! 3. Garante que o diretório e seu sub-diretório `tmp/` existam.
 //!
 //! Este crate entrega exatamente esse pipeline, byte-a-byte idêntico ao
@@ -93,7 +93,7 @@ use std::time::Duration;
 /// Equivalente a `MEM_DIR_NAME` no `.cjs`. Constante pública porque
 /// outros crates (observações, grafo, cofre) vão compor paths com ela
 /// diretamente.
-pub const MEM_DIR_NAME: &str = ".claude-project-memory";
+pub const MEM_DIR_NAME: &str = ".poupar";
 
 // ─── path.join paridade ─────────────────────────────────────────────────────
 
@@ -228,7 +228,7 @@ pub fn find_project_root(start_cwd: &Path) -> PathBuf {
 
 // ─── Path helpers puros ─────────────────────────────────────────────────────
 
-/// Resolve `<project_root>/.claude-project-memory` a partir de um `cwd`.
+/// Resolve `<project_root>/.poupar` a partir de um `cwd`.
 ///
 /// Replica `getMemDir(cwd)` do `.cjs`. Infalível — herda o fallback de
 /// [`find_project_root`]. Usa [`path_join`] para replicar o
@@ -331,13 +331,13 @@ mod tests {
 
     #[test]
     fn mem_dir_name_matches_cjs_constant() {
-        assert_eq!(MEM_DIR_NAME, ".claude-project-memory");
+        assert_eq!(MEM_DIR_NAME, ".poupar");
     }
 
     #[test]
     fn tmp_dir_joins_tmp_suffix() {
-        let base = PathBuf::from("/x/y/.claude-project-memory");
-        assert_eq!(tmp_dir(&base), PathBuf::from("/x/y/.claude-project-memory/tmp"));
+        let base = PathBuf::from("/x/y/.poupar");
+        assert_eq!(tmp_dir(&base), PathBuf::from("/x/y/.poupar/tmp"));
     }
 
     #[test]

@@ -5,13 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# Servidor HTTP do project-mem. Paridade com `plugin/ui/server.cjs` (3.665 linhas).
+# Servidor HTTP do open-poupar. Paridade com `plugin/ui/server.cjs` (3.665 linhas).
 # Lib pura (handlers + state + routing) + bin thin (bind + listen).
 [lib]
 path = "src/lib.rs"
 
 [[bin]]
-name = "pmem-http"
+name = "poupar-http"
 path = "src/bin/http.rs"
 
 [dependencies]
@@ -55,7 +55,7 @@ thiserror = { workspace = true }
 # - rand_core/OsRng pra geração de chaves (entropy do SO).
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
-# Bind Unix socket (PROJECT_MEM_BIND_UNIX). axum 0.7 só aceita TCP no
+# Bind Unix socket (POUPAR_BIND_UNIX). axum 0.7 só aceita TCP no
 # serve(), então fazemos accept loop manual com hyper direto.
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }

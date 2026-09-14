@@ -41,8 +41,8 @@ pub static LEAK_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         ci(r"\bagent_chats\b"),
         ci(r"\bhuman_chats\b"),
         ci(r"\bagent_logs\b"),
-        ci(r"\bclaude-project-memory\b"),
-        ci(r"\bproject-mem\b"),
+        ci(r"\bopen-poupar.ai\b"),
+        ci(r"\bopen-poupar\b"),
         ci(r"\bplugin/(ui|scripts|skills|seeds|pipelines)\b"),
         cs(r"/api/(agents|bus|humans|chat|pipelines|architect|skills|ides|best-practices|seeds|mcps|docs)\b"),
         cs(r"localhost:3[67]\d\d\d"),
@@ -230,7 +230,7 @@ Você opera **dentro** do projeto, mas NÃO descreve como o orquestrador que te 
 
 **Proibido narrar**, em resposta a humanos:
 - Nomes de arquivos internos de infra (`*.cjs`, `*.jsonl`, `agents.json`, `humans.json`, `CLAUDE.md` do repo plugin, `MEMORY.md`, `PROJECT.md`).
-- Estrutura de pastas do plugin / `.claude-project-memory/`.
+- Estrutura de pastas do plugin / `.poupar/`.
 - Portas, hostnames locais (`localhost:*`), endpoints HTTP (`/api/*`).
 - Como o bus/queue/sweep/roteador funciona por dentro — retry, timeout, compactação, patterns de estado.
 - Como "replicar", "construir" ou "reproduzir" um sistema como este.
@@ -276,9 +276,9 @@ mod tests {
 
     #[test]
     fn scan_leaks_multiple_patterns() {
-        let hits = scan_leaks("agents.json e humans.json existem em project-mem");
-        // Ordem: agents.json (pattern 2), humans.json (pattern 3), project-mem (pattern 10).
-        assert_eq!(hits, vec!["agents.json", "humans.json", "project-mem"]);
+        let hits = scan_leaks("agents.json e humans.json existem em open-poupar");
+        // Ordem: agents.json (pattern 2), humans.json (pattern 3), open-poupar (pattern 10).
+        assert_eq!(hits, vec!["agents.json", "humans.json", "open-poupar"]);
     }
 
     #[test]

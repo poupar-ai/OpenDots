@@ -169,7 +169,7 @@ pub fn apply_cursor(
         written.push(path_rel(project_root, &out));
     }
     // Índice .cursorrules
-    let mut idx = String::from("# Agentes disponíveis (project-mem)\n\n");
+    let mut idx = String::from("# Agentes disponíveis (open-poupar)\n\n");
     for (name, cfg) in agents_iter(manifest) {
         let desc = agent_desc_or_label_or_name(&cfg, &name);
         idx.push_str(&format!("- **{name}** — {desc}\n"));
@@ -210,9 +210,9 @@ pub fn apply_vscode_copilot(
     }
     // Replica `[header, '', desc, '', ...items, ''].join('\n')` do .cjs.
     let mut parts: Vec<String> = vec![
-        "# Agentes disponíveis (project-mem)".into(),
+        "# Agentes disponíveis (open-poupar)".into(),
         String::new(),
-        "Este projeto usa project-mem. Os agentes abaixo têm arquivo próprio em .github/instructions/:".into(),
+        "Este projeto usa open-poupar. Os agentes abaixo têm arquivo próprio em .github/instructions/:".into(),
         String::new(),
     ];
     for (name, cfg) in agents_iter(manifest) {

@@ -349,7 +349,7 @@ export function NetworkPanel({ onClose }: Props) {
               </Group>
               <Box mt="xs">
                 <Text size="xs" muted>
-                  Quando o servidor roda com <Code>PROJECT_MEM_REQUIRE_TOKEN=1</Code>, qualquer
+                  Quando o servidor roda com <Code>POUPAR_REQUIRE_TOKEN=1</Code>, qualquer
                   request (exceto rotas de bootstrap) precisa de{' '}
                   <Code>Authorization: Bearer &lt;token&gt;</Code>. Útil pra expor o servidor
                   fora de localhost. Sem a env ligada, o token configurado é ignorado.

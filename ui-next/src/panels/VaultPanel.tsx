@@ -329,10 +329,10 @@ export function VaultPanel({ onClose }: Props) {
         <header className="flex items-start justify-between gap-4 border-b px-4 py-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              <KeyRound className="h-4 w-4 text-amber-600" /> Cofre — credenciais do project-mem
+              <KeyRound className="h-4 w-4 text-amber-600" /> Cofre — credenciais do open-poupar
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Cofre encriptado <strong>local</strong> (AES-256-GCM). Guarda credenciais que os <strong>agentes do project-mem</strong> precisam pra chamar serviços externos (tokens, chaves, webhooks). As credenciais que sua <strong>aplicação</strong> usa em runtime continuam nos arquivos <code className="rounded bg-slate-100 px-1 text-xs">.env</code> do seu projeto — o cofre só guarda <em>cópias/backup</em> deles na aba "arquivos .env".
+              Cofre encriptado <strong>local</strong> (AES-256-GCM). Guarda credenciais que os <strong>agentes do open-poupar</strong> precisam pra chamar serviços externos (tokens, chaves, webhooks). As credenciais que sua <strong>aplicação</strong> usa em runtime continuam nos arquivos <code className="rounded bg-slate-100 px-1 text-xs">.env</code> do seu projeto — o cofre só guarda <em>cópias/backup</em> deles na aba "arquivos .env".
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               <strong>Modelo de acesso:</strong> agentes autorizados no manifest (<code>secrets: [...]</code>) acessam <em>sempre</em>, sem depender de senha. A <strong>senha mestra</strong> só protege esta UI — humano precisa dela pra ver/editar/apagar. Auto-lock só tranca a UI, agentes seguem trabalhando.
@@ -543,7 +543,7 @@ export function VaultPanel({ onClose }: Props) {
               {tab === 'secrets' && (
                 <>
                   <div className="rounded-md border border-indigo-100 bg-indigo-50/40 px-3 py-2 text-xs text-slate-600">
-                    <strong>Pros agentes do project-mem</strong> chamarem APIs externas. Cada secret é injetado como env var no subprocess do agente que declarar o nome em <code className="rounded bg-white px-1">secrets: [...]</code> no manifest — vale como autorização automática, não precisa de senha a cada invocação.
+                    <strong>Pros agentes do open-poupar</strong> chamarem APIs externas. Cada secret é injetado como env var no subprocess do agente que declarar o nome em <code className="rounded bg-white px-1">secrets: [...]</code> no manifest — vale como autorização automática, não precisa de senha a cada invocação.
                   </div>
 
                   <div className="flex items-center justify-between">

@@ -15,7 +15,7 @@ use serde_json::{json, Map, Value};
 
 use crate::{json_error, json_response, AppState};
 
-const MEM_DIR_NAME: &str = ".claude-project-memory";
+const MEM_DIR_NAME: &str = ".poupar";
 
 pub fn seeds_router() -> Router<AppState> {
     Router::new()

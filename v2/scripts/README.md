@@ -7,7 +7,7 @@ ou quando suspeitar de regressão.
 ## Pré-requisitos
 
 ```bash
-cargo build --release --manifest-path v2/Cargo.toml --bin pmem-http
+cargo build --release --manifest-path v2/Cargo.toml --bin poupar-http
 ```
 
 (Os scripts de HTTP precisam do binário release pra ter números reais.
@@ -75,7 +75,7 @@ v2/scripts/bench-handoff.sh [N_REQUESTS]   # default 500
 ```
 
 **Setup automático**: cria vault, agentes manager+oracle (com keypairs),
-mintea JWT via endpoint dev (env `PROJECT_MEM_DEV_MODE=1`).
+mintea JWT via endpoint dev (env `POUPAR_DEV_MODE=1`).
 
 **Quando rodar**:
 - Validar throughput do caminho mais crítico.
@@ -90,9 +90,9 @@ adicionar endpoint batch (`POST /api/agents/handoff_batch`).
 - **Não commitar resultados**: scripts imprimem, mas não persistem.
   Salve em local seu (PR description, gist, etc.) se quiser comparar
   histórico.
-- **Não rodar em paralelo**: cada script spawna pmem-http próprio.
+- **Não rodar em paralelo**: cada script spawna poupar-http próprio.
   Múltiplos em paralelo competem por CPU e tornam números ruidosos.
-- **Mate zombies entre runs**: se um script crashar, `pkill pmem-http`
+- **Mate zombies entre runs**: se um script crashar, `pkill poupar-http`
   antes de rodar de novo. Senão ficam instances vivas competindo por
   porta.
 

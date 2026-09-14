@@ -1,7 +1,7 @@
 [product]
-internal_name = "project-mem"
-display_name  = "project-mem"
-binary_name   = "pmem"
+internal_name = "open-poupar"
+display_name  = "open-poupar"
+binary_name   = "poupar"
 logo_path     = "assets/logo.png"
 
 [urls]

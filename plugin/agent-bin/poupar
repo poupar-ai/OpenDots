@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pmem — wrapper de chamadas autenticadas à API local do project-memory,
+# poupar — wrapper de chamadas autenticadas à API local do open-poupar.ai,
 # montado pra contornar o sandbox `simple_expansion` do Claude Code:
 # o agente roda comandos sem `$VAR` na linha; o token é lido aqui dentro.
 #
@@ -9,24 +9,24 @@
 #   subagent <prompt> [tools]    POST /api/agents/subagent/spawn
 #   poll <subagent_id>           GET  /api/agents/subagent/<id>
 #
-# Env esperado (injetado pelo pmem-http no spawn do agente):
-#   PROJECT_MEM_AGENT_TOKEN   token Ed25519 do agente
-#   CLAUDE_PROJECT_MEM_AGENT  nome do agente (usado como `from` no handoff)
-#   PROJECT_MEM_PORT          porta do pmem-http (default 37778)
+# Env esperado (injetado pelo poupar-http no spawn do agente):
+#   POUPAR_AGENT_TOKEN   token Ed25519 do agente
+#   CLAUDE_POUPAR_AGENT  nome do agente (usado como `from` no handoff)
+#   POUPAR_PORT          porta do poupar-http (default 37778)
 #
 # Sai com código != 0 se algo falhar; mensagem em stderr.
 
 set -euo pipefail
 
-PORT="${PROJECT_MEM_PORT:-37778}"
-HOST="${PROJECT_MEM_HOST:-localhost}"
+PORT="${POUPAR_PORT:-37778}"
+HOST="${POUPAR_HOST:-localhost}"
 BASE="http://${HOST}:${PORT}"
-FROM="${CLAUDE_PROJECT_MEM_AGENT:-unknown}"
+FROM="${CLAUDE_POUPAR_AGENT:-unknown}"
 
-die() { echo "pmem: $*" >&2; exit 1; }
+die() { echo "poupar: $*" >&2; exit 1; }
 
-if [[ -z "${PROJECT_MEM_AGENT_TOKEN:-}" ]]; then
-  die "PROJECT_MEM_AGENT_TOKEN não está no environment. Esse wrapper só roda dentro de agentes spawnados pelo pmem-http."
+if [[ -z "${POUPAR_AGENT_TOKEN:-}" ]]; then
+  die "POUPAR_AGENT_TOKEN não está no environment. Esse wrapper só roda dentro de agentes spawnados pelo poupar-http."
 fi
 
 # Monta um JSON usando jq quando disponível (escape correto). Fallback
@@ -46,25 +46,25 @@ json_handoff() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   handoff)
-    [[ $# -ge 2 ]] || die "uso: pmem handoff <to> <message>"
+    [[ $# -ge 2 ]] || die "uso: poupar handoff <to> <message>"
     to="$1"; shift
     msg="$*"
     body=$(json_handoff "$FROM" "$to" "$msg")
     curl -sS -X POST "${BASE}/api/agents/handoff" \
-      -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
       -H 'Content-Type: application/json' \
       -d "$body"
     ;;
   handoff-batch)
-    [[ $# -ge 1 ]] || die "uso: pmem handoff-batch <json-body>"
+    [[ $# -ge 1 ]] || die "uso: poupar handoff-batch <json-body>"
     body="$*"
     curl -sS -X POST "${BASE}/api/agents/handoff_batch" \
-      -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
       -H 'Content-Type: application/json' \
       -d "$body"
     ;;
   subagent)
-    [[ $# -ge 1 ]] || die "uso: pmem subagent <prompt> [tool1,tool2,...]"
+    [[ $# -ge 1 ]] || die "uso: poupar subagent <prompt> [tool1,tool2,...]"
     prompt="$1"; shift || true
     tools="${1:-Read,Grep,Glob}"
     if command -v jq >/dev/null 2>&1; then
@@ -75,19 +75,19 @@ case "$cmd" in
              "${prompt//\"/\\\"}" "${tools//,/\",\"}")
     fi
     curl -sS -X POST "${BASE}/api/agents/subagent/spawn" \
-      -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
       -H 'Content-Type: application/json' \
       -d "$body"
     ;;
   poll)
-    [[ $# -ge 1 ]] || die "uso: pmem poll <subagent_id>"
+    [[ $# -ge 1 ]] || die "uso: poupar poll <subagent_id>"
     id="$1"
     curl -sS "${BASE}/api/agents/subagent/${id}" \
-      -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}"
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}"
     ;;
   training-export)
     # training-export <agent> [format=anthropic-sft|openai-sft|messages]
-    [[ $# -ge 1 ]] || die "uso: pmem training-export <agent> [format]"
+    [[ $# -ge 1 ]] || die "uso: poupar training-export <agent> [format]"
     agt="$1"
     fmt="${2:-anthropic-sft}"
     curl -sS "${BASE}/api/training-export?agent=${agt}&format=${fmt}"
@@ -97,7 +97,7 @@ case "$cmd" in
     case "$sub" in
       schedule)
         # cron schedule "<cron-expr>" <target> "<message>"
-        [[ $# -ge 3 ]] || die "uso: pmem cron schedule \"<cron-expr>\" <target> \"<message>\""
+        [[ $# -ge 3 ]] || die "uso: poupar cron schedule \"<cron-expr>\" <target> \"<message>\""
         schedule="$1"; target="$2"; shift 2
         msg="$*"
         if command -v jq >/dev/null 2>&1; then
@@ -108,14 +108,14 @@ case "$cmd" in
                  "${schedule//\"/\\\"}" "${target//\"/\\\"}" "${msg//\"/\\\"}")
         fi
         curl -sS -X POST "${BASE}/api/cron" \
-          -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
           -H 'Content-Type: application/json' \
           -d "$body"
         ;;
       at)
         # cron at "<delay>" <target> "<message>"
         # delay aceita: <N>s, <N>m, <N>h, <N>d. Fire único, auto-deactiva.
-        [[ $# -ge 3 ]] || die "uso: pmem cron at \"<delay>\" <target> \"<message>\"  (ex: \"2m\", \"30s\", \"1h\")"
+        [[ $# -ge 3 ]] || die "uso: poupar cron at \"<delay>\" <target> \"<message>\"  (ex: \"2m\", \"30s\", \"1h\")"
         delay="$1"; target="$2"; shift 2
         msg="$*"
         # Parse delay → segundos
@@ -136,7 +136,7 @@ case "$cmd" in
                  "$secs" "${target//\"/\\\"}" "${msg//\"/\\\"}")
         fi
         curl -sS -X POST "${BASE}/api/cron" \
-          -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}" \
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
           -H 'Content-Type: application/json' \
           -d "$body"
         ;;
@@ -144,22 +144,22 @@ case "$cmd" in
         curl -sS "${BASE}/api/cron"
         ;;
       rm)
-        [[ $# -ge 1 ]] || die "uso: pmem cron rm <id>"
+        [[ $# -ge 1 ]] || die "uso: poupar cron rm <id>"
         id="$1"
         curl -sS -X DELETE "${BASE}/api/cron/${id}" \
-          -H "Authorization: Bearer ${PROJECT_MEM_AGENT_TOKEN}"
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}"
         ;;
       ""|help|-h|--help)
         cat <<EOF
-pmem cron — agendamento.
+poupar cron — agendamento.
 
 uso:
-  pmem cron at       "<delay>" <target> "<msg>"   # ONE-SHOT (recomendado pra "daqui a X")
-  pmem cron schedule "<cron-expr>" <target> "<msg>"  # RECORRENTE
-  pmem cron list
-  pmem cron rm <id>
+  poupar cron at       "<delay>" <target> "<msg>"   # ONE-SHOT (recomendado pra "daqui a X")
+  poupar cron schedule "<cron-expr>" <target> "<msg>"  # RECORRENTE
+  poupar cron list
+  poupar cron rm <id>
 
-ONE-SHOT (pmem cron at):
+ONE-SHOT (poupar cron at):
   Delay: Ns, Nm, Nh, Nd (segundos/minutos/horas/dias).
   Dispara UMA vez e auto-desativa. Use SEMPRE pra pedidos como
   "daqui a 2 min", "em 30s", "amanhã" — evita o erro clássico de
@@ -167,37 +167,37 @@ ONE-SHOT (pmem cron at):
   anual.
 
   Exemplos:
-    pmem cron at "2m"   oracle "está operante?"
-    pmem cron at "30s"  manager "ping"
-    pmem cron at "1h"   tester "rodar suíte de fumaça"
+    poupar cron at "2m"   oracle "está operante?"
+    poupar cron at "30s"  manager "ping"
+    poupar cron at "1h"   tester "rodar suíte de fumaça"
 
-RECORRENTE (pmem cron schedule):
+RECORRENTE (poupar cron schedule):
   Cron 6-campos: sec min hora dom mês dow (0=domingo).
   Atalhos: @hourly, @daily, @weekly, @monthly, @yearly.
 
   Exemplos:
-    pmem cron schedule "@hourly"          oracle "ronda de status"
-    pmem cron schedule "0 0 9 * * 1-5"    oracle "bom dia"
-    pmem cron schedule "*/30 * * * * *"   manager "tick a cada 30s"
+    poupar cron schedule "@hourly"          oracle "ronda de status"
+    poupar cron schedule "0 0 9 * * 1-5"    oracle "bom dia"
+    poupar cron schedule "*/30 * * * * *"   manager "tick a cada 30s"
 EOF
         [[ "$sub" == "" ]] && exit 1 || exit 0
         ;;
       *)
-        die "subcomando cron desconhecido: $sub (rode 'pmem cron help')"
+        die "subcomando cron desconhecido: $sub (rode 'poupar cron help')"
         ;;
     esac
     ;;
   ""|help|-h|--help)
     cat <<EOF
-pmem — wrapper auth pra API do project-memory (porta ${PORT}).
+poupar — wrapper auth pra API do open-poupar.ai (porta ${PORT}).
 
 uso:
-  pmem handoff <to> <message>        Manda mensagem pra outro agente
-  pmem handoff-batch <json>          Batch (N msgs num único POST)
-  pmem subagent <prompt> [tools]     Spawna subagent paralelo
-  pmem poll <subagent_id>            Status/resultado de subagent
-  pmem cron <schedule|list|rm>       Agendamento recorrente (rode 'pmem cron' pra subcomandos)
-  pmem training-export <agent> [fmt] Exporta chat history como dataset SFT (fine-tune)
+  poupar handoff <to> <message>        Manda mensagem pra outro agente
+  poupar handoff-batch <json>          Batch (N msgs num único POST)
+  poupar subagent <prompt> [tools]     Spawna subagent paralelo
+  poupar poll <subagent_id>            Status/resultado de subagent
+  poupar cron <schedule|list|rm>       Agendamento recorrente (rode 'poupar cron' pra subcomandos)
+  poupar training-export <agent> [fmt] Exporta chat history como dataset SFT (fine-tune)
 
 Token de auth e nome do agente vêm do env (injetado no spawn).
 Não use \$VAR diretamente — o sandbox do Claude Code bloqueia.
@@ -205,6 +205,6 @@ EOF
     [[ "$cmd" == "" ]] && exit 1 || exit 0
     ;;
   *)
-    die "subcomando desconhecido: $cmd (rode 'pmem help')"
+    die "subcomando desconhecido: $cmd (rode 'poupar help')"
     ;;
 esac

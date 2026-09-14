@@ -38,9 +38,9 @@ do pendente (~87% das linhas pendentes) está em `plugin/ui/server.cjs`
 
 | Arquivo `.cjs` | Linhas | Rust | Status |
 |---|---|---|---|
-| `scripts/install.cjs` | 62 | `crates/api-cli` (`pmem install`) | ✅ |
-| `scripts/uninstall.cjs` | 59 | `crates/api-cli` (`pmem uninstall`) | ✅ |
-| `scripts/status.cjs` | 39 | `crates/api-cli` (`pmem status`) | ✅ |
+| `scripts/install.cjs` | 62 | `crates/api-cli` (`poupar install`) | ✅ |
+| `scripts/uninstall.cjs` | 59 | `crates/api-cli` (`poupar uninstall`) | ✅ |
+| `scripts/status.cjs` | 39 | `crates/api-cli` (`poupar status`) | ✅ |
 
 ### `plugin/scripts/` — helpers e motores de domínio
 
@@ -128,7 +128,7 @@ do pendente (~87% das linhas pendentes) está em `plugin/ui/server.cjs`
 
 | Crate | Cobre | Nota |
 |---|---|---|
-| `api-cli` | `scripts/install.cjs` + `uninstall.cjs` + `status.cjs` | Binário único `pmem` com 3 subcomandos |
+| `api-cli` | `scripts/install.cjs` + `uninstall.cjs` + `status.cjs` | Binário único `poupar` com 3 subcomandos |
 | **`api-hooks`** (pendente) | `session-init.cjs` + `session-end.cjs` + `observe.cjs` + `startup.cjs` | 4 binários thin que leem stdin JSON, chamam `domain-session` + adapters |
 | **`api-mcp`** (pendente) | `mcp/server.cjs` | Servidor MCP stdio, expõe tools `mem.*` |
 | **`api-http`** (pendente) | `ui/server.cjs` | Axum + SSE + UI embutida |
@@ -146,10 +146,10 @@ isolado → acoplado) — ver tabela em [`migration_progress.md`](./migration_pr
 
 | Binário | Origem | Linhas | O que faz |
 |---|---|---|---|
-| `pmem-hook-session-init` | `session-init.cjs` | 411 | Carrega sessão, popula agentes, dispara seed se primeira vez |
-| `pmem-hook-session-end` | `session-end.cjs` | 214 | Resume sessão, computa stats, emite observação de fechamento |
-| `pmem-hook-observe` | `observe.cjs` | 182 | Captura tool calls do Claude e grava observação JSONL |
-| `pmem-hook-startup` | `startup.cjs` | 126 | Inicializa `.claude-project-memory/` se não existe |
+| `poupar-hook-session-init` | `session-init.cjs` | 411 | Carrega sessão, popula agentes, dispara seed se primeira vez |
+| `poupar-hook-session-end` | `session-end.cjs` | 214 | Resume sessão, computa stats, emite observação de fechamento |
+| `poupar-hook-observe` | `observe.cjs` | 182 | Captura tool calls do Claude e grava observação JSONL |
+| `poupar-hook-startup` | `startup.cjs` | 126 | Inicializa `.poupar/` se não existe |
 
 Primeira etapa real de cutover — onde o `.cjs` efetivamente roda no
 runtime do Claude Code. Todo o domínio (`domain-session`, `domain-bus`,

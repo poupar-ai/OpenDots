@@ -52,7 +52,7 @@ async fn get_scope(
 /// plugin é instalado num workspace; `siblings` = projetos vizinhos
 /// (cada um pode ser project_root individualmente).
 async fn get_suggestions(Extension(tc): Extension<TenantContext>) -> Response {
-    // mem_dir = <plugin_clone>/.claude-project-memory
+    // mem_dir = <plugin_clone>/.poupar
     let plugin_clone = tc.mem_dir.parent();
     let workspace = plugin_clone.and_then(|p| p.parent());
 

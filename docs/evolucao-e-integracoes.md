@@ -120,4 +120,4 @@ como o ponto de extensão pra "chamar API de serviço X" a partir de um agente.
 6. **Eventos versionados** (`type` + `schema_version`) — contrato estável pro
    outbox/SQS/SNS.
 7. **Feature flag** pra ligar enforcement/integração novo (como
-   `PROJECT_MEM_REQUIRE_HUMAN` / `PROJECT_MEM_GUARD_ORIGIN`) — rollout sem susto.
+   `POUPAR_REQUIRE_HUMAN` / `POUPAR_GUARD_ORIGIN`) — rollout sem susto.

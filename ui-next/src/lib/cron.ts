@@ -1,4 +1,4 @@
-// Client TypeScript pras rotas /api/cron do pmem-http.
+// Client TypeScript pras rotas /api/cron do poupar-http.
 
 export interface CronJob {
   id: string;

@@ -1,11 +1,9 @@
-//! Core do binário `pmem` (install / uninstall / status).
+//! Core do binário `poupar` (install / uninstall / status).
 //!
-//! Replica `scripts/{install,uninstall,status}.cjs` byte-a-byte no
-//! conteúdo gerado em `~/.claude/settings.json`. Output visual das
-//! mensagens é byte-idêntico também — usuários e docs já dependem
-//! dos "✓" / "✗" literais. Única exceção: a linha do MCP server
-//! anota o launcher (`node` / `nativo`), informação que não existia
-//! no `.cjs` porque lá só havia o caminho Node.
+//! Escreve o registro do plugin em `~/.claude/settings.json`: entrada de
+//! marketplace, plugin habilitado e MCP server. Output visual das
+//! mensagens é estável — docs e scripts dependem
+//! dos "✓" / "✗" literais.
 //!
 //! ## Arquitetura
 //!
@@ -25,9 +23,9 @@ use serde_json::{json, Map, Value};
 
 // ─── Constantes — chaves literais compartilhadas com o .cjs ─────────
 
-pub const MARKETPLACE_KEY: &str = "project-man";
-pub const PLUGIN_KEY: &str = "project-man@project-man";
-pub const MCP_SERVER_KEY: &str = "project-mem";
+pub const MARKETPLACE_KEY: &str = "open-poupar";
+pub const PLUGIN_KEY: &str = "open-poupar@open-poupar";
+pub const MCP_SERVER_KEY: &str = "open-poupar";
 
 // ─── Erros ──────────────────────────────────────────────────────────
 
@@ -108,46 +106,19 @@ pub fn write_settings(path: &Path, settings: &Value) -> Result<(), Error> {
 
 // ─── Install ────────────────────────────────────────────────────────
 
-/// Como o Claude Code deve lançar o MCP server do project-mem.
+/// Caminho do binário do MCP server dentro de uma instalação.
 ///
-/// Os dois layouts de instalação diferem no que existe no disco:
-/// o clone git traz `plugin/mcp/server.cjs` e depende de um Node
-/// externo; o tarball traz `plugin/bin/pmem-mcp` compilado e não
-/// depende de runtime nenhum.
-#[derive(Debug, Clone)]
-pub enum McpLauncher {
-    /// `plugin/mcp/server.cjs` rodado por Node. `node_bin` substitui
-    /// `process.execPath` — em Rust não existe equivalente implícito; o
-    /// binário `pmem` resolve via `--node-bin`, env `NODE_BIN` ou
-    /// fallback `"node"`.
-    Node { node_bin: PathBuf },
-    /// Binário nativo `plugin/bin/pmem-mcp`, invocado direto e sem args.
-    Native,
-}
-
-impl McpLauncher {
-    /// Caminho do binário nativo dentro de uma instalação.
-    pub fn native_bin(install_dir: &Path) -> PathBuf {
-        install_dir.join("plugin").join("bin").join("pmem-mcp")
-    }
-
-    /// Escolhe o launcher olhando o disco: nativo quando o tarball
-    /// trouxe o binário, Node caso contrário. Deixa o `pmem install`
-    /// funcionar igual nos dois layouts, sem flag nova.
-    pub fn detect(install_dir: &Path, node_bin: PathBuf) -> Self {
-        if Self::native_bin(install_dir).is_file() {
-            Self::Native
-        } else {
-            Self::Node { node_bin }
-        }
-    }
+/// Existe como função (e não literal espalhado) porque o `install.sh`, o
+/// smoke do tarball e o registro no `settings.json` precisam concordar
+/// byte-a-byte sobre onde o binário está.
+pub fn mcp_bin(install_dir: &Path) -> PathBuf {
+    install_dir.join("plugin").join("bin").join("poupar-mcp")
 }
 
 /// Parâmetros para o `apply_install`.
 #[derive(Debug, Clone)]
 pub struct InstallConfig {
     pub install_dir: PathBuf,
-    pub mcp: McpLauncher,
 }
 
 /// Faz merge das 3 entradas necessárias em `settings`, criando as
@@ -160,7 +131,7 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
     }
     let obj = settings.as_object_mut().unwrap();
 
-    // extraKnownMarketplaces["project-man"] = { source: { source: "directory", path: install_dir } }
+    // extraKnownMarketplaces["open-poupar"] = { source: { source: "directory", path: install_dir } }
     let marketplaces = obj
         .entry("extraKnownMarketplaces".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -177,7 +148,7 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
         }),
     );
 
-    // enabledPlugins["project-man@project-man"] = true
+    // enabledPlugins["open-poupar@open-poupar"] = true
     let plugins = obj
         .entry("enabledPlugins".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -189,28 +160,8 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
         .unwrap()
         .insert(PLUGIN_KEY.to_string(), Value::Bool(true));
 
-    // mcpServers["project-mem"] = { type: "stdio", command, args }
-    //   Node:   command = node_bin, args = [ install_dir/plugin/mcp/server.cjs ]
-    //   Native: command = install_dir/plugin/bin/pmem-mcp, args = []
-    let (command, args) = match &cfg.mcp {
-        McpLauncher::Node { node_bin } => {
-            let script = cfg
-                .install_dir
-                .join("plugin")
-                .join("mcp")
-                .join("server.cjs");
-            (
-                node_bin.to_string_lossy().into_owned(),
-                vec![Value::String(script.to_string_lossy().into_owned())],
-            )
-        }
-        McpLauncher::Native => (
-            McpLauncher::native_bin(&cfg.install_dir)
-                .to_string_lossy()
-                .into_owned(),
-            vec![],
-        ),
-    };
+    // mcpServers[<chave>] = { type: "stdio", command: <bin>, args: [] }
+    // Sem args: o binário resolve mem_dir a partir do cwd, como os hooks.
     let mcp_servers = obj
         .entry("mcpServers".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -221,15 +172,15 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
         MCP_SERVER_KEY.to_string(),
         json!({
             "type": "stdio",
-            "command": command,
-            "args": args
+            "command": mcp_bin(&cfg.install_dir).to_string_lossy(),
+            "args": []
         }),
     );
 }
 
 // ─── Uninstall ──────────────────────────────────────────────────────
 
-/// Remove as 3 entradas do project-man. Se após remover algum dos
+/// Remove as 3 entradas do open-poupar. Se após remover algum dos
 /// maps de topo ficar vazio, remove a chave de topo também (paridade
 /// com `if (Object.keys(x).length === 0) delete settings[x]`).
 ///
@@ -330,7 +281,7 @@ impl StatusReport {
             }
             StatusReport::SettingsInvalid => "✗ settings.json inválido\n".to_string(),
             StatusReport::Installed { dir } => format!(
-                "✓ project-man instalado\n  Diretório: {dir}\n  Settings:  {}\n",
+                "✓ open-poupar instalado\n  Diretório: {dir}\n  Settings:  {}\n",
                 settings_path.display()
             ),
             StatusReport::Incomplete {
@@ -338,12 +289,12 @@ impl StatusReport {
                 has_plugin,
             } => {
                 let mut out =
-                    String::from("✗ project-man não instalado (ou instalação incompleta)\n");
+                    String::from("✗ open-poupar não instalado (ou instalação incompleta)\n");
                 if !has_marketplace {
-                    out.push_str("  → falta: extraKnownMarketplaces[\"project-man\"]\n");
+                    out.push_str("  → falta: extraKnownMarketplaces[\"open-poupar\"]\n");
                 }
                 if !has_plugin {
-                    out.push_str("  → falta: enabledPlugins[\"project-man@project-man\"]\n");
+                    out.push_str("  → falta: enabledPlugins[\"open-poupar@open-poupar\"]\n");
                 }
                 out.push_str("  → rode: make install\n");
                 out

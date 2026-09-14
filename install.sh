@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# project-mem — instalador one-liner.
+# open-poupar — instalador one-liner.
 #
 #   curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
 #
 # Baixa o tarball da release correspondente ao seu SO/arquitetura,
-# confere o SHA-256, instala em ~/.local/share/project-mem e registra o
+# confere o SHA-256, instala em ~/.local/share/open-poupar e registra o
 # plugin no ~/.claude/settings.json. Não precisa de Node, Rust ou git.
 #
 # Variáveis de ambiente:
-#   PMEM_VERSION      tag a instalar (ex.: v0.2.0). Default: última release.
-#   PMEM_HOME         diretório de instalação. Default: ${XDG_DATA_HOME:-~/.local/share}/project-mem
-#   PMEM_BIN_DIR      onde criar o symlink do CLI. Default: ~/.local/bin
-#   PMEM_REPO         owner/repo de origem. Default: poupar-ai/open-poupar.ai
-#   PMEM_NO_REGISTER  =1 para instalar os arquivos sem tocar no settings.json
-#   PMEM_API_BASE     base da API de releases. Default: https://api.github.com
-#   PMEM_DL_BASE      base do download dos assets. Default: https://github.com
+#   POUPAR_VERSION      tag a instalar (ex.: v0.2.0). Default: última release.
+#   POUPAR_HOME         diretório de instalação. Default: ${XDG_DATA_HOME:-~/.local/share}/open-poupar
+#   POUPAR_LINK_DIR      onde criar o symlink do CLI. Default: ~/.local/bin
+#   POUPAR_REPO         owner/repo de origem. Default: poupar-ai/open-poupar.ai
+#   POUPAR_NO_REGISTER  =1 para instalar os arquivos sem tocar no settings.json
+#   POUPAR_API_BASE     base da API de releases. Default: https://api.github.com
+#   POUPAR_DL_BASE      base do download dos assets. Default: https://github.com
 #
 # As duas últimas existem pra mirror interno e pros testes do instalador.
 #
 # Rodar de novo atualiza a instalação no lugar: só os diretórios que o
-# instalador criou são substituídos, o resto de PMEM_HOME fica intacto.
+# instalador criou são substituídos, o resto de POUPAR_HOME fica intacto.
 
 set -euo pipefail
 
-REPO="${PMEM_REPO:-poupar-ai/open-poupar.ai}"
-VERSION="${PMEM_VERSION:-}"
-HOME_DIR="${PMEM_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/project-mem}"
-BIN_DIR="${PMEM_BIN_DIR:-$HOME/.local/bin}"
-API_BASE="${PMEM_API_BASE:-https://api.github.com}"
-DL_BASE="${PMEM_DL_BASE:-https://github.com}"
+REPO="${POUPAR_REPO:-poupar-ai/open-poupar.ai}"
+VERSION="${POUPAR_VERSION:-}"
+HOME_DIR="${POUPAR_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/open-poupar}"
+BIN_DIR="${POUPAR_LINK_DIR:-$HOME/.local/bin}"
+API_BASE="${POUPAR_API_BASE:-https://api.github.com}"
+DL_BASE="${POUPAR_DL_BASE:-https://github.com}"
 
-# Tudo que o instalador cria dentro de PMEM_HOME. Só esses caminhos são
+# Tudo que o instalador cria dentro de POUPAR_HOME. Só esses caminhos são
 # removidos num upgrade — qualquer outra coisa que o usuário tenha
 # colocado lá sobrevive.
 OWNED=(.claude-plugin plugin ui VERSION TARGET LICENSE README.md)
@@ -96,14 +96,14 @@ main() {
   if [ -z "$tag" ]; then
     info "procurando a última release de $REPO"
     tag="$(latest_tag)" || true
-    [ -n "$tag" ] || die "não consegui descobrir a última release. Passe PMEM_VERSION=vX.Y.Z"
+    [ -n "$tag" ] || die "não consegui descobrir a última release. Passe POUPAR_VERSION=vX.Y.Z"
   fi
 
   # A tag é `vX.Y.Z`; o asset usa a versão sem o `v`.
-  asset="project-mem-${tag#v}-${target}.tar.gz"
+  asset="open-poupar-${tag#v}-${target}.tar.gz"
   url="$DL_BASE/$REPO/releases/download/$tag/$asset"
 
-  info "project-mem $tag ($target)"
+  info "open-poupar $tag ($target)"
 
   tmp="$(mktemp -d)"
   # shellcheck disable=SC2064  # $tmp precisa ser expandido agora, não no trap
@@ -123,13 +123,13 @@ main() {
     || die "checksum não bate (esperado $expected, obtido $actual). Não instalei nada."
 
   tar -xzf "$tarball" -C "$tmp"
-  extracted="$tmp/project-mem-${tag#v}-${target}"
+  extracted="$tmp/open-poupar-${tag#v}-${target}"
   [ -d "$extracted" ] || die "tarball com layout inesperado: falta $extracted"
 
-  # Um clone git em PMEM_HOME é instalação de fonte — sobrescrever ali
+  # Um clone git em POUPAR_HOME é instalação de fonte — sobrescrever ali
   # apagaria trabalho do usuário. `make install` é o caminho de lá.
   if [ -d "$HOME_DIR/.git" ]; then
-    die "$HOME_DIR é um clone git. Use 'make install' nele, ou aponte PMEM_HOME pra outro lugar."
+    die "$HOME_DIR é um clone git. Use 'make install' nele, ou aponte POUPAR_HOME pra outro lugar."
   fi
 
   info "instalando em $HOME_DIR"
@@ -141,21 +141,21 @@ main() {
     fi
   done
 
-  info "symlink do CLI em $BIN_DIR/pmem"
+  info "symlink do CLI em $BIN_DIR/poupar"
   mkdir -p "$BIN_DIR"
-  ln -sf "$HOME_DIR/plugin/bin/pmem" "$BIN_DIR/pmem"
+  ln -sf "$HOME_DIR/plugin/bin/poupar" "$BIN_DIR/poupar"
 
-  if [ "${PMEM_NO_REGISTER:-}" = "1" ]; then
-    warn "PMEM_NO_REGISTER=1 — settings.json não foi tocado"
+  if [ "${POUPAR_NO_REGISTER:-}" = "1" ]; then
+    warn "POUPAR_NO_REGISTER=1 — settings.json não foi tocado"
   else
     info "registrando o plugin no Claude Code"
-    "$HOME_DIR/plugin/bin/pmem" install "$HOME_DIR"
+    "$HOME_DIR/plugin/bin/poupar" install "$HOME_DIR"
   fi
 
   say
-  ok "project-mem $tag instalado"
+  ok "open-poupar $tag instalado"
   say "  Diretório: $HOME_DIR"
-  say "  CLI:       $BIN_DIR/pmem"
+  say "  CLI:       $BIN_DIR/poupar"
   say
 
   case ":$PATH:" in

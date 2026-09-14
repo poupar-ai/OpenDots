@@ -1,4 +1,4 @@
-//! `pmem` — binário CLI que replica `scripts/{install,uninstall,status}.cjs`.
+//! `poupar` — binário CLI que replica `scripts/{install,uninstall,status}.cjs`.
 //!
 //! Thin main: parse argumentos com clap, chama funções puras do
 //! `api_cli`, escreve stdout/stderr e escolhe exit code. Toda decisão
@@ -9,13 +9,13 @@ use std::process::ExitCode;
 
 use api_cli::{
     apply_install, apply_uninstall, describe_status, read_settings, settings_path, write_settings,
-    InstallConfig, McpLauncher, StatusReport,
+    InstallConfig, StatusReport,
 };
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 #[derive(Parser)]
-#[command(name = "pmem", version, about = "project-mem CLI")]
+#[command(name = "poupar", version, about = "open-poupar CLI")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -25,31 +25,31 @@ struct Cli {
 enum Cmd {
     /// Registra o plugin em ~/.claude/settings.json
     Install {
-        /// Diretório onde o plugin está instalado (`installDir` no .cjs)
+        /// Diretório onde o plugin está instalado
         install_dir: PathBuf,
-        /// Caminho para o binário do node (substitui `process.execPath`
-        /// do .cjs). Default: valor de $NODE_BIN, senão "node" (PATH).
-        #[arg(long)]
-        node_bin: Option<PathBuf>,
     },
     /// Remove os registros do plugin
     Uninstall,
     /// Mostra se o plugin está instalado
     Status,
+    /// Rebuild do code index do projeto (mapa de símbolos reutilizáveis)
+    Index {
+        /// Só imprime o CODE_INDEX.md atual, sem reconstruir
+        #[arg(long)]
+        show: bool,
+    },
 }
 
 fn main() -> ExitCode {
     match Cli::parse().cmd {
-        Cmd::Install {
-            install_dir,
-            node_bin,
-        } => run_install(install_dir, node_bin),
+        Cmd::Install { install_dir } => run_install(install_dir),
         Cmd::Uninstall => run_uninstall(),
         Cmd::Status => run_status(),
+        Cmd::Index { show } => run_index(show),
     }
 }
 
-fn run_install(install_dir: PathBuf, node_bin: Option<PathBuf>) -> ExitCode {
+fn run_install(install_dir: PathBuf) -> ExitCode {
     let path = match settings_path() {
         Ok(p) => p,
         Err(e) => {
@@ -72,21 +72,10 @@ fn run_install(install_dir: PathBuf, node_bin: Option<PathBuf>) -> ExitCode {
         }
     };
 
-    let node_bin = node_bin
-        .or_else(|| std::env::var_os("NODE_BIN").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("node"));
-
-    let mcp = McpLauncher::detect(&install_dir, node_bin);
-    let mcp_label = match &mcp {
-        McpLauncher::Node { .. } => "node",
-        McpLauncher::Native => "nativo",
-    };
-
     apply_install(
         &mut settings,
         &InstallConfig {
             install_dir: install_dir.clone(),
-            mcp,
         },
     );
 
@@ -97,7 +86,7 @@ fn run_install(install_dir: PathBuf, node_bin: Option<PathBuf>) -> ExitCode {
 
     println!("✓ settings.json atualizado: {}", path.display());
     println!("✓ Plugin registrado em: {}", install_dir.display());
-    println!("✓ MCP server registrado: project-mem ({mcp_label})");
+    println!("✓ MCP server registrado: open-poupar");
     ExitCode::SUCCESS
 }
 
@@ -127,7 +116,7 @@ fn run_uninstall() -> ExitCode {
     };
 
     if !apply_uninstall(&mut settings) {
-        println!("project-man não estava registrado — nada a fazer.");
+        println!("open-poupar não estava registrado — nada a fazer.");
         return ExitCode::SUCCESS;
     }
 
@@ -136,7 +125,7 @@ fn run_uninstall() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    println!("✓ project-man removido de: {}", path.display());
+    println!("✓ open-poupar removido de: {}", path.display());
     ExitCode::SUCCESS
 }
 
@@ -167,4 +156,62 @@ fn run_status() -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// `poupar index` — rebuild completo do code index.
+///
+/// Existe como subcomando porque o `/mem-index` precisa de um caminho
+/// sem Node, e a rota HTTP equivalente não existe: o indexador só era
+/// alcançável pelo hook de fim de sessão (incremental) e pelo `.cjs`.
+///
+/// `mem_dir` sai do mesmo lugar que os hooks usam — `<git toplevel>/.poupar`
+/// a partir do cwd — pra que o índice caia junto do resto da memória.
+fn run_index(show: bool) -> ExitCode {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let project_root = core_paths::find_project_root(&cwd);
+    let mem_dir = project_root.join(core_paths::MEM_DIR_NAME);
+
+    if show {
+        let md = mem_dir.join(domain_indexer::INDEX_MD);
+        return match std::fs::read_to_string(&md) {
+            Ok(c) => {
+                print!("{c}");
+                ExitCode::SUCCESS
+            }
+            Err(_) => {
+                eprintln!("sem índice ainda em {} — rode `poupar index`", md.display());
+                ExitCode::from(1)
+            }
+        };
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&mem_dir) {
+        eprintln!("não consegui criar {}: {e}", mem_dir.display());
+        return ExitCode::from(1);
+    }
+
+    let index = match domain_indexer::rebuild_index(
+        &mem_dir,
+        &project_root,
+        &domain_indexer::SystemClock,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("falha no rebuild: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(e) = domain_indexer::write_index_md(&mem_dir, &index) {
+        eprintln!("falha ao escrever {}: {e}", domain_indexer::INDEX_MD);
+        return ExitCode::from(1);
+    }
+
+    let n = index
+        .get("files")
+        .and_then(Value::as_object)
+        .map(serde_json::Map::len)
+        .unwrap_or(0);
+    println!("✓ code index reconstruído: {n} arquivo(s)");
+    println!("  {}", mem_dir.join(domain_indexer::INDEX_MD).display());
+    ExitCode::SUCCESS
 }

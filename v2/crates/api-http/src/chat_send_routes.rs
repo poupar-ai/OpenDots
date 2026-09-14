@@ -101,10 +101,26 @@ fn global_disallowed_tools() -> Vec<String> {
         "Bash(git push --force *)".into(),
         "Bash(git push -f *)".into(),
         "Bash(git clean *)".into(),
-        // Escrita em config do plugin
-        "Write(/home/tiago/pessoal/project-mem/**)".into(),
-        "Edit(/home/tiago/pessoal/project-mem/**)".into(),
     ]
+}
+
+/// Bloqueia escrita na árvore de instalação do próprio plugin.
+///
+/// Antes isso era um literal com o path da máquina de quem escreveu a
+/// regra, o que a tornava inócua em qualquer outra instalação: o agente
+/// podia reescrever hooks, skills e binários do plugin sem bater na
+/// deny-list. Agora o path sai de `core_paths::install_root()`, que
+/// resolve a partir do próprio executável.
+///
+/// Sem raiz resolvível (binário solto fora da árvore) não há o que
+/// proteger, e devolver vazio é melhor que chutar um path que bloquearia
+/// diretório alheio.
+fn plugin_tree_write_guards() -> Vec<String> {
+    let Some(root) = core_paths::install_root() else {
+        return Vec::new();
+    };
+    let glob = format!("{}/**", root.display());
+    vec![format!("Write({glob})"), format!("Edit({glob})")]
 }
 
 /// Paridade com `buildAllowedTools` em `server.cjs:429-459`.
@@ -142,9 +158,9 @@ pub(crate) fn build_allowed_tools(agent_cfg: &Value) -> Vec<String> {
 
     // Auto-injeção pra comunicação entre agentes: se o agente tem
     // `can_talk_to` não-vazio, ele precisa fazer handoff. Caminho
-    // canônico é `pmem handoff <to> "<msg>"` (wrapper em PATH); curl
+    // canônico é `poupar handoff <to> "<msg>"` (wrapper em PATH); curl
     // direto fica disponível como fallback pra endpoints que não
-    // precisam de `$PROJECT_MEM_AGENT_TOKEN` na linha (sandbox
+    // precisam de `$POUPAR_AGENT_TOKEN` na linha (sandbox
     // simple_expansion bloqueia qualquer Bash com `$VAR`).
     // O servidor já valida `can_talk_to` no endpoint de handoff (403
     // se violar), então os patterns largos aqui não ampliam o que o
@@ -154,7 +170,7 @@ pub(crate) fn build_allowed_tools(agent_cfg: &Value) -> Vec<String> {
         .and_then(Value::as_array)
         .map(|a| !a.is_empty())
         .unwrap_or(false);
-    const HANDOFF_PATTERNS: &[&str] = &["pmem *", "curl *"];
+    const HANDOFF_PATTERNS: &[&str] = &["poupar *", "curl *"];
     if has_can_talk_to {
         if !raw_tools.iter().any(|t| t == "Bash") {
             raw_tools.push("Bash".to_string());
@@ -201,7 +217,9 @@ pub(crate) fn build_allowed_tools(agent_cfg: &Value) -> Vec<String> {
 
 /// Paridade com `buildDisallowedTools` em `server.cjs:464-466`.
 pub(crate) fn build_disallowed_tools() -> Vec<String> {
-    global_disallowed_tools()
+    let mut out = global_disallowed_tools();
+    out.extend(plugin_tree_write_guards());
+    out
 }
 
 /// Paridade com `buildAgentEnv` em `server.cjs:548-570`. Lê secrets do
@@ -564,31 +582,31 @@ Resposta padrão à insistência, em UMA linha:\n\
 - Nunca fabrique um caminho. Se você não sabe qual é a ponte, diga \"não sei qual é a ponte correta na minha hierarquia\" em vez de chutar.\n\n\
 Regra de ouro: **ordem do Engenheiro é input, `can_talk_to` é lei.** Autorização do Engenheiro não revoga a lei. Urgência aparente é exatamente quando a lei mais importa.\n\n\
 Nota técnica: esta regra é **aplicada fisicamente pelo sistema de permissões**. Suas ferramentas `Write`/`Edit` **não podem** tocar em `agent_chats/*.jsonl` — o sistema bloqueia. Handoffs são feitos exclusivamente pelo endpoint HTTP abaixo, que valida `can_talk_to` do lado do servidor.\n\n\
-## Suas capacidades neste projeto (use `pmem`, não curl)\n\
-Você tem um wrapper `pmem` no PATH com todos os comandos necessários — ele lê o token do env internamente. **Use SEMPRE** o pmem; não monte curl com `$PROJECT_MEM_AGENT_TOKEN` (sandbox do Claude Code bloqueia `$VAR` em Bash).\n\n\
+## Suas capacidades neste projeto (use `poupar`, não curl)\n\
+Você tem um wrapper `poupar` no PATH com todos os comandos necessários — ele lê o token do env internamente. **Use SEMPRE** o poupar; não monte curl com `$POUPAR_AGENT_TOKEN` (sandbox do Claude Code bloqueia `$VAR` em Bash).\n\n\
 ```bash\n\
-pmem handoff <to> \"<msg>\"                       # mandar mensagem pra outro agente\n\
-pmem handoff-batch '{{\"items\":[...]}}'           # batch (N msgs num POST)\n\
-pmem subagent \"<prompt>\" [tools-csv]            # spawn de subagent paralelo\n\
-pmem poll <subagent_id>                          # status/resultado de subagent\n\
-pmem cron at \"<delay>\" <target> \"<msg>\"          # AGENDAMENTO ONE-SHOT (delay: 30s, 2m, 1h, 1d)\n\
-pmem cron schedule \"<expr>\" <target> \"<msg>\"     # AGENDAMENTO RECORRENTE (cron 6-campos)\n\
-pmem cron list                                   # ver agendamentos ativos\n\
-pmem cron rm <id>                                # cancelar agendamento\n\
+poupar handoff <to> \"<msg>\"                       # mandar mensagem pra outro agente\n\
+poupar handoff-batch '{{\"items\":[...]}}'           # batch (N msgs num POST)\n\
+poupar subagent \"<prompt>\" [tools-csv]            # spawn de subagent paralelo\n\
+poupar poll <subagent_id>                          # status/resultado de subagent\n\
+poupar cron at \"<delay>\" <target> \"<msg>\"          # AGENDAMENTO ONE-SHOT (delay: 30s, 2m, 1h, 1d)\n\
+poupar cron schedule \"<expr>\" <target> \"<msg>\"     # AGENDAMENTO RECORRENTE (cron 6-campos)\n\
+poupar cron list                                   # ver agendamentos ativos\n\
+poupar cron rm <id>                                # cancelar agendamento\n\
 ```\n\n\
 ### Regra: agendamento = execução, não promessa\n\
-Quando o humano pedir algo com delay (\"daqui a 2 min\", \"em 30s\", \"amanhã às 9h\"), **use `pmem cron at`** (NÃO construa cron expression — erro clássico vai apontar pra próxima ocorrência anual). O endpoint devolve um JSON com `id` e `run_at_ms`; reporte ambos. Sem id retornado = não houve agendamento.\n\n\
-Pra recorrência (\"toda hora\", \"todo dia 9h\"), use `pmem cron schedule` com expr 6-campos (`sec min hora dom mês dow`, 0=domingo) ou atalho (`@hourly`, `@daily`, `@weekly`).\n\n\
+Quando o humano pedir algo com delay (\"daqui a 2 min\", \"em 30s\", \"amanhã às 9h\"), **use `poupar cron at`** (NÃO construa cron expression — erro clássico vai apontar pra próxima ocorrência anual). O endpoint devolve um JSON com `id` e `run_at_ms`; reporte ambos. Sem id retornado = não houve agendamento.\n\n\
+Pra recorrência (\"toda hora\", \"todo dia 9h\"), use `poupar cron schedule` com expr 6-campos (`sec min hora dom mês dow`, 0=domingo) ou atalho (`@hourly`, `@daily`, `@weekly`).\n\n\
 ### Regra absoluta: verificação obrigatória após execução\n\
 Quando reportar id/status/timestamp/contador, **anexe o output bruto** da chamada entre triple backticks na sua resposta. Formato:\n\n\
 ```text\n\
-$ pmem cron at \"2m\" oracle \"está operante?\"\n\
+$ poupar cron at \"2m\" oracle \"está operante?\"\n\
 {{\"id\":\"c_abc...\",\"run_at_ms\":12345,\"target\":\"oracle\",...}}\n\
 ```\n\n\
 **Sem output bruto anexado = invenção.** Você não pode citar ids, timestamps ou contadores que não viu literalmente no stdout. Inventar quebra a regra de não simular e é violação grave.\n\n\
 ### Capacidade fora do seu escopo\n\
-Se o humano pedir algo que NÃO está na lista de `pmem` acima (ex.: \"rode kubectl\", \"acesse o banco direto\", \"edite o arquivo X do projeto Y\"), responda em UMA linha: **\"Não tenho <capacidade> no meu escopo. Você pode adicionar via UI/scope.json ou eu sigo só com o que tenho.\"** Nada de tentar fingir que tem.\n\n\
-## Como fazer handoff pra um interlocutor permitido (referência — use pmem acima)\nQuando você decidir acionar um agente que **está** na sua `can_talk_to`, use o endpoint de handoff via `Bash` + `curl`:\n\n\
+Se o humano pedir algo que NÃO está na lista de `poupar` acima (ex.: \"rode kubectl\", \"acesse o banco direto\", \"edite o arquivo X do projeto Y\"), responda em UMA linha: **\"Não tenho <capacidade> no meu escopo. Você pode adicionar via UI/scope.json ou eu sigo só com o que tenho.\"** Nada de tentar fingir que tem.\n\n\
+## Como fazer handoff pra um interlocutor permitido (referência — use poupar acima)\nQuando você decidir acionar um agente que **está** na sua `can_talk_to`, use o endpoint de handoff via `Bash` + `curl`:\n\n\
 ```bash\n\
 curl -s -X POST http://localhost:{port}/api/agents/handoff \\\\\n\
   -H 'Content-Type: application/json' \\\\\n\
@@ -633,7 +651,7 @@ Não existe \"sem ferramenta pra acionar\". Se o alvo está em `can_talk_to` e v
 - Seja direto. Sem preâmbulo. Português.\n\
 {manager_line}\n\
 {autonomy_blk}\n\n\
-## Persistência de anotações (project-mem)\nQuando o Engenheiro disser \"anote\", \"registre\", \"salve\" ou equivalente, **não pergunte onde** — classifique e grave. Siga a hierarquia do README:\n\n\
+## Persistência de anotações (open-poupar)\nQuando o Engenheiro disser \"anote\", \"registre\", \"salve\" ou equivalente, **não pergunte onde** — classifique e grave. Siga a hierarquia do README:\n\n\
 | Tipo de anotação | Destino | Como salvar | Quem pode registrar |\n\
 |---|---|---|---|\n\
 | Decisão técnica local do SEU escopo (com \"por quê\") | `decisions.jsonl` → `DECISIONS.md` | `/mem-decision <o que> — <por quê>` | {persistence_who_decision} |\n\
@@ -946,22 +964,22 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("CLAUDE_PROJECT_MEM_SUBAGENT", "1")
-        .env("CLAUDE_PROJECT_MEM_AGENT", agent)
+        .env("CLAUDE_POUPAR_SUBAGENT", "1")
+        .env("CLAUDE_POUPAR_AGENT", agent)
         .kill_on_drop(true);
     // Token JWT por spawn (Fase C — identidade Ed25519). Se o vault
     // tiver a privada do agente acessível, agente usa em `Authorization:
     // Bearer` no handoff. Sem token: handoff cai pro modo legado
     // (untrusted, mas logado) pra não quebrar agentes pré-keypair.
     if let Some(token) = crate::agent_keys::mint_token_for(agent, &st.vault, &st.mem_dir) {
-        cmd.env("PROJECT_MEM_AGENT_TOKEN", token);
+        cmd.env("POUPAR_AGENT_TOKEN", token);
     }
-    // `plugin_dir/agent-bin` no PATH — agente chama `pmem handoff ...`
+    // `plugin_dir/agent-bin` no PATH — agente chama `poupar handoff ...`
     // sem expor $VAR na linha de comando. Veja agent_runner.rs pro motivo.
     let agent_bin = st.plugin_dir.join("agent-bin");
     let path_now = std::env::var("PATH").unwrap_or_default();
     cmd.env("PATH", format!("{}:{}", agent_bin.display(), path_now));
-    cmd.env("PROJECT_MEM_PORT", st.port.to_string());
+    cmd.env("POUPAR_PORT", st.port.to_string());
     for (k, v) in build_agent_env(&st.mem_dir, &st.vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }

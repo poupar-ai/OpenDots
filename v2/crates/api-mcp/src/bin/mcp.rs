@@ -1,9 +1,9 @@
-//! `pmem-mcp` — binário MCP stdio.
+//! `poupar-mcp` — binário MCP stdio.
 //!
 //! Paridade com `plugin/mcp/server.cjs`:
 //! - Transport: JSON-RPC 2.0 newline-delimited sobre stdin/stdout.
 //! - Tools: `mem_context`, `mem_read_project`, `mem_search`, `mem_add_note`.
-//! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.claude-project-memory`.
+//! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.poupar`.
 //! - Linhas não-JSON são silenciosamente descartadas (paridade com
 //!   `try { JSON.parse(...) } catch { return }` do `.cjs`).
 //! - EOF → exit 0.

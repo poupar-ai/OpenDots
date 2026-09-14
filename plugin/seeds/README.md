@@ -8,7 +8,7 @@ seeds/
 │   ├── meta.json              # label + descrição da categoria
 │   └── <pack>/
 │       ├── meta.json          # label + descrição do pack
-│       ├── agents.json        # manifest (subset de .claude-project-memory/agents.json)
+│       ├── agents.json        # manifest (subset de .poupar/agents.json)
 │       └── agents/*.md        # mini-contexto de cada agente
 ```
 
@@ -40,6 +40,6 @@ Sem `--overwrite`, é idempotente: só adiciona o que ainda não existe.
 
 1. Criar `seeds/<categoria>/meta.json` com `{ "label": "...", "description": "..." }`.
 2. Criar `seeds/<categoria>/<pack>/meta.json` igual.
-3. Criar `seeds/<categoria>/<pack>/agents.json` (mesmo formato do `.claude-project-memory/agents.json`).
+3. Criar `seeds/<categoria>/<pack>/agents.json` (mesmo formato do `.poupar/agents.json`).
 4. Criar `seeds/<categoria>/<pack>/agents/<nome>.md` para cada agente.
 5. Pronto — aparece automaticamente no `--list` e no wizard.

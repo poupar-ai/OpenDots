@@ -56,7 +56,7 @@ pub const SCRYPT_P: u32 = 1;
 
 pub const EXPORT_MAGIC: &[u8; 7] = b"PMVEXP1";
 
-pub const GITIGNORE_MARKER: &str = "# project-mem vault — nunca commitar";
+pub const GITIGNORE_MARKER: &str = "# open-poupar vault — nunca commitar";
 pub const GITIGNORE_ENTRIES: &[&str] =
     &["vault.enc", ".vault-devicekey", ".vault-unlock-state.json"];
 

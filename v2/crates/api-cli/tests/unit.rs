@@ -1,25 +1,14 @@
 use std::path::PathBuf;
 
 use api_cli::{
-    apply_install, apply_uninstall, describe_status, serialize_settings, InstallConfig,
-    McpLauncher, StatusReport,
+    apply_install, apply_uninstall, describe_status, mcp_bin, serialize_settings, InstallConfig,
+    StatusReport,
 };
 use serde_json::{json, Value};
 
 fn cfg(install_dir: &str) -> InstallConfig {
     InstallConfig {
         install_dir: PathBuf::from(install_dir),
-        mcp: McpLauncher::Node {
-            node_bin: PathBuf::from("/usr/bin/node"),
-        },
-    }
-}
-
-/// Mesma instalação, mas registrando o binário nativo (layout tarball).
-fn cfg_native(install_dir: &str) -> InstallConfig {
-    InstallConfig {
-        install_dir: PathBuf::from(install_dir),
-        mcp: McpLauncher::Native,
     }
 }
 
@@ -30,63 +19,29 @@ fn install_empty_settings_sets_all_three_keys() {
     let mut s = Value::Object(Default::default());
     apply_install(&mut s, &cfg("/opt/pm"));
     assert_eq!(
-        s["extraKnownMarketplaces"]["project-man"]["source"]["path"],
+        s["extraKnownMarketplaces"]["open-poupar"]["source"]["path"],
         "/opt/pm"
     );
-    assert_eq!(s["enabledPlugins"]["project-man@project-man"], true);
-    assert_eq!(s["mcpServers"]["project-mem"]["type"], "stdio");
-    assert_eq!(s["mcpServers"]["project-mem"]["command"], "/usr/bin/node");
+    assert_eq!(s["enabledPlugins"]["open-poupar@open-poupar"], true);
+    assert_eq!(s["mcpServers"]["open-poupar"]["type"], "stdio");
     assert_eq!(
-        s["mcpServers"]["project-mem"]["args"][0],
-        "/opt/pm/plugin/mcp/server.cjs"
+        s["mcpServers"]["open-poupar"]["command"],
+        "/opt/pm/plugin/bin/poupar-mcp"
     );
+    // `args: []` e não ausente — mantém o shape do settings.json estável.
+    assert_eq!(s["mcpServers"]["open-poupar"]["args"], json!([]));
 }
 
 #[test]
-fn install_native_registers_binary_without_args() {
+fn mcp_command_bate_com_o_helper_publico() {
+    // O install.sh e o smoke do tarball procuram o binário nesse mesmo
+    // caminho. Se o registro e o helper divergirem, o MCP some sem erro.
     let mut s = Value::Object(Default::default());
-    apply_install(&mut s, &cfg_native("/opt/pm"));
-    assert_eq!(s["mcpServers"]["project-mem"]["type"], "stdio");
+    apply_install(&mut s, &cfg("/opt/pm"));
     assert_eq!(
-        s["mcpServers"]["project-mem"]["command"],
-        "/opt/pm/plugin/bin/pmem-mcp"
+        s["mcpServers"]["open-poupar"]["command"],
+        mcp_bin(&PathBuf::from("/opt/pm")).to_string_lossy().as_ref()
     );
-    // `args: []` e não ausente — a chave existe nos dois launchers, o
-    // que mantém o shape do settings.json estável entre instalações.
-    assert_eq!(s["mcpServers"]["project-mem"]["args"], json!([]));
-}
-
-#[test]
-fn install_native_e_node_diferem_so_no_mcp() {
-    let mut native = Value::Object(Default::default());
-    let mut node = Value::Object(Default::default());
-    apply_install(&mut native, &cfg_native("/opt/pm"));
-    apply_install(&mut node, &cfg("/opt/pm"));
-
-    assert_eq!(
-        native["extraKnownMarketplaces"],
-        node["extraKnownMarketplaces"]
-    );
-    assert_eq!(native["enabledPlugins"], node["enabledPlugins"]);
-    assert_ne!(native["mcpServers"], node["mcpServers"]);
-}
-
-#[test]
-fn detect_escolhe_node_quando_nao_ha_binario_nativo() {
-    let tmp = tempfile::TempDir::new().unwrap();
-    let launcher = McpLauncher::detect(tmp.path(), PathBuf::from("/usr/bin/node"));
-    assert!(matches!(launcher, McpLauncher::Node { .. }));
-}
-
-#[test]
-fn detect_escolhe_nativo_quando_o_binario_existe() {
-    let tmp = tempfile::TempDir::new().unwrap();
-    let bin = McpLauncher::native_bin(tmp.path());
-    std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
-    std::fs::write(&bin, b"").unwrap();
-
-    let launcher = McpLauncher::detect(tmp.path(), PathBuf::from("/usr/bin/node"));
-    assert!(matches!(launcher, McpLauncher::Native));
 }
 
 #[test]
@@ -99,9 +54,9 @@ fn install_preserves_unrelated_user_keys() {
     apply_install(&mut s, &cfg("/opt/pm"));
     assert_eq!(s["theme"], "dark");
     assert_eq!(s["enabledPlugins"]["other@ns"], true);
-    assert_eq!(s["enabledPlugins"]["project-man@project-man"], true);
+    assert_eq!(s["enabledPlugins"]["open-poupar@open-poupar"], true);
     assert_eq!(s["mcpServers"]["existing"]["command"], "node");
-    assert_eq!(s["mcpServers"]["project-mem"]["type"], "stdio");
+    assert_eq!(s["mcpServers"]["open-poupar"]["type"], "stdio");
 }
 
 #[test]
@@ -135,13 +90,13 @@ fn uninstall_drops_empty_top_keys() {
 #[test]
 fn uninstall_keeps_top_keys_with_other_entries() {
     let mut s = json!({
-        "enabledPlugins": { "other@ns": true, "project-man@project-man": true },
-        "mcpServers": { "existing": { "type": "stdio" }, "project-mem": { "type": "stdio" } }
+        "enabledPlugins": { "other@ns": true, "open-poupar@open-poupar": true },
+        "mcpServers": { "existing": { "type": "stdio" }, "open-poupar": { "type": "stdio" } }
     });
     assert!(apply_uninstall(&mut s));
     assert_eq!(s["enabledPlugins"]["other@ns"], true);
-    assert!(s["enabledPlugins"].get("project-man@project-man").is_none());
-    assert!(s["mcpServers"].get("project-mem").is_none());
+    assert!(s["enabledPlugins"].get("open-poupar@open-poupar").is_none());
+    assert!(s["mcpServers"].get("open-poupar").is_none());
     assert_eq!(s["mcpServers"]["existing"]["type"], "stdio");
 }
 
@@ -167,7 +122,7 @@ fn status_installed() {
 
 #[test]
 fn status_incomplete_missing_marketplace() {
-    let s = json!({ "enabledPlugins": { "project-man@project-man": true } });
+    let s = json!({ "enabledPlugins": { "open-poupar@open-poupar": true } });
     assert_eq!(
         describe_status(&s),
         StatusReport::Incomplete {
@@ -180,7 +135,7 @@ fn status_incomplete_missing_marketplace() {
 #[test]
 fn status_incomplete_missing_plugin() {
     let s = json!({
-        "extraKnownMarketplaces": { "project-man": { "source": { "source": "directory", "path": "/x" } } }
+        "extraKnownMarketplaces": { "open-poupar": { "source": { "source": "directory", "path": "/x" } } }
     });
     assert_eq!(
         describe_status(&s),
@@ -199,7 +154,7 @@ fn status_render_installed_matches_cjs_format() {
     let out = r.render(&PathBuf::from("/home/u/.claude/settings.json"));
     assert_eq!(
         out,
-        "✓ project-man instalado\n  Diretório: /opt/pm\n  Settings:  /home/u/.claude/settings.json\n"
+        "✓ open-poupar instalado\n  Diretório: /opt/pm\n  Settings:  /home/u/.claude/settings.json\n"
     );
 }
 
@@ -212,7 +167,7 @@ fn status_render_incomplete_lists_only_missing_items() {
     let out = r.render(&PathBuf::from("/x"));
     assert_eq!(
         out,
-        "✗ project-man não instalado (ou instalação incompleta)\n  → falta: extraKnownMarketplaces[\"project-man\"]\n  → rode: make install\n"
+        "✗ open-poupar não instalado (ou instalação incompleta)\n  → falta: extraKnownMarketplaces[\"open-poupar\"]\n  → rode: make install\n"
     );
 }
 

@@ -1,4 +1,4 @@
-//! `api-http` — servidor HTTP do project-mem.
+//! `api-http` — servidor HTTP do open-poupar.
 //!
 //! Paridade com `plugin/ui/server.cjs` (3.665 linhas). Porta em sub-fases.
 //!
@@ -174,7 +174,7 @@ pub struct AppState {
     pub project_root: PathBuf,
     pub plugin_dir: PathBuf,
     /// Diretório onde mora config de **processo** (network.json) — não
-    /// dados de projeto. Tipicamente o `<clone>/.claude-project-memory/`
+    /// dados de projeto. Tipicamente o `<clone>/.poupar/`
     /// (binary-local), onde o startup do seed escreve. Isolado do
     /// `mem_dir` (que é project-scoped) pra evitar que mudança de
     /// project_root via UI quebre o binding do servidor.
@@ -439,7 +439,7 @@ fn missing_dist_response() -> Response {
     );
     headers.insert("cache-control", HeaderValue::from_static("no-cache"));
     let body = r#"<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><title>project-mem</title>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>open-poupar</title>
 <style>body{font:14px system-ui;background:#0d1117;color:#e6edf3;padding:48px;max-width:720px;margin:0 auto}
 code{background:#161b22;padding:2px 6px;border-radius:4px}h1{color:#388bfd}</style></head>
 <body><h1>UI não construída</h1>

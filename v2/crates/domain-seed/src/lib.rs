@@ -786,7 +786,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -800,7 +800,7 @@ mod tests {
         assert!(r.skipped.is_empty());
         assert_eq!(r.md_copied.len(), 2);
         let manifest: Value = serde_json::from_str(
-            &fs::read_to_string(proj.join(".claude-project-memory/agents.json")).unwrap(),
+            &fs::read_to_string(proj.join(".poupar/agents.json")).unwrap(),
         )
         .unwrap();
         assert!(manifest.pointer("/agents/coder").is_some());
@@ -830,7 +830,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -845,7 +845,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -872,7 +872,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -887,7 +887,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: true,
@@ -914,7 +914,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -930,7 +930,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -951,7 +951,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -966,7 +966,7 @@ mod tests {
         // Verifica manifest no disco: context_file aponta pro .md certo,
         // agent_origin tem os nomes finais.
         let manifest: Value = serde_json::from_str(
-            &fs::read_to_string(proj.join(".claude-project-memory/agents.json")).unwrap(),
+            &fs::read_to_string(proj.join(".poupar/agents.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(
@@ -977,8 +977,8 @@ mod tests {
         assert!(manifest.pointer("/_meta/agent_origin/coder-3").is_some());
 
         // .md files devem existir com nomes suffixados.
-        assert!(proj.join(".claude-project-memory/agents/coder-2.md").exists());
-        assert!(proj.join(".claude-project-memory/agents/reviewer-3.md").exists());
+        assert!(proj.join(".poupar/agents/coder-2.md").exists());
+        assert!(proj.join(".poupar/agents/reviewer-3.md").exists());
     }
 
     #[test]
@@ -994,7 +994,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: Some("coder"),
             exclude: None,
             overwrite: false,
@@ -1019,7 +1019,7 @@ mod tests {
             bp_dir: &bp,
             reference: "dev/base",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,
@@ -1028,9 +1028,9 @@ mod tests {
             ide: None,
         })
         .unwrap();
-        assert!(proj.join(".claude-project-memory").is_dir());
-        assert!(proj.join(".claude-project-memory/agents").is_dir());
-        assert!(proj.join(".claude-project-memory/agents.json").is_file());
+        assert!(proj.join(".poupar").is_dir());
+        assert!(proj.join(".poupar/agents").is_dir());
+        assert!(proj.join(".poupar/agents.json").is_file());
     }
 
     #[test]
@@ -1046,7 +1046,7 @@ mod tests {
             bp_dir: &bp,
             reference: "x/y",
             project_root: &proj,
-            mem_dir_name: ".claude-project-memory",
+            mem_dir_name: ".poupar",
             only: None,
             exclude: None,
             overwrite: false,

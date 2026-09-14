@@ -11,7 +11,7 @@
 #
 # Env esperado (injetado pelo poupar-http no spawn do agente):
 #   POUPAR_AGENT_TOKEN   token Ed25519 do agente
-#   CLAUDE_POUPAR_AGENT  nome do agente (usado como `from` no handoff)
+#   POUPAR_AGENT  nome do agente (usado como `from` no handoff)
 #   POUPAR_PORT          porta do poupar-http (default 37778)
 #
 # Sai com código != 0 se algo falhar; mensagem em stderr.
@@ -21,7 +21,7 @@ set -euo pipefail
 PORT="${POUPAR_PORT:-37778}"
 HOST="${POUPAR_HOST:-localhost}"
 BASE="http://${HOST}:${PORT}"
-FROM="${CLAUDE_POUPAR_AGENT:-unknown}"
+FROM="${POUPAR_AGENT:-unknown}"
 
 die() { echo "poupar: $*" >&2; exit 1; }
 

@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     }
 
     let ts = now_iso();
-    let agent_id = env::var("CLAUDE_POUPAR_AGENT")
+    let agent_id = env::var("POUPAR_AGENT")
         .ok()
         .filter(|s| !s.is_empty());
 

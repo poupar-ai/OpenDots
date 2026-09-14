@@ -964,8 +964,8 @@ async fn chat_send_handler(State(st): State<AppState>, body: Bytes) -> Response 
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("CLAUDE_POUPAR_SUBAGENT", "1")
-        .env("CLAUDE_POUPAR_AGENT", agent)
+        .env("POUPAR_SUBAGENT", "1")
+        .env("POUPAR_AGENT", agent)
         .kill_on_drop(true);
     // Token JWT por spawn (Fase C — identidade Ed25519). Se o vault
     // tiver a privada do agente acessível, agente usa em `Authorization:

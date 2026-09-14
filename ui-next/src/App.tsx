@@ -235,7 +235,7 @@ export default function App() {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-base font-semibold leading-tight">project-mem</h1>
+            <h1 className="text-base font-semibold leading-tight">open-poupar</h1>
             <p className="text-xs text-muted-foreground leading-tight">
               {data?.project.name || '…'}
             </p>

@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# poupar — wrapper de chamadas autenticadas à API local do open-poupar.ai,
+# montado pra contornar o sandbox `simple_expansion` do Claude Code:
+# o agente roda comandos sem `$VAR` na linha; o token é lido aqui dentro.
+#
+# Subcomandos:
+#   handoff <to> <message>       POST /api/agents/handoff
+#   handoff-batch <json>         POST /api/agents/handoff_batch  (body literal)
+#   subagent <prompt> [tools]    POST /api/agents/subagent/spawn
+#   poll <subagent_id>           GET  /api/agents/subagent/<id>
+#
+# Env esperado (injetado pelo poupar-http no spawn do agente):
+#   POUPAR_AGENT_TOKEN   token Ed25519 do agente
+#   CLAUDE_POUPAR_AGENT  nome do agente (usado como `from` no handoff)
+#   POUPAR_PORT          porta do poupar-http (default 37778)
+#
+# Sai com código != 0 se algo falhar; mensagem em stderr.
+
+set -euo pipefail
+
+PORT="${POUPAR_PORT:-37778}"
+HOST="${POUPAR_HOST:-localhost}"
+BASE="http://${HOST}:${PORT}"
+FROM="${CLAUDE_POUPAR_AGENT:-unknown}"
+
+die() { echo "poupar: $*" >&2; exit 1; }
+
+if [[ -z "${POUPAR_AGENT_TOKEN:-}" ]]; then
+  die "POUPAR_AGENT_TOKEN não está no environment. Esse wrapper só roda dentro de agentes spawnados pelo poupar-http."
+fi
+
+# Monta um JSON usando jq quando disponível (escape correto). Fallback
+# pra concat manual com escapes básicos quando jq não existir — suficiente
+# pra mensagens curtas/sem caracteres especiais.
+json_handoff() {
+  local from="$1" to="$2" msg="$3"
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg from "$from" --arg to "$to" --arg message "$msg" \
+       '{from:$from, to:$to, message:$message}'
+  else
+    printf '{"from":"%s","to":"%s","message":"%s"}\n' \
+      "${from//\"/\\\"}" "${to//\"/\\\"}" "${msg//\"/\\\"}"
+  fi
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  handoff)
+    [[ $# -ge 2 ]] || die "uso: poupar handoff <to> <message>"
+    to="$1"; shift
+    msg="$*"
+    body=$(json_handoff "$FROM" "$to" "$msg")
+    curl -sS -X POST "${BASE}/api/agents/handoff" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
+      -H 'Content-Type: application/json' \
+      -d "$body"
+    ;;
+  handoff-batch)
+    [[ $# -ge 1 ]] || die "uso: poupar handoff-batch <json-body>"
+    body="$*"
+    curl -sS -X POST "${BASE}/api/agents/handoff_batch" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
+      -H 'Content-Type: application/json' \
+      -d "$body"
+    ;;
+  subagent)
+    [[ $# -ge 1 ]] || die "uso: poupar subagent <prompt> [tool1,tool2,...]"
+    prompt="$1"; shift || true
+    tools="${1:-Read,Grep,Glob}"
+    if command -v jq >/dev/null 2>&1; then
+      body=$(jq -n --arg p "$prompt" --arg t "$tools" \
+             '{prompt:$p, tools:($t|split(","))}')
+    else
+      body=$(printf '{"prompt":"%s","tools":["%s"]}' \
+             "${prompt//\"/\\\"}" "${tools//,/\",\"}")
+    fi
+    curl -sS -X POST "${BASE}/api/agents/subagent/spawn" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
+      -H 'Content-Type: application/json' \
+      -d "$body"
+    ;;
+  poll)
+    [[ $# -ge 1 ]] || die "uso: poupar poll <subagent_id>"
+    id="$1"
+    curl -sS "${BASE}/api/agents/subagent/${id}" \
+      -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}"
+    ;;
+  training-export)
+    # training-export <agent> [format=anthropic-sft|openai-sft|messages]
+    [[ $# -ge 1 ]] || die "uso: poupar training-export <agent> [format]"
+    agt="$1"
+    fmt="${2:-anthropic-sft}"
+    curl -sS "${BASE}/api/training-export?agent=${agt}&format=${fmt}"
+    ;;
+  cron)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      schedule)
+        # cron schedule "<cron-expr>" <target> "<message>"
+        [[ $# -ge 3 ]] || die "uso: poupar cron schedule \"<cron-expr>\" <target> \"<message>\""
+        schedule="$1"; target="$2"; shift 2
+        msg="$*"
+        if command -v jq >/dev/null 2>&1; then
+          body=$(jq -n --arg s "$schedule" --arg t "$target" --arg m "$msg" \
+                 '{schedule:$s, target:$t, message:$m}')
+        else
+          body=$(printf '{"schedule":"%s","target":"%s","message":"%s"}' \
+                 "${schedule//\"/\\\"}" "${target//\"/\\\"}" "${msg//\"/\\\"}")
+        fi
+        curl -sS -X POST "${BASE}/api/cron" \
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
+          -H 'Content-Type: application/json' \
+          -d "$body"
+        ;;
+      at)
+        # cron at "<delay>" <target> "<message>"
+        # delay aceita: <N>s, <N>m, <N>h, <N>d. Fire único, auto-deactiva.
+        [[ $# -ge 3 ]] || die "uso: poupar cron at \"<delay>\" <target> \"<message>\"  (ex: \"2m\", \"30s\", \"1h\")"
+        delay="$1"; target="$2"; shift 2
+        msg="$*"
+        # Parse delay → segundos
+        num="${delay%[smhd]}"
+        unit="${delay: -1}"
+        case "$unit" in
+          s) secs=$((num)) ;;
+          m) secs=$((num * 60)) ;;
+          h) secs=$((num * 3600)) ;;
+          d) secs=$((num * 86400)) ;;
+          *) die "delay inválido: $delay (use Ns, Nm, Nh, Nd)" ;;
+        esac
+        if command -v jq >/dev/null 2>&1; then
+          body=$(jq -n --argjson r "$secs" --arg t "$target" --arg m "$msg" \
+                 '{run_in_seconds:$r, target:$t, message:$m}')
+        else
+          body=$(printf '{"run_in_seconds":%d,"target":"%s","message":"%s"}' \
+                 "$secs" "${target//\"/\\\"}" "${msg//\"/\\\"}")
+        fi
+        curl -sS -X POST "${BASE}/api/cron" \
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}" \
+          -H 'Content-Type: application/json' \
+          -d "$body"
+        ;;
+      list)
+        curl -sS "${BASE}/api/cron"
+        ;;
+      rm)
+        [[ $# -ge 1 ]] || die "uso: poupar cron rm <id>"
+        id="$1"
+        curl -sS -X DELETE "${BASE}/api/cron/${id}" \
+          -H "Authorization: Bearer ${POUPAR_AGENT_TOKEN}"
+        ;;
+      ""|help|-h|--help)
+        cat <<EOF
+poupar cron — agendamento.
+
+uso:
+  poupar cron at       "<delay>" <target> "<msg>"   # ONE-SHOT (recomendado pra "daqui a X")
+  poupar cron schedule "<cron-expr>" <target> "<msg>"  # RECORRENTE
+  poupar cron list
+  poupar cron rm <id>
+
+ONE-SHOT (poupar cron at):
+  Delay: Ns, Nm, Nh, Nd (segundos/minutos/horas/dias).
+  Dispara UMA vez e auto-desativa. Use SEMPRE pra pedidos como
+  "daqui a 2 min", "em 30s", "amanhã" — evita o erro clássico de
+  construir cron expr recorrente que apontaria pra próxima ocorrência
+  anual.
+
+  Exemplos:
+    poupar cron at "2m"   oracle "está operante?"
+    poupar cron at "30s"  manager "ping"
+    poupar cron at "1h"   tester "rodar suíte de fumaça"
+
+RECORRENTE (poupar cron schedule):
+  Cron 6-campos: sec min hora dom mês dow (0=domingo).
+  Atalhos: @hourly, @daily, @weekly, @monthly, @yearly.
+
+  Exemplos:
+    poupar cron schedule "@hourly"          oracle "ronda de status"
+    poupar cron schedule "0 0 9 * * 1-5"    oracle "bom dia"
+    poupar cron schedule "*/30 * * * * *"   manager "tick a cada 30s"
+EOF
+        [[ "$sub" == "" ]] && exit 1 || exit 0
+        ;;
+      *)
+        die "subcomando cron desconhecido: $sub (rode 'poupar cron help')"
+        ;;
+    esac
+    ;;
+  ""|help|-h|--help)
+    cat <<EOF
+poupar — wrapper auth pra API do open-poupar.ai (porta ${PORT}).
+
+uso:
+  poupar handoff <to> <message>        Manda mensagem pra outro agente
+  poupar handoff-batch <json>          Batch (N msgs num único POST)
+  poupar subagent <prompt> [tools]     Spawna subagent paralelo
+  poupar poll <subagent_id>            Status/resultado de subagent
+  poupar cron <schedule|list|rm>       Agendamento recorrente (rode 'poupar cron' pra subcomandos)
+  poupar training-export <agent> [fmt] Exporta chat history como dataset SFT (fine-tune)
+
+Token de auth e nome do agente vêm do env (injetado no spawn).
+Não use \$VAR diretamente — o sandbox do Claude Code bloqueia.
+EOF
+    [[ "$cmd" == "" ]] && exit 1 || exit 0
+    ;;
+  *)
+    die "subcomando desconhecido: $cmd (rode 'poupar help')"
+    ;;
+esac

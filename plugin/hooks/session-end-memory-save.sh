@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -u
 
-# SessionEnd hook do project-mem: dispara memory-save só na sessão REPL principal.
-# Pula qualquer sub-agente spawnado pelo server do project-mem e qualquer recursão.
+# SessionEnd hook do open-poupar: dispara memory-save só na sessão REPL principal.
+# Pula qualquer sub-agente spawnado pelo server do open-poupar e qualquer recursão.
 
-[ -n "${CLAUDE_PROJECT_MEM_SUBAGENT:-}" ] && exit 0
+[ -n "${CLAUDE_POUPAR_SUBAGENT:-}" ] && exit 0
 [ -n "${CLAUDE_HOOK_MEMORY_SAVE_RUNNING:-}" ] && exit 0
 
 # Requer o comando per-project .claude/commands/memory-save.md na raiz do projeto.

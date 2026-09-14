@@ -1,4 +1,4 @@
-//! `pmem-hook-session-end` — thin entrypoint do `SessionEnd`.
+//! `poupar-hook-session-end` — thin entrypoint do `SessionEnd`.
 //!
 //! Paridade com `plugin/scripts/session-end.cjs`:
 //! 1. Lê stdin JSON com `session_id`.

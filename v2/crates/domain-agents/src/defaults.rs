@@ -262,7 +262,7 @@ Conversa com os agentes envolvidos pra entender o fluxo real, decidir a ordem do
 - **Pergunte antes de inventar.** Se não ficou claro quem faz X, consulte o humano ou o agente em dúvida.
 
 ## Onde grava
-Sempre no projeto corrente: `.claude-project-memory/pipelines/<id>/pipeline.yaml`.
+Sempre no projeto corrente: `.poupar/pipelines/<id>/pipeline.yaml`.
 Template global é trabalho do humano (não tem acesso a `plugin/pipelines/`).
 
 ## Schema mínimo

@@ -14,7 +14,7 @@ BATCH_SIZE="${2:-20}"
 TOTAL=$((N_BATCHES * BATCH_SIZE))
 PORT="${PORT:-37985}"
 TMP="$(mktemp -d)"
-BIN="${BIN:-$(pwd)/v2/target/release/pmem-http}"
+BIN="${BIN:-$(pwd)/v2/target/release/poupar-http}"
 
 if [[ ! -x "$BIN" ]]; then
   echo "binário não encontrado: $BIN"
@@ -22,7 +22,7 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 cleanup() {
-  pkill -P $$ pmem-http 2>/dev/null || true
+  pkill -P $$ poupar-http 2>/dev/null || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -33,7 +33,7 @@ echo "== bench handoff BATCH =="
 echo "N_BATCHES=$N_BATCHES, BATCH_SIZE=$BATCH_SIZE → TOTAL=$TOTAL handoffs"
 echo ""
 
-PROJECT_MEM_DEV_MODE=1 PROJECT_MEM_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/server.log" &
+POUPAR_DEV_MODE=1 POUPAR_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/server.log" &
 for _ in $(seq 1 30); do
   curl -s -o /dev/null --max-time 1 "$URL/" 2>/dev/null && break
   sleep 0.1

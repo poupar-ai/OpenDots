@@ -2,7 +2,7 @@
 //! exige Bearer token global do servidor.
 //!
 //! Single-tenant hoje. Bearer enforcement é OPT-IN via env
-//! `PROJECT_MEM_REQUIRE_TOKEN=1`:
+//! `POUPAR_REQUIRE_TOKEN=1`:
 //!   - Off (default): comportamento atual, sem auth header obrigatório.
 //!   - On: middleware rejeita 401 quando header ausente/inválido —
 //!     EXCETO em rotas whitelistadas (status do token, init de vault)
@@ -103,8 +103,8 @@ fn is_public_write(path: &str) -> bool {
 
 fn require_human_enabled() -> bool {
     // Ligado por padrão (projeto novo, sem legado). Desligar com
-    // PROJECT_MEM_REQUIRE_HUMAN=0.
-    std::env::var("PROJECT_MEM_REQUIRE_HUMAN").ok().as_deref() != Some("0")
+    // POUPAR_REQUIRE_HUMAN=0.
+    std::env::var("POUPAR_REQUIRE_HUMAN").ok().as_deref() != Some("0")
 }
 
 fn unauthorized(msg: &str) -> Response {
@@ -117,7 +117,7 @@ fn unauthorized(msg: &str) -> Response {
 }
 
 fn require_token_enabled() -> bool {
-    std::env::var("PROJECT_MEM_REQUIRE_TOKEN").ok().as_deref() == Some("1")
+    std::env::var("POUPAR_REQUIRE_TOKEN").ok().as_deref() == Some("1")
 }
 
 fn forbidden(msg: &str) -> Response {
@@ -137,9 +137,9 @@ fn forbidden(msg: &str) -> Response {
 /// - `Sec-Fetch-Site: cross-site` → bloqueia (sinal forte e moderno do browser).
 /// - `Origin` presente e fora da allowlist → bloqueia (fallback p/ browsers
 ///   sem Sec-Fetch-Site). A allowlist inclui a porta da API e a do Vite dev.
-/// - Sem Origin nem Sec-Fetch-Site (curl, agentes via pmem) → passa.
+/// - Sem Origin nem Sec-Fetch-Site (curl, agentes via poupar) → passa.
 ///
-/// Desligável com `PROJECT_MEM_GUARD_ORIGIN=0` (default: ligado).
+/// Desligável com `POUPAR_GUARD_ORIGIN=0` (default: ligado).
 pub async fn origin_guard_middleware(
     State(state): State<AppState>,
     req: Request,
@@ -149,7 +149,7 @@ pub async fn origin_guard_middleware(
         *req.method(),
         Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     );
-    let disabled = std::env::var("PROJECT_MEM_GUARD_ORIGIN").ok().as_deref() == Some("0");
+    let disabled = std::env::var("POUPAR_GUARD_ORIGIN").ok().as_deref() == Some("0");
     if mutating && !disabled {
         let headers = req.headers();
         if let Some(sfs) = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()) {
@@ -195,7 +195,7 @@ pub async fn auth_middleware(
     let principal = resolve_principal(req.headers(), &state.mem_dir);
 
     // Enforcement OPT-IN de auth por humano/agente nas rotas de escrita.
-    // Default OFF (não trava nada); ligar com PROJECT_MEM_REQUIRE_HUMAN=1.
+    // Default OFF (não trava nada); ligar com POUPAR_REQUIRE_HUMAN=1.
     if require_human_enabled() {
         let path = req.uri().path().to_string();
         let method = req.method().clone();

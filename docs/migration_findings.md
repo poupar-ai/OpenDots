@@ -32,7 +32,7 @@
 - **Comportamento:** se `git rev-parse --show-toplevel` falha (git ausente,
   não é repo) **ou passa de 3s** (network FS lento, repo gigante),
   retorna o `startCwd` sem nenhum log/warn.
-- **Impacto:** memória pode acabar gravada em `$HOME/.claude-project-memory`
+- **Impacto:** memória pode acabar gravada em `$HOME/.poupar`
   em vez de no projeto, dependendo de onde o Claude Code foi invocado.
   Usuário só percebe quando algo que devia estar lá não está.
 - **Recomendação pós-cutover:** emitir warning estruturado (stderr JSON)
@@ -43,7 +43,7 @@
 ### [F2-02] 🟡 `ensureMemDir` não valida que o path é diretório
 - **Onde:** `plugin/scripts/lib.cjs:35-37`.
 - **Comportamento:** `if (!fs.existsSync(memDir)) fs.mkdirSync(...)`. Se
-  `memDir` existe mas é arquivo (usuário criou `.claude-project-memory`
+  `memDir` existe mas é arquivo (usuário criou `.poupar`
   como arquivo por engano), a função é no-op. Próxima chamada
   downstream (`appendJsonl`, `fs.writeFileSync`) falha de forma
   confusa.
@@ -73,7 +73,7 @@
   qualquer linha que deserialize para `null`, `false`, `0`, `""`.
 - **Impacto:** se algum caller gravar um desses valores como linha JSON
   legítima, `read_jsonl` nunca o devolve. Os callers atuais do
-  project-mem sempre gravam objetos, então o bug é latente.
+  open-poupar sempre gravam objetos, então o bug é latente.
 - **Recomendação pós-cutover:** aplicar filter só em valores parse-falha
   (já retornamos `null`), distinguindo de JSON literal `null`.
   Atualmente os dois se confundem.
@@ -101,7 +101,7 @@ corrompe e o arquivo cabe num chunk
 - **Comportamento:** Node só tem double — `9007199254740993` vira
   `9007199254740992` silenciosamente. Rust preserva i64 até
   `i64::MAX`.
-- **Impacto:** hoje zero (project-mem não grava ints tão grandes — IDs
+- **Impacto:** hoje zero (open-poupar não grava ints tão grandes — IDs
   são UUID string, timestamps ms cabem em i64 até o ano 294.276).
   Mas um caller futuro que gravasse um hash numérico grande perderia
   info no `.cjs` sem saber.
@@ -270,7 +270,7 @@ corrompe e o arquivo cabe num chunk
 - **Onde:** `plugin/scripts/lib.cjs:155-185` — path de replace usa
   `existing.indexOf(CLAUDE_MD_END)` que retorna a **primeira** ocorrência.
 - **Comportamento observado:** se `projectMdContent` incluir a string
-  `<!-- claude-project-memory:end -->` literal (ex.: PROJECT.md
+  `<!-- open-poupar.ai:end -->` literal (ex.: PROJECT.md
   documentando o próprio marker), a primeira invocação grava corretamente
   (path "arquivo ausente" — só concatena). A **segunda** invocação (path
   de replace) faz `indexOf(END)` bater no END **dentro** do bloco velho,
@@ -2000,16 +2000,16 @@ Parity tests garantem byte-a-byte:
 ### [F21-02] 🟢 Autostart da UI não é portado no binário Rust do `startup`
 - **Onde:** `plugin/scripts/startup.cjs:19-62` — `ensureUiRunning`.
 - **Comportamento esperado:** spawna detached `node ui/server.cjs`
-  com pidfile lock em `/tmp/project-mem-ui-<port>.pid`, idempotente
+  com pidfile lock em `/tmp/open-poupar-ui-<port>.pid`, idempotente
   via sinal 0 (check do PID vivo).
-- **Decisão:** `pmem-hook-startup` **não** spawna nada. Durante o
+- **Decisão:** `poupar-hook-startup` **não** spawna nada. Durante o
   período híbrido (antes de `api-http` existir — F4-05), o `.cjs`
   continua responsável pelo autostart. O Rust só emite o banner.
   Motivo: a alternativa seria spawnar `node` do Rust, o que mantém
   o `.cjs` no hot path e não adiciona valor.
 - **Paridade v2:** *divergência consciente* — documentada aqui e no
   cabeçalho de `crates/api-hooks/src/bin/startup.rs`. Teste de
-  paridade desliga o autostart via `PROJECT_MEM_UI_AUTOSTART=0` para
+  paridade desliga o autostart via `POUPAR_UI_AUTOSTART=0` para
   ambos os lados, portanto o stdout ainda casa byte-a-byte.
 
 ## Fase 4 — Port de `ui/server.cjs`

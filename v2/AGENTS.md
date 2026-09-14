@@ -1,4 +1,4 @@
-# AGENTS.md — project-mem v2 (Rust port)
+# AGENTS.md — open-poupar v2 (Rust port)
 
 > Guia de onboarding para qualquer IA que entrar frio neste diretório.
 > Leia antes de editar qualquer arquivo em `v2/`.
@@ -6,13 +6,13 @@
 ## O que é este diretório
 
 `v2/` é a **migração em andamento** do plugin comercial
-**project-mem** de Node.js CJS para Rust, seguindo arquitetura
+**open-poupar** de Node.js CJS para Rust, seguindo arquitetura
 hexagonal. O código em `../plugin/` (Node) continua sendo a versão
 de produção até a paridade chegar a 100% e o cutover ser feito.
 
 **Nada aqui deve impactar a v1 em produção.**
 
-project-mem é produto comercial closed-source vendido como binário
+open-poupar é produto comercial closed-source vendido como binário
 assinado com licença Firebase Ed25519 em 4 tiers (Free/Basic/Pro/
 Business com limites de instalação 1/1/3/10).
 
@@ -178,7 +178,7 @@ antes de fechar fase.
   `core-paths/Cargo.toml`; propagada pelo workspace por unification.
 - **Inteiros `> 2^53` divergem por design.** Node perde precisão
   (double), Rust preserva (i64). Decidido não corrigir — nenhum
-  caller de produção do project-mem grava ints tão grandes. Parity
+  caller de produção do open-poupar grava ints tão grandes. Parity
   test `audit_append_big_number_matches_v1` marcado `#[ignore]`.
 
 ## Ao detectar divergência durante o port
@@ -204,6 +204,6 @@ a migração descobriu por acaso. Fluxo:
 - Achados da migração: `../docs/migration_findings.md`
 - Código-fonte v1 (verdade): `../plugin/scripts/*.cjs`
 - UI atual: `../ui-next/` (React + Mantine; v1 antiga em `plugin/ui/` foi removida)
-- Repo público do produto comercial: github.com/schedylabs/claude-project-memory
+- Repo público do produto comercial: github.com/schedylabs/open-poupar.ai
 - Memória persistente relevante: `feedback_port_rust_paridade.md`,
-  `reference_project_mem_repo.md`.
+  `reference_poupar_repo.md`.

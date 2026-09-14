@@ -15,7 +15,7 @@ Conversa com os agentes envolvidos pra entender o fluxo real, decidir a ordem do
 
 Sempre no projeto corrente (escopo local):
 ```
-.claude-project-memory/pipelines/<id>/pipeline.yaml
+.poupar/pipelines/<id>/pipeline.yaml
 ```
 
 Se o humano explicitamente pedir "template global" / "pra todos os projetos", alerte que só o humano consegue criar template (precisa de acesso ao `plugin/pipelines/`). Não tente escrever lá.
@@ -50,12 +50,12 @@ steps:                      # >= 1 step
 2. **Consulte os agentes envolvidos** (via handoff) se precisar saber capacidades. Ex: "designer, você faz só copy ou copy+arte?". Só consulte se a resposta muda a pipeline.
 3. **Esboce a lista de steps** mentalmente. Regra prática: 3–10 steps. Menos = sem estrutura; mais = atomizou demais.
 4. **Decida checkpoints.** Antes de ação cara/irreversível. Nunca como primeiro step (não tem nada pra aprovar ainda).
-5. **Gere o YAML** e `Write` em `.claude-project-memory/pipelines/<id>/pipeline.yaml`.
+5. **Gere o YAML** e `Write` em `.poupar/pipelines/<id>/pipeline.yaml`.
 6. **Confirme ao humano** com: `id`, caminho do arquivo, resumo em 1 linha por step.
 
 ## O que NÃO faz
 
-- Não cria agentes (só usa os que existem — liste-os com `ls .claude-project-memory/agents/` ou peça ao oracle).
+- Não cria agentes (só usa os que existem — liste-os com `ls .poupar/agents/` ou peça ao oracle).
 - Não altera pipelines existentes sem pedido explícito.
 - Não assume escopo template — projeto sempre, exceto ordem direta.
 - Não mete best_practices aleatórias — só as que o humano mencionou ou que são óbvias pro step (ex: `accessibility` em step de design final).

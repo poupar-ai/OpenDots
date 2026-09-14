@@ -68,7 +68,7 @@ pub struct BannerInputs {
     pub seed_cli_path: PathBuf,
 
     /// Porta da UI usada no link final. `.cjs` lê de
-    /// `PROJECT_MEM_PORT` com default `37778`.
+    /// `POUPAR_PORT` com default `37778`.
     pub ui_port: u16,
 
     /// Warning de MCP ausente, se houver. O caller computa via
@@ -80,7 +80,7 @@ pub struct BannerInputs {
 /// Monta a linha de banner idêntica à do `.cjs`.
 ///
 /// A string cresce por concatenação nesta ordem:
-/// 1. `🧠 project-mem | <projectName>`
+/// 1. `🧠 open-poupar | <projectName>`
 /// 2. Se memDir **não** existe → ` | sem memória ainda — rode /mem-setup...`
 /// 3. Senão:
 ///     - ` | <N> sessões · <M> obs`
@@ -91,7 +91,7 @@ pub struct BannerInputs {
 ///     - ` | UI → http://localhost:<port>`
 /// 4. [`mcp_warning`](BannerInputs::mcp_warning) anexado (começa com ` | ⚠`).
 pub fn build_banner(i: &BannerInputs) -> String {
-    let mut line = format!("🧠 project-mem | {}", i.project_name);
+    let mut line = format!("🧠 open-poupar | {}", i.project_name);
 
     if !i.mem_dir_exists {
         line.push_str(" | sem memória ainda — rode /mem-setup para iniciar");
@@ -237,7 +237,7 @@ pub fn load_agent_count(mem_dir: &Path) -> Option<usize> {
 }
 
 /// Verifica `~/.claude/settings.json` por um entry
-/// `mcpServers["project-mem"]`. Retorna a mensagem de warning pronta
+/// `mcpServers["open-poupar"]`. Retorna a mensagem de warning pronta
 /// pra concatenar (começa com ` | ⚠`).
 ///
 /// Paridade do `.cjs`:
@@ -249,13 +249,13 @@ pub fn check_mcp_registered(settings_path: &Path, mcp_path: &Path) -> Option<Str
     let v: Value = serde_json::from_str(&raw).ok()?;
     let already = v
         .get("mcpServers")
-        .and_then(|m| m.get("project-mem"))
+        .and_then(|m| m.get("open-poupar"))
         .is_some();
     if already {
         return None;
     }
     Some(format!(
-        " | ⚠ MCP não registrado — adicione em settings.json: {{\"mcpServers\":{{\"project-mem\":{{\"type\":\"stdio\",\"command\":\"node\",\"args\":[\"{}\"]}}}}}}",
+        " | ⚠ MCP não registrado — adicione em settings.json: {{\"mcpServers\":{{\"open-poupar\":{{\"type\":\"stdio\",\"command\":\"node\",\"args\":[\"{}\"]}}}}}}",
         mcp_path.display()
     ))
 }
@@ -287,7 +287,7 @@ mod tests {
         let b = build_banner(&i);
         assert_eq!(
             b,
-            "🧠 project-mem | demo | sem memória ainda — rode /mem-setup para iniciar"
+            "🧠 open-poupar | demo | sem memória ainda — rode /mem-setup para iniciar"
         );
     }
 
@@ -447,7 +447,7 @@ mod tests {
     fn mcp_check_returns_none_when_already_registered() {
         let tmp = TempDir::new().unwrap();
         let sp = tmp.path().join("settings.json");
-        fs::write(&sp, r#"{"mcpServers":{"project-mem":{"type":"stdio"}}}"#).unwrap();
+        fs::write(&sp, r#"{"mcpServers":{"open-poupar":{"type":"stdio"}}}"#).unwrap();
         assert_eq!(
             check_mcp_registered(&sp, Path::new("/p/mcp/server.cjs")),
             None

@@ -2,8 +2,8 @@
 //! em `lib.cjs`.
 //!
 //! ```js
-//! const CLAUDE_MD_START = '<!-- claude-project-memory:start -->';
-//! const CLAUDE_MD_END   = '<!-- claude-project-memory:end -->';
+//! const CLAUDE_MD_START = '<!-- open-poupar.ai:start -->';
+//! const CLAUDE_MD_END   = '<!-- open-poupar.ai:end -->';
 //!
 //! function syncClaudeMd(projectRoot, projectMdContent) {
 //!   const claudeDir    = path.join(projectRoot, '.claude');
@@ -63,10 +63,10 @@ use std::io;
 use std::path::Path;
 
 /// Marker de início do bloco gerenciado pelo plugin.
-pub const CLAUDE_MD_START: &str = "<!-- claude-project-memory:start -->";
+pub const CLAUDE_MD_START: &str = "<!-- open-poupar.ai:start -->";
 
 /// Marker de fim.
-pub const CLAUDE_MD_END: &str = "<!-- claude-project-memory:end -->";
+pub const CLAUDE_MD_END: &str = "<!-- open-poupar.ai:end -->";
 
 /// Diretório relativo ao project root onde o `CLAUDE.md` é gravado.
 pub const CLAUDE_DIR_NAME: &str = ".claude";

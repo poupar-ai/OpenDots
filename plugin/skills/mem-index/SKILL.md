@@ -20,32 +20,29 @@ Faz rebuild completo do **code index** — o mapa de símbolos reutilizáveis (f
 
 ## 1. Rebuild
 
+Resolva o binário e rode o rebuild a partir da raiz do projeto:
+
 ```bash
-_R="${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}"
-node -e "
-  const { rebuildIndex } = require('$_R/scripts/indexer.cjs');
-  const path = require('path');
-  const { execSync } = require('child_process');
-  const root = execSync('git rev-parse --show-toplevel').toString().trim();
-  const memDir = path.join(root, '.claude-project-memory');
-  const start = Date.now();
-  const idx = rebuildIndex(memDir, root);
-  const files = Object.keys(idx.files).length;
-  const syms  = Object.values(idx.files).reduce((n, f) => n + f.symbols.length, 0);
-  console.log('files:', files, '· símbolos:', syms, '· em', Date.now()-start, 'ms');
-"
+_R="${CLAUDE_PLUGIN_ROOT}"
+_CLI="$(bash "$_R/bin-path.sh" poupar)" && "$_CLI" index
 ```
 
-Gera dois arquivos em `.claude-project-memory/`:
-- `code_index.json` — dados brutos consultáveis
-- `CODE_INDEX.md` — renderização legível (top símbolos, arquivos mais densos)
+Ele varre os arquivos versionados no git, extrai símbolos por linguagem,
+conta referências e grava `.poupar/code_index.json` +
+`.poupar/CODE_INDEX.md`.
+
+## 1b. Só ver o índice atual
+
+```bash
+"$_CLI" index --show
+```
 
 ## 2. Show — exibir o index atual
 
 Quando `$ARGUMENTS` = `show`:
 
 ```bash
-cat "$(git rev-parse --show-toplevel)/.claude-project-memory/CODE_INDEX.md"
+cat "$(git rev-parse --show-toplevel)/.poupar/CODE_INDEX.md"
 ```
 
 ## 3. Como é usado em sessões futuras

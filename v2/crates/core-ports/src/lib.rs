@@ -1,6 +1,6 @@
 //! # core-ports
 //!
-//! Contratos (traits) da arquitetura hexagonal do project-mem v2.
+//! Contratos (traits) da arquitetura hexagonal do open-poupar v2.
 //!
 //! ## Regra do crate
 //!

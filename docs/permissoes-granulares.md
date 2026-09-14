@@ -11,7 +11,7 @@ A estrutura já está pronta pra granular — este doc é a receita.
   único** de decisão. Hoje retorna `principal.is_authenticated()`.
 - **Enforcement** (`auth.rs::auth_middleware`): nas rotas de escrita
   (POST/PUT/PATCH/DELETE), bootstrap público + resto exige principal autenticado.
-  Ligado por padrão; `PROJECT_MEM_REQUIRE_HUMAN=0` desliga.
+  Ligado por padrão; `POUPAR_REQUIRE_HUMAN=0` desliga.
 - **Dados**: humanos em `humans.json`, agentes em `agents.json` (já têm `pubkey`).
 
 ## Passos

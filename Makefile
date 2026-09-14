@@ -1,17 +1,15 @@
 SHELL := /bin/bash
 INSTALL_DIR := $(shell pwd)
 
-# Resolve Node.js — prefers nvm, falls back to system node
-NODE := $(shell ls $(HOME)/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)
-ifeq ($(NODE),)
-NODE := node
-endif
+# O CLI é o binário compilado. `make build` gera; sem ele, install/
+# uninstall/status avisam em vez de falhar com "command not found".
+CLI := v2/target/release/poupar
 
-.PHONY: install uninstall status help ui ui-dev build package smoke
+.PHONY: install uninstall status help ui ui-dev build package smoke _need-cli
 
 help:
 	@echo ""
-	@echo "  project-man — comandos disponíveis"
+	@echo "  open-poupar — comandos disponíveis"
 	@echo ""
 	@echo "  make install    Registra o plugin no Claude Code"
 	@echo "  make uninstall  Remove o plugin do Claude Code"
@@ -41,22 +39,33 @@ ui-dev:
 
 install:
 	@echo ""
-	@echo "Instalando project-man..."
+	@echo "Instalando open-poupar..."
 	@echo "Diretório: $(INSTALL_DIR)"
 	@echo ""
-	@$(NODE) scripts/install.cjs "$(INSTALL_DIR)"
+	@$(MAKE) --no-print-directory _need-cli
+	@$(CLI) install "$(INSTALL_DIR)"
 	@echo ""
 	@echo "Reinicie o Claude Code para ativar o plugin."
 	@echo ""
 
 uninstall:
 	@echo ""
-	@$(NODE) scripts/uninstall.cjs
+	@$(MAKE) --no-print-directory _need-cli
+	@$(CLI) uninstall
 	@echo ""
 	@echo "Reinicie o Claude Code para aplicar a remoção."
 	@echo ""
 
 status:
 	@echo ""
-	@$(NODE) scripts/status.cjs
+	@$(MAKE) --no-print-directory _need-cli
+	@$(CLI) status
 	@echo ""
+
+# Guarda: sem binário compilado não há CLI. Mensagem clara em vez de
+# "No such file or directory".
+_need-cli:
+	@test -x "$(CLI)" || { \
+	  echo "$(CLI) não existe — rode 'make build' primeiro."; \
+	  exit 1; \
+	}

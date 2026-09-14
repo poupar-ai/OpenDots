@@ -1,15 +1,151 @@
-# claude-project-memory
+# open-poupar.ai
 
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
+**A edição aberta da [poupar.ai](https://poupar.ai) — memória persistente e um time de
+agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.**
+
+[![poupar.ai](https://img.shields.io/badge/poupar.ai-site-2F6FED)](https://poupar.ai)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange.svg)](./LICENSE)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
 
-> ⚠️ **Em desenvolvimento ativo** — funcional, mas ainda em evolução. Feedbacks, bugs e PRs são bem-vindos. Abra uma [issue](https://github.com/poupar-ai/open-poupar.ai/issues) se encontrar algum problema.
+![O time de agentes do open-poupar.ai trabalhando](docs/assets/demo-agentes.gif)
 
-**Plugin para [Claude Code](https://claude.ai/code) que mantém memória persistente por projeto**, armazenada como arquivos de texto simples dentro do próprio repositório — versionável no git, legível por humanos, sem serviços externos, sem banco de dados.
+## O que faz
 
-Cada projeto tem sua própria memória. O time inteiro compartilha o contexto ao clonar o repo.
+Toda vez que você abre o Claude Code, ele começa do zero. O open-poupar.ai resolve isso
+com duas coisas que funcionam juntas:
+
+**1. Memória que mora no repositório.** Cada edição, comando e decisão vira uma linha de
+JSONL dentro de `.poupar/`, no seu próprio projeto. No começo de cada
+sessão isso é injetado de volta no contexto do Claude — ele já abre sabendo a stack, os
+padrões, as decisões e as armadilhas do projeto. Como é texto puro versionado no git,
+`git diff` mostra o que a memória aprendeu, e quem clonar o repo herda o contexto inteiro.
+
+**2. Um time de agentes, não um assistente só.** Você define papéis — manager, oracle,
+arquiteto, revisor, tester, devs por senioridade, especialistas — cada um com seu modelo,
+suas ferramentas, seu escopo e seu contexto. Eles conversam entre si, delegam, escalam
+para você quando travam, e tudo fica registrado. O canvas acima é a UI local onde você
+acompanha e conversa com o time.
+
+Concretamente, ele:
+
+| | |
+|---|---|
+| **Grava** | edições (com `git diff --numstat`), comandos (com resumo de saída de teste/lint), correções suas e armadilhas `falha → conserto → sucesso` |
+| **Injeta** | SOUL/PROJECT/DECISIONS/GOTCHAS, sessões recentes, estado do git, índice de código e padrões do grafo — com orçamento de tokens por prioridade |
+| **Detecta** | arquivos mais quentes, acoplamentos (arquivos editados juntos) e workflows recorrentes (`editar X → rodar Y`) |
+| **Orquestra** | time de agentes com handoff, subagentes paralelos, cron, pipelines e fila com retry |
+| **Protege** | cofre criptografado por projeto, identidade Ed25519 por agente, allowlist de comandos e bloqueio de operação destrutiva |
+
+Roda inteiro na sua máquina: sem conta, sem nuvem, sem telemetria. O binário é estático e
+não depende de runtime nenhum.
 
 ---
+
+## Instalação
+
+> **Licença:** uso livre para fins **não-comerciais** (pessoal, estudo, ONG,
+> escola, órgão público). Uso em empresa exige licença comercial — veja
+> [Licença](#licença).
+
+### Via curl (recomendado)
+
+**Pré-requisito:** [Claude Code](https://claude.ai/code). Só isso — os binários
+são compilados e distribuídos prontos; não precisa de Node, Rust nem git.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
+```
+
+O instalador detecta seu SO/arquitetura, baixa o tarball da última release,
+**confere o SHA-256**, instala em `~/.local/share/open-poupar`, cria o symlink
+`~/.local/bin/poupar` e registra o plugin no `~/.claude/settings.json` (merge
+seguro — não sobrescreve suas outras configurações).
+
+Reinicie o Claude Code e rode `/mem-setup` dentro de um projeto.
+
+Plataformas com binário pronto:
+
+| SO | Arquitetura | Target |
+|---|---|---|
+| Linux | x86_64 | `x86_64-unknown-linux-musl` (estático) |
+| Linux | ARM64 | `aarch64-unknown-linux-musl` (estático) |
+| macOS | Intel | `x86_64-apple-darwin` |
+| macOS | Apple Silicon | `aarch64-apple-darwin` |
+
+Ajustes por variável de ambiente:
+
+```bash
+# versão específica em vez da última
+curl -fsSL .../install.sh | POUPAR_VERSION=v0.1.0 bash
+
+# outro diretório de instalação
+curl -fsSL .../install.sh | POUPAR_HOME=/opt/open-poupar bash
+
+# instalar os arquivos sem tocar no settings.json
+curl -fsSL .../install.sh | POUPAR_NO_REGISTER=1 bash
+```
+
+Para desinstalar (a memória dos seus projetos **não** é tocada):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
+```
+
+Prefere não canalizar um script pro shell? Baixe, leia, execute:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh
+less install.sh && bash install.sh
+```
+
+### Via Claude Code
+
+Abra o Claude Code e peça:
+
+> "Instale o plugin poupar-ai/open-poupar.ai"
+
+Ou execute diretamente no terminal:
+
+```bash
+claude plugins marketplace add poupar-ai/open-poupar.ai
+claude plugins install open-poupar@open-poupar
+```
+
+Reinicie o Claude Code. Pronto.
+
+### Do código-fonte
+
+**Pré-requisitos:** [Claude Code](https://claude.ai/code) + Rust 1.88 + Node.js
+(a UI é buildada com Vite).
+
+```bash
+git clone https://github.com/poupar-ai/open-poupar.ai.git
+cd open-poupar.ai
+make install
+```
+
+```bash
+make status     # verifica se está instalado
+make uninstall  # remove o plugin
+```
+
+Os hooks rodam sempre os binários compilados; o `plugin/hooks/run-hook.sh`
+só resolve onde eles estão (`plugin/bin/` no tarball, `v2/target/release/`
+no clone). Por isso `make build` é obrigatório antes do `make install`.
+
+Para gerar seu próprio tarball de release:
+
+```bash
+scripts/package.sh                              # target nativo
+scripts/package.sh --target aarch64-apple-darwin  # cross-compile
+scripts/smoke-package.sh                        # confere que o tarball roda
+```
+
+### E o Node?
+
+Não precisa. O runtime inteiro — hooks, MCP server, servidor HTTP, CLI e
+indexador — é Rust compilado num binário estático. Node só entra pra buildar
+a UI a partir do fonte, e mesmo isso o tarball já traz pronto.
 
 ## Filosofia
 
@@ -67,12 +203,12 @@ Isso leva a respostas genéricas, violações de padrões estabelecidos e retrab
 
 ## A solução
 
-O **claude-project-memory** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
+O **open-poupar.ai** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
 
 ```
 Você abre o Claude Code
         ↓
-Banner: "🧠 project-man | meu-projeto | 12 sessões · 340 obs | PROJECT.md ✓"
+Banner: "🧠 open-poupar | meu-projeto | 12 sessões · 340 obs | PROJECT.md ✓"
         ↓
 Você digita o primeiro prompt
         ↓
@@ -87,126 +223,15 @@ Ao encerrar → resumo da sessão gerado automaticamente
 
 ---
 
-## Instalação
-
-> **Licença:** uso livre para fins **não-comerciais** (pessoal, estudo, ONG,
-> escola, órgão público). Uso em empresa exige licença comercial — veja
-> [Licença](#licença).
-
-### Via curl (recomendado)
-
-**Pré-requisito:** [Claude Code](https://claude.ai/code). Só isso — os binários
-são compilados e distribuídos prontos; não precisa de Node, Rust nem git.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
-```
-
-O instalador detecta seu SO/arquitetura, baixa o tarball da última release,
-**confere o SHA-256**, instala em `~/.local/share/project-mem`, cria o symlink
-`~/.local/bin/pmem` e registra o plugin no `~/.claude/settings.json` (merge
-seguro — não sobrescreve suas outras configurações).
-
-Reinicie o Claude Code e rode `/mem-setup` dentro de um projeto.
-
-Plataformas com binário pronto:
-
-| SO | Arquitetura | Target |
-|---|---|---|
-| Linux | x86_64 | `x86_64-unknown-linux-musl` (estático) |
-| Linux | ARM64 | `aarch64-unknown-linux-musl` (estático) |
-| macOS | Intel | `x86_64-apple-darwin` |
-| macOS | Apple Silicon | `aarch64-apple-darwin` |
-
-Ajustes por variável de ambiente:
-
-```bash
-# versão específica em vez da última
-curl -fsSL .../install.sh | PMEM_VERSION=v0.1.0 bash
-
-# outro diretório de instalação
-curl -fsSL .../install.sh | PMEM_HOME=/opt/project-mem bash
-
-# instalar os arquivos sem tocar no settings.json
-curl -fsSL .../install.sh | PMEM_NO_REGISTER=1 bash
-```
-
-Para desinstalar (a memória dos seus projetos **não** é tocada):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
-```
-
-Prefere não canalizar um script pro shell? Baixe, leia, execute:
-
-```bash
-curl -fsSLO https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh
-less install.sh && bash install.sh
-```
-
-### Via Claude Code
-
-Abra o Claude Code e peça:
-
-> "Instale o plugin poupar-ai/open-poupar.ai"
-
-Ou execute diretamente no terminal:
-
-```bash
-claude plugins marketplace add poupar-ai/open-poupar.ai
-claude plugins install project-mem@project-mem
-```
-
-Reinicie o Claude Code. Pronto.
-
-### Do código-fonte
-
-**Pré-requisitos:** [Claude Code](https://claude.ai/code) + Rust 1.88 + Node.js
-(a UI é buildada com Vite).
-
-```bash
-git clone https://github.com/poupar-ai/open-poupar.ai.git
-cd open-poupar.ai
-make install
-```
-
-```bash
-make status     # verifica se está instalado
-make uninstall  # remove o plugin
-```
-
-Na instalação por clone os hooks rodam a implementação `.cjs` (Node); no
-tarball rodam os binários compilados. Os dois produzem a mesma saída — quem
-decide é o `plugin/hooks/run-hook.sh`, que só escolhe o binário quando ele
-está presente em `plugin/bin/`.
-
-Para gerar seu próprio tarball de release:
-
-```bash
-scripts/package.sh                              # target nativo
-scripts/package.sh --target aarch64-apple-darwin  # cross-compile
-scripts/smoke-package.sh                        # confere que o tarball roda
-```
-
-### E o Node?
-
-O runtime do plugin — hooks, MCP server, servidor HTTP e UI — é 100% Rust
-compilado e não precisa de Node. Duas coisas opcionais ainda chamam Node
-quando você as usa: os skills `/mem-agents` e `/mem-index`, e o CLI de seed
-(`plugin/scripts/seed.cjs setup`). Sem Node instalado o plugin funciona; só
-esses extras ficam indisponíveis.
-
----
-
 ## Como a memória é armazenada
 
-Dentro de cada projeto, em `.claude-project-memory/`:
+Dentro de cada projeto, em `.poupar/`:
 
 ```
 meu-projeto/
 ├── .claude/
 │   └── CLAUDE.md                     ← gerado automaticamente pelo plugin (leitura nativa do Claude)
-└── .claude-project-memory/
+└── .poupar/
     ├── SOUL.md             ← alma: valores, filosofia, voz (raramente muda)
     ├── PROJECT.md          ← contexto permanente (stack, padrões, decisões)
     ├── DECISIONS.md        ← log renderizado de decisões do projeto
@@ -241,7 +266,7 @@ O `.claude/CLAUDE.md` é atualizado automaticamente toda vez que o PROJECT.md mu
 - Funciona com ferramentas de busca padrão (`grep`, `jq`, `cat`)
 - Zero dependência de banco de dados
 
-**Commitar ou não?** Você decide. Por padrão, o plugin não adiciona `.gitignore`. Commitar o `.claude-project-memory/` significa que qualquer dev que clonar o projeto já tem o contexto completo.
+**Commitar ou não?** Você decide. Por padrão, o plugin não adiciona `.gitignore`. Commitar o `.poupar/` significa que qualquer dev que clonar o projeto já tem o contexto completo.
 
 ---
 
@@ -283,7 +308,7 @@ O que faz:
 1. Lê manifestos de dependência, configs, estrutura de pastas e amostra de código
 2. Apresenta um diagnóstico: stack, arquitetura, padrões identificados, como rodar
 3. Pergunta ao dev por contexto que não está no código (restrições, decisões, armadilhas)
-4. Cria `.claude-project-memory/PROJECT.md` com tudo documentado
+4. Cria `.poupar/PROJECT.md` com tudo documentado
 
 A partir daí, o Claude nunca "esquece" o padrão do projeto.
 
@@ -350,13 +375,13 @@ Para subir manualmente:
 
 ```bash
 # instalação por tarball
-PROJECT_MEM_PORT=37778 ~/.local/share/project-mem/plugin/bin/pmem-http
+POUPAR_PORT=37778 ~/.local/share/open-poupar/plugin/bin/poupar-http
 
 # instalação por clone (precisa de build prévio)
 cd /caminho/para/open-poupar.ai
 cargo build --release --manifest-path v2/Cargo.toml -p api-http
 cd ui-next && npm install && npm run build
-PROJECT_MEM_PORT=37778 v2/target/release/pmem-http
+POUPAR_PORT=37778 v2/target/release/poupar-http
 ```
 
 O binário deve ser executado a partir da raiz do projeto que você quer
@@ -457,35 +482,30 @@ open-poupar.ai/
 ├── Makefile                        ← install / uninstall / status (fonte)
 ├── scripts/
 │   ├── package.sh                  ← monta o tarball de release
-│   ├── smoke-package.sh            ← verifica que o tarball roda fora do clone
-│   ├── install.cjs                 ← atualiza ~/.claude/settings.json
-│   ├── uninstall.cjs
-│   └── status.cjs
+│   └── smoke-package.sh            ← verifica que o tarball roda fora do clone
 ├── plugin/
 │   ├── bin-path.sh                 ← resolve onde os binários compilados estão
 │   ├── hooks/
 │   │   ├── hooks.json              ← UserPromptSubmit, PostToolUse, SessionEnd
-│   │   └── run-hook.sh             ← escolhe binário compilado ou .cjs
-│   ├── scripts/*.cjs               ← implementação Node (instalação por clone)
-│   ├── mcp/server.cjs              ← MCP server em Node (instalação por clone)
+│   │   └── run-hook.sh             ← resolve e executa o binário do hook
 │   ├── skills/                     ← /mem-setup, /mem-soul, /mem-decision, …
-│   ├── agent-bin/pmem              ← wrapper de API usado dentro dos agentes
+│   ├── agent-bin/poupar              ← wrapper de API usado dentro dos agentes
 │   └── seeds/ pipelines/ best-practices/
 ├── ui-next/                        ← front React + Vite (build → ui-next/dist)
 └── v2/                             ← workspace Rust (a implementação compilada)
-    ├── crates/api-cli              → pmem
-    ├── crates/api-hooks            → pmem-hook-{startup,observe,session-init,session-end}
-    ├── crates/api-http             → pmem-http (API + UI)
-    ├── crates/api-mcp              → pmem-mcp
+    ├── crates/api-cli              → poupar
+    ├── crates/api-hooks            → poupar-hook-{startup,observe,session-init,session-end}
+    ├── crates/api-http             → poupar-http (API + UI)
+    ├── crates/api-mcp              → poupar-mcp
     ├── crates/core-*               ← paths, storage, queue, ports, branding
     └── crates/domain-*             ← 20+ domínios (agents, graph, vault, cron, …)
 ```
 
 Layout de uma instalação por tarball — é isso que o `install.sh` deixa em
-`~/.local/share/project-mem`:
+`~/.local/share/open-poupar`:
 
 ```
-project-mem/
+open-poupar/
 ├── .claude-plugin/marketplace.json ← faz o Claude Code reconhecer o plugin
 ├── plugin/
 │   ├── bin/                        ← os 7 binários compilados
@@ -500,21 +520,42 @@ Os binários acham `plugin/` e `ui/` a partir do **próprio executável**
 
 ---
 
-## Comparação com claude-mem
+## Onde ele se diferencia
 
-|  | [claude-mem](https://github.com/thedotmack/claude-mem) | claude-project-memory |
-|--|---|---|
-| Armazenamento | `~/.claude-mem/` (global na máquina) | `.claude-project-memory/` (dentro de cada projeto) |
-| Formato | SQLite + Chroma (binário) | JSONL (texto puro) |
-| Git | Não commitável diretamente | Feito para commitar e compartilhar |
-| Worker | Processo Bun em background | Sem worker — hooks são binários de execução curta |
-| Dependências | Bun, tree-sitter, SQLite, Chroma | Nenhuma — binário estático |
-| Busca | Semântica via embeddings | Full-text + grafo de padrões |
-| Compartilhamento | Memória pessoal de cada dev | Compartilhada via git com o time |
+O espaço de "memória para agente de código" tem três famílias, e elas resolvem problemas
+diferentes. Vale entender em qual você está entrando antes de escolher.
 
-Os dois podem coexistir — servem propósitos diferentes.
+**Serviços hospedados** (Supermemory, Mem0 e afins, inclusive como provider do Hermes
+Agent) — memória fica num serviço externo, com busca semântica e perfil que atravessa
+projetos e ferramentas. Você ganha recall entre contextos; paga com dependência de rede,
+conta e um terceiro guardando o que seu time discute.
 
----
+**Plugins de memória local** (do `MEMORY.md` curado ao SQLite com embeddings) — arquivo ou
+banco na sua máquina, injetado no início da sessão. Simples e privado; a memória costuma
+ser pessoal daquela máquina e o escopo é lembrar fatos.
+
+**open-poupar.ai** — memória versionada *dentro do repositório* **e** um time de agentes
+operando sobre ela.
+
+O que decorre disso, concretamente:
+
+| | open-poupar.ai |
+|---|---|
+| **Onde a memória vive** | `.poupar/` no seu repo — `git diff` mostra o que ela aprendeu, `git blame` mostra quando, e quem clona herda o contexto |
+| **De quem é a memória** | do projeto, não da máquina: o time inteiro compartilha pelo git, sem sync nem servidor |
+| **Formato** | JSONL e Markdown legíveis — `grep`, `jq` e qualquer editor funcionam; nada de blob binário |
+| **Escopo** | além de lembrar fatos: time de agentes com papéis, handoff, subagentes paralelos, cron, pipelines e fila com retry |
+| **Dependências** | binário estático — sem conta, sem nuvem, sem telemetria, sem runtime |
+| **Se o projeto sumir** | a memória continua legível: são arquivos de texto no seu repo, sem formato proprietário |
+
+O custo honesto dessa escolha: a memória **não** atravessa projetos nem máquinas
+automaticamente (é justamente o que o git resolve, e o que um serviço hospedado faz por
+você), e a busca é full-text com BM25 (SQLite FTS5) mais um grafo de padrões — não
+embeddings semânticos. Se o que você quer é um perfil único te seguindo por todas as
+ferramentas, um serviço hospedado atende melhor. Se você quer que **o repositório** saiba
+de si mesmo e que um time opere sobre ele, é aqui.
+
+Os dois modelos coexistem — resolvem camadas diferentes.
 
 ## Débitos técnicos a resolver
 
@@ -529,7 +570,7 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 
 ### Segurança (auditoria 2026-05-20)
 
-> Postura padrão hoje: `PROJECT_MEM_REQUIRE_HUMAN` on (escritas exigem JWT), mas
+> Postura padrão hoje: `POUPAR_REQUIRE_HUMAN` on (escritas exigem JWT), mas
 > `authorize()` libera tudo a qualquer principal autenticado; **GETs não exigem
 > auth**; `REQUIRE_TOKEN` off; bind padrão `lan` (`0.0.0.0`). Confirmado SEGURO:
 > sem command-injection no spawn (argv, sem shell), sem SSRF (não há cliente HTTP
@@ -581,7 +622,7 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 - **Secrets de MCP vault-backed exibidos em texto plano** no `McpForm.tsx:91` (via
   `getMcp`) — sem máscara/reveal-gate.
 - **Plugin Node**: `mem_dir` guiado por `cwd`/`file_path` não-confiáveis do hook
-  (`plugin/scripts/lib.cjs:13-29`, `observe.cjs:147`).
+  (no port Rust equivalente).
 - **Restore não revalida `entry.path` do manifest** (`db_routes.rs:271`) —
   zip-slip latente (vira live com upload).
 - **Server token com PRNG fraco** (`auth_routes.rs` `simple_uuid_v4`) + compare
@@ -591,10 +632,10 @@ Pontos mapeados pra melhorar (com referência ao código). Ordenados por impacto
 - `exp` sem teto e claim `ver` não validado; EdDSA usa `verify` (não
   `verify_strict`); JWT humano/agente sem claim `typ`/`aud` (confusão de realm).
 - PBKDF2 100k rounds (OWASP ≥600k); senha mínima 4 chars.
-- `/api/_dev/mint_token` auto-provisiona identidade — só com `PROJECT_MEM_DEV_MODE=1`.
+- `/api/_dev/mint_token` auto-provisiona identidade — só com `POUPAR_DEV_MODE=1`.
 - Garantir `agent_keys/` e `human_keys/` (`.priv`) no `.gitignore`.
 - Prompt-injection via observações reinjetadas; MCP server carrega JSONL inteiro
-  (DoS local); `install.cjs` não-atômico; colisão de chave de cofre `foo-bar`↔`foo_bar`.
+  (DoS local); escrita de settings.json não-atômica; colisão de chave de cofre `foo-bar`↔`foo_bar`.
 
 ### Médio
 
@@ -636,32 +677,34 @@ git clone https://github.com/poupar-ai/open-poupar.ai.git
 cd open-poupar.ai
 ```
 
-O runtime oficial é o workspace Rust em `v2/` — `cargo build --release` a
-partir de `v2/` produz os 7 binários. Os `.cjs` em `plugin/scripts/` são a
-implementação Node original, mantida como fallback da instalação por clone
-e como referência de paridade dos testes.
+O runtime é o workspace Rust em `v2/` — `cargo build --release` a partir de
+`v2/` produz os 7 binários. A implementação Node original (`.cjs`) foi
+removida junto com sua suíte de paridade; o histórico do git guarda a
+referência de quem quiser comparar.
 
 **Para testar um hook manualmente:**
 
 ```bash
+make build
+
 # banner de status
-node plugin/scripts/startup.cjs
+echo '{"session_id":"test","cwd":"/seu/projeto"}' \
+  | v2/target/release/poupar-hook-startup
 
 # injeção de contexto
-echo '{"session_id":"test","cwd":"/seu/projeto"}' | node plugin/scripts/session-init.cjs
+echo '{"session_id":"test","cwd":"/seu/projeto"}' \
+  | v2/target/release/poupar-hook-session-init
 
 # gravar observação
-echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"pytest -v"},"tool_response":{"exit_code":0}}' | node plugin/scripts/observe.cjs
+echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"pytest -v"},"tool_response":{"exit_code":0},"cwd":"/seu/projeto"}' \
+  | v2/target/release/poupar-hook-observe
 ```
 
-**Para testar os binários compilados:**
+**Para testar os hooks:**
 
 ```bash
-cd v2 && cargo build --release && cd ..
+make build
 
-# o dispatcher só escolhe o binário quando ele está "instalado" —
-# no clone, aponte explicitamente:
-export PROJECT_MEM_BIN_DIR="$PWD/v2/target/release"
 echo '{"session_id":"test","cwd":"/seu/projeto"}' \
   | CLAUDE_PLUGIN_ROOT="$PWD/plugin" bash plugin/hooks/run-hook.sh session-init
 ```
@@ -698,7 +741,7 @@ scripts/package.sh && scripts/smoke-package.sh
 
 ## Apoie o projeto
 
-O **claude-project-memory** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
+O **open-poupar.ai** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/schedylabs)
 
@@ -718,7 +761,7 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Palavras-chave
 
-`claude-code` `claude-code-plugin` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph`
+`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph`
 
 ---
 

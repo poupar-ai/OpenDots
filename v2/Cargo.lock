@@ -158,6 +158,8 @@ name = "api-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "core-paths",
+ "domain-indexer",
  "serde_json",
  "tempfile",
  "thiserror",

@@ -1,11 +1,11 @@
 ---
 name: mem-decision
-description: Registra uma decisão técnica, arquitetural ou de produto em .claude-project-memory/decisions.jsonl, injetada em sessões futuras.
+description: Registra uma decisão técnica, arquitetural ou de produto em .poupar/decisions.jsonl, injetada em sessões futuras.
 ---
 
 # /mem-decision — Registrar uma decisão do projeto
 
-Registra uma decisão técnica, arquitetural ou de produto no histórico do projeto. Decisões ficam em `.claude-project-memory/decisions.jsonl` e são injetadas automaticamente em toda sessão futura.
+Registra uma decisão técnica, arquitetural ou de produto no histórico do projeto. Decisões ficam em `.poupar/decisions.jsonl` e são injetadas automaticamente em toda sessão futura.
 
 **Entrada:** $ARGUMENTS
 
@@ -15,7 +15,7 @@ Registra uma decisão técnica, arquitetural ou de produto no histórico do proj
 git rev-parse --show-toplevel
 ```
 
-Se o comando falhar, use `pwd`. O diretório de memória é `<raiz>/.claude-project-memory/`.
+Se o comando falhar, use `pwd`. O diretório de memória é `<raiz>/.poupar/`.
 
 Se o diretório não existir, informe ao dev que este projeto ainda não tem memória e sugira rodar `/mem-setup` antes.
 
@@ -37,7 +37,7 @@ Se o dev mandar só `$ARGUMENTS` sem explicação clara, pergunte uma vez: **"Qu
 
 ## 3. Append no JSONL
 
-Acrescente uma linha em `.claude-project-memory/decisions.jsonl`:
+Acrescente uma linha em `.poupar/decisions.jsonl`:
 
 ```json
 {"id":"<uuid-curto>","what":"<o que>","why":"<por quê>","ts":"<ISO8601>","session_id":"<id-atual se disponível>"}
@@ -47,14 +47,14 @@ Para o `id`, use um identificador curto e único — pode ser os primeiros 8 cha
 
 Comando sugerido:
 ```bash
-printf '%s\n' "$(jq -cn --arg what "<what>" --arg why "<why>" --arg ts "$(date -u +%FT%TZ)" --arg id "$(date -u +%Y%m%d%H%M%S)" '{id:$id, what:$what, why:$why, ts:$ts}')" >> .claude-project-memory/decisions.jsonl
+printf '%s\n' "$(jq -cn --arg what "<what>" --arg why "<why>" --arg ts "$(date -u +%FT%TZ)" --arg id "$(date -u +%Y%m%d%H%M%S)" '{id:$id, what:$what, why:$why, ts:$ts}')" >> .poupar/decisions.jsonl
 ```
 
 Se `jq` não estiver disponível, escreva manualmente a linha JSON tomando cuidado com escape de aspas.
 
 ## 4. Renderize DECISIONS.md
 
-Após o append, regenere `.claude-project-memory/DECISIONS.md` a partir do JSONL — simples markdown append-only, ordem cronológica decrescente:
+Após o append, regenere `.poupar/DECISIONS.md` a partir do JSONL — simples markdown append-only, ordem cronológica decrescente:
 
 ```markdown
 # Decisões do projeto
@@ -73,7 +73,7 @@ Você pode ler o JSONL completo, mapear cada linha e regravar o MD inteiro. É u
 Mostre ao dev:
 - A entrada exata que foi gravada (`what` + `why`)
 - O caminho do arquivo JSONL e do MD
-- Sugestão de commit: `git add .claude-project-memory/ && git commit -m "chore: registrar decisão — <resumo curto>"`
+- Sugestão de commit: `git add .poupar/ && git commit -m "chore: registrar decisão — <resumo curto>"`
 
 ## Exemplos de uso
 

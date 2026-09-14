@@ -5,14 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-# MCP server stdio para `claude-project-memory`. Expõe memória do projeto
+# MCP server stdio para `open-poupar.ai`. Expõe memória do projeto
 # como tools callable pelo Claude durante a conversa. Lib pura (tools +
 # JSON-RPC dispatch) + bin thin (readline-like stdio loop).
 [lib]
 path = "src/lib.rs"
 
 [[bin]]
-name = "pmem-mcp"
+name = "poupar-mcp"
 path = "src/bin/mcp.rs"
 
 [dependencies]

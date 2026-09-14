@@ -10,10 +10,10 @@
 //!
 //! | Hook             | Módulo             | Binário              | Origem               |
 //! |------------------|--------------------|----------------------|----------------------|
-//! | SessionStart     | [`startup`]        | `pmem-hook-startup`  | `startup.cjs`        |
-//! | PostToolUse      | *(pendente)*       | `pmem-hook-observe`  | `observe.cjs`        |
-//! | UserPromptSubmit | *(pendente)*       | `pmem-hook-session-init` | `session-init.cjs`|
-//! | SessionEnd       | *(pendente)*       | `pmem-hook-session-end`  | `session-end.cjs`|
+//! | SessionStart     | [`startup`]        | `poupar-hook-startup`  | `startup.cjs`        |
+//! | PostToolUse      | *(pendente)*       | `poupar-hook-observe`  | `observe.cjs`        |
+//! | UserPromptSubmit | *(pendente)*       | `poupar-hook-session-init` | `session-init.cjs`|
+//! | SessionEnd       | *(pendente)*       | `poupar-hook-session-end`  | `session-end.cjs`|
 
 pub mod observe;
 pub mod session_end;

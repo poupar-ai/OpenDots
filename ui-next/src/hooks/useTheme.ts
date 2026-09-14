@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
 
-const STORAGE_KEY = 'project-mem:theme';
+const STORAGE_KEY = 'open-poupar:theme';
 
 function readInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'light';

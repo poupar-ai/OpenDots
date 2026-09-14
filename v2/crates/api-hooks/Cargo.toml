@@ -14,19 +14,19 @@ path = "src/lib.rs"
 # Hook: SessionStart (startup | clear | compact). Mostra banner de status,
 # ensure UI autostart, warn se MCP não está registrado.
 [[bin]]
-name = "pmem-hook-startup"
+name = "poupar-hook-startup"
 path = "src/bin/startup.rs"
 
 # Hook: PostToolUse. Captura tool calls do Claude (Write/Edit/Bash/Task)
 # e grava observação JSONL + atualiza grafo.
 [[bin]]
-name = "pmem-hook-observe"
+name = "poupar-hook-observe"
 path = "src/bin/observe.rs"
 
 # Hook: SessionEnd. Gera summary da sessão, detecta gotchas (fail→edit→success),
 # regenera DECISIONS/GOTCHAS/GLOSSARY.md, update incremental do code index.
 [[bin]]
-name = "pmem-hook-session-end"
+name = "poupar-hook-session-end"
 path = "src/bin/session_end.rs"
 
 # Hook: UserPromptSubmit. Primeira vez → onboarding; subsequentes → injeta
@@ -34,7 +34,7 @@ path = "src/bin/session_end.rs"
 # correções + decisões + gotchas + observações + code index + graph,
 # com token budget priority-aware.
 [[bin]]
-name = "pmem-hook-session-init"
+name = "poupar-hook-session-init"
 path = "src/bin/session_init.rs"
 
 [dependencies]

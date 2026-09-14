@@ -6,7 +6,7 @@
 //!
 //! ## Opt-in first
 //!
-//! project-mem guarda dados sensíveis do usuário (secrets, decisões
+//! open-poupar guarda dados sensíveis do usuário (secrets, decisões
 //! arquiteturais). Telemetria **nunca** é ligada por default. O
 //! adapter padrão é no-op até o usuário ativar explicitamente; a
 //! variante de erro `Disabled` existe para o domínio saber quando a

@@ -1,4 +1,4 @@
-//! `pmem-hook-startup` — thin entrypoint do `SessionStart`.
+//! `poupar-hook-startup` — thin entrypoint do `SessionStart`.
 //!
 //! Paridade com `plugin/scripts/startup.cjs`: coleta inputs do env/FS,
 //! chama [`api_hooks::startup::build_banner`], imprime uma linha JSON.
@@ -30,7 +30,7 @@ fn main() -> ExitCode {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     let md = mem_dir(&cwd);
-    let port: u16 = env::var("PROJECT_MEM_PORT")
+    let port: u16 = env::var("POUPAR_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(37778);

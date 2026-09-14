@@ -1,13 +1,13 @@
 // Helper de fetch que injeta o Bearer token salvo no localStorage,
 // quando configurado. Middleware do servidor exige isso quando rodando
-// com `PROJECT_MEM_REQUIRE_TOKEN=1`. Sem token, fetches passam sem
+// com `POUPAR_REQUIRE_TOKEN=1`. Sem token, fetches passam sem
 // header — compat com modo dev (default).
 //
 // Migração orgânica: ao tocar um fetch existente, troca pra apiFetch.
 // Fetches que não usarem isso continuam funcionando enquanto enforcement
 // estiver off; quando ligado, vão receber 401 até serem migrados.
 
-const TOKEN_KEY = 'project-mem.server_token';
+const TOKEN_KEY = 'open-poupar.server_token';
 
 export function getServerToken(): string | null {
   try {

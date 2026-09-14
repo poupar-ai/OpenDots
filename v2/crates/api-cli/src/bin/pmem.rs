@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use api_cli::{
     apply_install, apply_uninstall, describe_status, read_settings, settings_path, write_settings,
-    InstallConfig, StatusReport,
+    InstallConfig, McpLauncher, StatusReport,
 };
 use clap::{Parser, Subcommand};
 use serde_json::Value;
@@ -76,11 +76,17 @@ fn run_install(install_dir: PathBuf, node_bin: Option<PathBuf>) -> ExitCode {
         .or_else(|| std::env::var_os("NODE_BIN").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("node"));
 
+    let mcp = McpLauncher::detect(&install_dir, node_bin);
+    let mcp_label = match &mcp {
+        McpLauncher::Node { .. } => "node",
+        McpLauncher::Native => "nativo",
+    };
+
     apply_install(
         &mut settings,
         &InstallConfig {
             install_dir: install_dir.clone(),
-            node_bin,
+            mcp,
         },
     );
 
@@ -91,7 +97,7 @@ fn run_install(install_dir: PathBuf, node_bin: Option<PathBuf>) -> ExitCode {
 
     println!("✓ settings.json atualizado: {}", path.display());
     println!("✓ Plugin registrado em: {}", install_dir.display());
-    println!("✓ MCP server registrado: project-mem");
+    println!("✓ MCP server registrado: project-mem ({mcp_label})");
     ExitCode::SUCCESS
 }
 

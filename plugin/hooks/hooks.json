@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session-init.cjs\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh\" session-init",
             "timeout": 10,
             "statusMessage": "Carregando memória do projeto..."
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/observe.cjs\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh\" observe",
             "timeout": 5,
             "async": true
           }
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "_NODE=\"$(ls $HOME/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)\"; [ -z \"$_NODE\" ] && _NODE=\"node\"; \"$_NODE\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.cjs\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh\" session-end",
             "timeout": 10
           },
           {

@@ -7,7 +7,7 @@ ifeq ($(NODE),)
 NODE := node
 endif
 
-.PHONY: install uninstall status help ui ui-dev
+.PHONY: install uninstall status help ui ui-dev build package smoke
 
 help:
 	@echo ""
@@ -18,7 +18,20 @@ help:
 	@echo "  make status     Verifica se o plugin está instalado"
 	@echo "  make ui         Instala deps e builda a UI React (ui-next/dist)"
 	@echo "  make ui-dev     Roda Vite dev server (porta 5173, proxy /api → 37778)"
+	@echo "  make build      Compila os binários Rust em release"
+	@echo "  make package    Monta o tarball de release em dist/"
+	@echo "  make smoke      Verifica que o tarball de dist/ roda fora do clone"
 	@echo ""
+
+# `cd v2` para que v2/rust-toolchain.toml valha — mesmo pin do package.sh.
+build:
+	@cd v2 && cargo build --release --workspace
+
+package:
+	@bash scripts/package.sh
+
+smoke:
+	@bash scripts/smoke-package.sh
 
 ui:
 	@cd ui-next && npm install --silent && npm run build

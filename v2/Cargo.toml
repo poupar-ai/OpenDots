@@ -39,8 +39,8 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-license = "Proprietary"
-repository = "https://github.com/tiago/project-mem"
+license = "PolyForm-Noncommercial-1.0.0"
+repository = "https://github.com/poupar-ai/open-poupar.ai"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

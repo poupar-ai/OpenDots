@@ -1,9 +1,9 @@
 # claude-project-memory
 
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange.svg)](./LICENSE)
 
-> ⚠️ **Em desenvolvimento ativo** — funcional, mas ainda em evolução. Feedbacks, bugs e PRs são bem-vindos. Abra uma [issue](https://github.com/schedylabs/claude-project-memory/issues) se encontrar algum problema.
+> ⚠️ **Em desenvolvimento ativo** — funcional, mas ainda em evolução. Feedbacks, bugs e PRs são bem-vindos. Abra uma [issue](https://github.com/poupar-ai/open-poupar.ai/issues) se encontrar algum problema.
 
 **Plugin para [Claude Code](https://claude.ai/code) que mantém memória persistente por projeto**, armazenada como arquivos de texto simples dentro do próprio repositório — versionável no git, legível por humanos, sem serviços externos, sem banco de dados.
 
@@ -89,28 +89,84 @@ Ao encerrar → resumo da sessão gerado automaticamente
 
 ## Instalação
 
-### Via Claude Code (recomendado)
+> **Licença:** uso livre para fins **não-comerciais** (pessoal, estudo, ONG,
+> escola, órgão público). Uso em empresa exige licença comercial — veja
+> [Licença](#licença).
+
+### Via curl (recomendado)
+
+**Pré-requisito:** [Claude Code](https://claude.ai/code). Só isso — os binários
+são compilados e distribuídos prontos; não precisa de Node, Rust nem git.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
+```
+
+O instalador detecta seu SO/arquitetura, baixa o tarball da última release,
+**confere o SHA-256**, instala em `~/.local/share/project-mem`, cria o symlink
+`~/.local/bin/pmem` e registra o plugin no `~/.claude/settings.json` (merge
+seguro — não sobrescreve suas outras configurações).
+
+Reinicie o Claude Code e rode `/mem-setup` dentro de um projeto.
+
+Plataformas com binário pronto:
+
+| SO | Arquitetura | Target |
+|---|---|---|
+| Linux | x86_64 | `x86_64-unknown-linux-musl` (estático) |
+| Linux | ARM64 | `aarch64-unknown-linux-musl` (estático) |
+| macOS | Intel | `x86_64-apple-darwin` |
+| macOS | Apple Silicon | `aarch64-apple-darwin` |
+
+Ajustes por variável de ambiente:
+
+```bash
+# versão específica em vez da última
+curl -fsSL .../install.sh | PMEM_VERSION=v0.1.0 bash
+
+# outro diretório de instalação
+curl -fsSL .../install.sh | PMEM_HOME=/opt/project-mem bash
+
+# instalar os arquivos sem tocar no settings.json
+curl -fsSL .../install.sh | PMEM_NO_REGISTER=1 bash
+```
+
+Para desinstalar (a memória dos seus projetos **não** é tocada):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
+```
+
+Prefere não canalizar um script pro shell? Baixe, leia, execute:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh
+less install.sh && bash install.sh
+```
+
+### Via Claude Code
 
 Abra o Claude Code e peça:
 
-> "Instale o plugin schedylabs/claude-project-memory"
+> "Instale o plugin poupar-ai/open-poupar.ai"
 
 Ou execute diretamente no terminal:
 
 ```bash
-claude plugins marketplace add schedylabs/claude-project-memory
+claude plugins marketplace add poupar-ai/open-poupar.ai
 claude plugins install project-mem@project-mem
 ```
 
 Reinicie o Claude Code. Pronto.
 
-### Manual
+### Do código-fonte
 
-**Pré-requisito:** [Claude Code](https://claude.ai/code) + Node.js
+**Pré-requisitos:** [Claude Code](https://claude.ai/code) + Rust 1.88 + Node.js
+(a UI é buildada com Vite).
 
 ```bash
-git clone git@github.com:schedylabs/claude-project-memory.git
-cd claude-project-memory
+git clone https://github.com/poupar-ai/open-poupar.ai.git
+cd open-poupar.ai
 make install
 ```
 
@@ -119,7 +175,26 @@ make status     # verifica se está instalado
 make uninstall  # remove o plugin
 ```
 
-O `make install` faz merge seguro no `~/.claude/settings.json` sem sobrescrever outras configurações.
+Na instalação por clone os hooks rodam a implementação `.cjs` (Node); no
+tarball rodam os binários compilados. Os dois produzem a mesma saída — quem
+decide é o `plugin/hooks/run-hook.sh`, que só escolhe o binário quando ele
+está presente em `plugin/bin/`.
+
+Para gerar seu próprio tarball de release:
+
+```bash
+scripts/package.sh                              # target nativo
+scripts/package.sh --target aarch64-apple-darwin  # cross-compile
+scripts/smoke-package.sh                        # confere que o tarball roda
+```
+
+### E o Node?
+
+O runtime do plugin — hooks, MCP server, servidor HTTP e UI — é 100% Rust
+compilado e não precisa de Node. Duas coisas opcionais ainda chamam Node
+quando você as usa: os skills `/mem-agents` e `/mem-index`, e o CLI de seed
+(`plugin/scripts/seed.cjs setup`). Sem Node instalado o plugin funciona; só
+esses extras ficam indisponíveis.
 
 ---
 
@@ -274,16 +349,18 @@ Atualização automática a cada 10 segundos.
 Para subir manualmente:
 
 ```bash
-cd /caminho/para/claude-project-memory
+# instalação por tarball
+PROJECT_MEM_PORT=37778 ~/.local/share/project-mem/plugin/bin/pmem-http
+
+# instalação por clone (precisa de build prévio)
+cd /caminho/para/open-poupar.ai
+cargo build --release --manifest-path v2/Cargo.toml -p api-http
+cd ui-next && npm install && npm run build
 PROJECT_MEM_PORT=37778 v2/target/release/pmem-http
 ```
 
-Build prévio (se faltar):
-
-```bash
-cargo build --release --manifest-path v2/Cargo.toml -p api-http
-cd ui-next && npm install && npm run build
-```
+O binário deve ser executado a partir da raiz do projeto que você quer
+inspecionar — é o `cwd` que define qual memória a UI mostra.
 
 ---
 
@@ -374,33 +451,52 @@ O hook `UserPromptSubmit` monta um bloco de contexto com tudo que for relevante 
 ## Estrutura do repositório
 
 ```
-claude-project-memory/
-├── Makefile                        ← install / uninstall / status
+open-poupar.ai/
+├── install.sh                      ← instalador curl | bash
+├── uninstall.sh
+├── Makefile                        ← install / uninstall / status (fonte)
 ├── scripts/
+│   ├── package.sh                  ← monta o tarball de release
+│   ├── smoke-package.sh            ← verifica que o tarball roda fora do clone
 │   ├── install.cjs                 ← atualiza ~/.claude/settings.json
 │   ├── uninstall.cjs
 │   └── status.cjs
-└── plugin/
-    ├── hooks/hooks.json            ← SessionStart, UserPromptSubmit, PostToolUse, SessionEnd
-    ├── scripts/
-    │   ├── lib.cjs                 ← helpers compartilhados
-    │   ├── startup.cjs             ← banner de status ao abrir
-    │   ├── session-init.cjs        ← injeta contexto no primeiro prompt
-    │   ├── observe.cjs             ← grava edições e comandos (async)
-    │   ├── session-end.cjs         ← gera resumo ao encerrar
-    │   └── graph.cjs               ← grafo de padrões sobre as observações
-    ├── mcp/
-    │   └── server.cjs              ← MCP server (mem_context, mem_search, mem_add_note)
-    ├── skills/
-    │   ├── mem-setup/SKILL.md      ← /mem-setup
-    │   ├── mem-soul/SKILL.md       ← /mem-soul
-    │   ├── mem-decision/SKILL.md   ← /mem-decision
-    │   ├── mem-search/SKILL.md     ← /mem-search
-    │   └── mem-ui/SKILL.md         ← /mem-ui
-    └── ui/
-        ├── server.cjs              ← servidor HTTP sem dependências
-        └── index.html              ← frontend single-page
+├── plugin/
+│   ├── bin-path.sh                 ← resolve onde os binários compilados estão
+│   ├── hooks/
+│   │   ├── hooks.json              ← UserPromptSubmit, PostToolUse, SessionEnd
+│   │   └── run-hook.sh             ← escolhe binário compilado ou .cjs
+│   ├── scripts/*.cjs               ← implementação Node (instalação por clone)
+│   ├── mcp/server.cjs              ← MCP server em Node (instalação por clone)
+│   ├── skills/                     ← /mem-setup, /mem-soul, /mem-decision, …
+│   ├── agent-bin/pmem              ← wrapper de API usado dentro dos agentes
+│   └── seeds/ pipelines/ best-practices/
+├── ui-next/                        ← front React + Vite (build → ui-next/dist)
+└── v2/                             ← workspace Rust (a implementação compilada)
+    ├── crates/api-cli              → pmem
+    ├── crates/api-hooks            → pmem-hook-{startup,observe,session-init,session-end}
+    ├── crates/api-http             → pmem-http (API + UI)
+    ├── crates/api-mcp              → pmem-mcp
+    ├── crates/core-*               ← paths, storage, queue, ports, branding
+    └── crates/domain-*             ← 20+ domínios (agents, graph, vault, cron, …)
 ```
+
+Layout de uma instalação por tarball — é isso que o `install.sh` deixa em
+`~/.local/share/project-mem`:
+
+```
+project-mem/
+├── .claude-plugin/marketplace.json ← faz o Claude Code reconhecer o plugin
+├── plugin/
+│   ├── bin/                        ← os 7 binários compilados
+│   └── hooks/ skills/ seeds/ …     ← assets do plugin
+├── ui/                             ← build da UI
+└── VERSION
+```
+
+Os binários acham `plugin/` e `ui/` a partir do **próprio executável**
+(`core_paths::install`), subindo até o `.claude-plugin/marketplace.json`.
+É o que permite instalar em qualquer diretório sem variável de ambiente.
 
 ---
 
@@ -411,8 +507,8 @@ claude-project-memory/
 | Armazenamento | `~/.claude-mem/` (global na máquina) | `.claude-project-memory/` (dentro de cada projeto) |
 | Formato | SQLite + Chroma (binário) | JSONL (texto puro) |
 | Git | Não commitável diretamente | Feito para commitar e compartilhar |
-| Worker | Processo Bun em background | Sem worker — scripts Node.js diretos |
-| Dependências | Bun, tree-sitter, SQLite, Chroma | Apenas Node.js |
+| Worker | Processo Bun em background | Sem worker — hooks são binários de execução curta |
+| Dependências | Bun, tree-sitter, SQLite, Chroma | Nenhuma — binário estático |
 | Busca | Semântica via embeddings | Full-text + grafo de padrões |
 | Compartilhamento | Memória pessoal de cada dev | Compartilhada via git com o time |
 
@@ -536,11 +632,14 @@ Issues, PRs e sugestões são bem-vindos.
 > Se você usa **Claude Code** para contribuir com este projeto, o repositório já tem um `CLAUDE.md` na raiz com contexto completo da arquitetura, convenções e como testar. O Claude lê esse arquivo automaticamente ao abrir o projeto.
 
 ```bash
-git clone git@github.com:schedylabs/claude-project-memory.git
-cd claude-project-memory
+git clone https://github.com/poupar-ai/open-poupar.ai.git
+cd open-poupar.ai
 ```
 
-Não há build step. Os scripts são Node.js CJS, editáveis diretamente.
+O runtime oficial é o workspace Rust em `v2/` — `cargo build --release` a
+partir de `v2/` produz os 7 binários. Os `.cjs` em `plugin/scripts/` são a
+implementação Node original, mantida como fallback da instalação por clone
+e como referência de paridade dos testes.
 
 **Para testar um hook manualmente:**
 
@@ -555,17 +654,51 @@ echo '{"session_id":"test","cwd":"/seu/projeto"}' | node plugin/scripts/session-
 echo '{"session_id":"test","tool_name":"Bash","tool_input":{"command":"pytest -v"},"tool_response":{"exit_code":0}}' | node plugin/scripts/observe.cjs
 ```
 
+**Para testar os binários compilados:**
+
+```bash
+cd v2 && cargo build --release && cd ..
+
+# o dispatcher só escolhe o binário quando ele está "instalado" —
+# no clone, aponte explicitamente:
+export PROJECT_MEM_BIN_DIR="$PWD/v2/target/release"
+echo '{"session_id":"test","cwd":"/seu/projeto"}' \
+  | CLAUDE_PLUGIN_ROOT="$PWD/plugin" bash plugin/hooks/run-hook.sh session-init
+```
+
+### Publicando uma release
+
+1. Suba a `version` em `v2/Cargo.toml` (`[workspace.package]`).
+2. Commit, tag e push:
+
+   ```bash
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+O workflow [`release.yml`](.github/workflows/release.yml) valida que a tag bate
+com a `version` do workspace, builda a UI uma vez, compila os 4 targets, gera
+`.tar.gz` + `.sha256` de cada um e publica tudo na release. A partir daí o
+`install.sh` já serve a versão nova — ele sempre resolve a última release.
+
+Antes de taggear, dá pra ensaiar tudo localmente:
+
+```bash
+scripts/package.sh && scripts/smoke-package.sh
+```
+
 **Áreas abertas para contribuição:**
 - Perfis de stack (Python/FastAPI, Go, Next.js, Laravel, etc.) para análise especializada no `/mem-setup`
 - Suporte a monorepos
 - Exportação da memória para Markdown
 - Integração com `git log` para enriquecer o contexto automaticamente
+- Zerar a dívida de `cargo fmt` / `cargo clippy` herdada da migração Node→Rust
+  (hoje roda como `continue-on-error` no CI)
 
 ---
 
 ## Apoie o projeto
 
-O **claude-project-memory** é gratuito e open source. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
+O **claude-project-memory** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/schedylabs)
 
@@ -591,4 +724,26 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Licença
 
-MIT — veja [LICENSE](./LICENSE).
+[**PolyForm Noncommercial 1.0.0**](https://polyformproject.org/licenses/noncommercial/1.0.0/) — veja [LICENSE](./LICENSE).
+
+O código é aberto para ler, estudar, modificar e redistribuir, mas **só pode
+ser usado para fins não-comerciais**. Na prática:
+
+| Uso | Permitido |
+|---|---|
+| Projetos pessoais, hobby, estudo, pesquisa | ✅ |
+| ONGs, escolas, universidades, órgãos públicos, saúde | ✅ |
+| Fork, modificação e redistribuição (mantendo a licença e o aviso) | ✅ |
+| Usar no trabalho de uma empresa, mesmo internamente | ❌ |
+| Vender, hospedar como serviço ou embutir num produto pago | ❌ |
+
+Formalmente isso **não** é uma licença open source pela definição da
+[OSI](https://opensource.org/osd) — que exige não discriminar campo de atuação.
+O termo correto é *source available*. O código está todo aqui, é auditável e
+aceita contribuições; o que a licença restringe é o uso comercial.
+
+**Precisa usar comercialmente?** Existe licença comercial — escreva para
+**maisbitlabs@gmail.com**.
+
+Contribuições são bem-vindas sob os mesmos termos: ao abrir um PR você licencia
+sua contribuição para o projeto sob a PolyForm Noncommercial 1.0.0.

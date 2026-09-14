@@ -3,7 +3,9 @@
 //! Replica `scripts/{install,uninstall,status}.cjs` byte-a-byte no
 //! conteúdo gerado em `~/.claude/settings.json`. Output visual das
 //! mensagens é byte-idêntico também — usuários e docs já dependem
-//! dos "✓" / "✗" literais.
+//! dos "✓" / "✗" literais. Única exceção: a linha do MCP server
+//! anota o launcher (`node` / `nativo`), informação que não existia
+//! no `.cjs` porque lá só havia o caminho Node.
 //!
 //! ## Arquitetura
 //!
@@ -106,14 +108,46 @@ pub fn write_settings(path: &Path, settings: &Value) -> Result<(), Error> {
 
 // ─── Install ────────────────────────────────────────────────────────
 
-/// Parâmetros para o `apply_install`. `node_bin` substitui
-/// `process.execPath` — em Rust não existe equivalente implícito; o
-/// binário `pmem` resolve via `--node-bin`, env `NODE_BIN` ou fallback
-/// `"node"`.
+/// Como o Claude Code deve lançar o MCP server do project-mem.
+///
+/// Os dois layouts de instalação diferem no que existe no disco:
+/// o clone git traz `plugin/mcp/server.cjs` e depende de um Node
+/// externo; o tarball traz `plugin/bin/pmem-mcp` compilado e não
+/// depende de runtime nenhum.
+#[derive(Debug, Clone)]
+pub enum McpLauncher {
+    /// `plugin/mcp/server.cjs` rodado por Node. `node_bin` substitui
+    /// `process.execPath` — em Rust não existe equivalente implícito; o
+    /// binário `pmem` resolve via `--node-bin`, env `NODE_BIN` ou
+    /// fallback `"node"`.
+    Node { node_bin: PathBuf },
+    /// Binário nativo `plugin/bin/pmem-mcp`, invocado direto e sem args.
+    Native,
+}
+
+impl McpLauncher {
+    /// Caminho do binário nativo dentro de uma instalação.
+    pub fn native_bin(install_dir: &Path) -> PathBuf {
+        install_dir.join("plugin").join("bin").join("pmem-mcp")
+    }
+
+    /// Escolhe o launcher olhando o disco: nativo quando o tarball
+    /// trouxe o binário, Node caso contrário. Deixa o `pmem install`
+    /// funcionar igual nos dois layouts, sem flag nova.
+    pub fn detect(install_dir: &Path, node_bin: PathBuf) -> Self {
+        if Self::native_bin(install_dir).is_file() {
+            Self::Native
+        } else {
+            Self::Node { node_bin }
+        }
+    }
+}
+
+/// Parâmetros para o `apply_install`.
 #[derive(Debug, Clone)]
 pub struct InstallConfig {
     pub install_dir: PathBuf,
-    pub node_bin: PathBuf,
+    pub mcp: McpLauncher,
 }
 
 /// Faz merge das 3 entradas necessárias em `settings`, criando as
@@ -155,12 +189,28 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
         .unwrap()
         .insert(PLUGIN_KEY.to_string(), Value::Bool(true));
 
-    // mcpServers["project-mem"] = { type: "stdio", command: node_bin, args: [ install_dir/plugin/mcp/server.cjs ] }
-    let mcp_path = cfg
-        .install_dir
-        .join("plugin")
-        .join("mcp")
-        .join("server.cjs");
+    // mcpServers["project-mem"] = { type: "stdio", command, args }
+    //   Node:   command = node_bin, args = [ install_dir/plugin/mcp/server.cjs ]
+    //   Native: command = install_dir/plugin/bin/pmem-mcp, args = []
+    let (command, args) = match &cfg.mcp {
+        McpLauncher::Node { node_bin } => {
+            let script = cfg
+                .install_dir
+                .join("plugin")
+                .join("mcp")
+                .join("server.cjs");
+            (
+                node_bin.to_string_lossy().into_owned(),
+                vec![Value::String(script.to_string_lossy().into_owned())],
+            )
+        }
+        McpLauncher::Native => (
+            McpLauncher::native_bin(&cfg.install_dir)
+                .to_string_lossy()
+                .into_owned(),
+            vec![],
+        ),
+    };
     let mcp_servers = obj
         .entry("mcpServers".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -171,8 +221,8 @@ pub fn apply_install(settings: &mut Value, cfg: &InstallConfig) {
         MCP_SERVER_KEY.to_string(),
         json!({
             "type": "stdio",
-            "command": cfg.node_bin.to_string_lossy(),
-            "args": [ mcp_path.to_string_lossy() ]
+            "command": command,
+            "args": args
         }),
     );
 }

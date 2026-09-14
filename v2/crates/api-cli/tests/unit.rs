@@ -2,14 +2,24 @@ use std::path::PathBuf;
 
 use api_cli::{
     apply_install, apply_uninstall, describe_status, serialize_settings, InstallConfig,
-    StatusReport,
+    McpLauncher, StatusReport,
 };
 use serde_json::{json, Value};
 
 fn cfg(install_dir: &str) -> InstallConfig {
     InstallConfig {
         install_dir: PathBuf::from(install_dir),
-        node_bin: PathBuf::from("/usr/bin/node"),
+        mcp: McpLauncher::Node {
+            node_bin: PathBuf::from("/usr/bin/node"),
+        },
+    }
+}
+
+/// Mesma instalação, mas registrando o binário nativo (layout tarball).
+fn cfg_native(install_dir: &str) -> InstallConfig {
+    InstallConfig {
+        install_dir: PathBuf::from(install_dir),
+        mcp: McpLauncher::Native,
     }
 }
 
@@ -30,6 +40,53 @@ fn install_empty_settings_sets_all_three_keys() {
         s["mcpServers"]["project-mem"]["args"][0],
         "/opt/pm/plugin/mcp/server.cjs"
     );
+}
+
+#[test]
+fn install_native_registers_binary_without_args() {
+    let mut s = Value::Object(Default::default());
+    apply_install(&mut s, &cfg_native("/opt/pm"));
+    assert_eq!(s["mcpServers"]["project-mem"]["type"], "stdio");
+    assert_eq!(
+        s["mcpServers"]["project-mem"]["command"],
+        "/opt/pm/plugin/bin/pmem-mcp"
+    );
+    // `args: []` e não ausente — a chave existe nos dois launchers, o
+    // que mantém o shape do settings.json estável entre instalações.
+    assert_eq!(s["mcpServers"]["project-mem"]["args"], json!([]));
+}
+
+#[test]
+fn install_native_e_node_diferem_so_no_mcp() {
+    let mut native = Value::Object(Default::default());
+    let mut node = Value::Object(Default::default());
+    apply_install(&mut native, &cfg_native("/opt/pm"));
+    apply_install(&mut node, &cfg("/opt/pm"));
+
+    assert_eq!(
+        native["extraKnownMarketplaces"],
+        node["extraKnownMarketplaces"]
+    );
+    assert_eq!(native["enabledPlugins"], node["enabledPlugins"]);
+    assert_ne!(native["mcpServers"], node["mcpServers"]);
+}
+
+#[test]
+fn detect_escolhe_node_quando_nao_ha_binario_nativo() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let launcher = McpLauncher::detect(tmp.path(), PathBuf::from("/usr/bin/node"));
+    assert!(matches!(launcher, McpLauncher::Node { .. }));
+}
+
+#[test]
+fn detect_escolhe_nativo_quando_o_binario_existe() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let bin = McpLauncher::native_bin(tmp.path());
+    std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+    std::fs::write(&bin, b"").unwrap();
+
+    let launcher = McpLauncher::detect(tmp.path(), PathBuf::from("/usr/bin/node"));
+    assert!(matches!(launcher, McpLauncher::Native));
 }
 
 #[test]

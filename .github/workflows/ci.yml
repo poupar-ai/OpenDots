@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Sem `dtolnay/rust-toolchain` em lugar nenhum: o `v2/rust-toolchain.toml`
+  # já pina o canal, e o rustup do runner instala sozinho no primeiro
+  # `cargo` rodado com cwd em v2/.
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: v2
+      - name: test
+        working-directory: v2
+        run: cargo test --workspace
+
+  # fmt e clippy ainda não passam no repo inteiro (≈485 hunks de fmt e
+  # ≈95 warnings de clippy herdados da migração Node→Rust). Ficam como
+  # sinal visível, não como gate: travar o merge em dívida pré-existente
+  # deixaria o CI vermelho desde o primeiro push. Ao zerar cada um, tire
+  # o `continue-on-error` correspondente.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: v2
+      - name: fmt
+        continue-on-error: true
+        working-directory: v2
+        run: cargo fmt --all -- --check
+      - name: clippy
+        continue-on-error: true
+        working-directory: v2
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui-next/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui-next
+      - run: npm run build
+        working-directory: ui-next
+
+  # Os scripts shell são o caminho de instalação de todo mundo que usa
+  # `curl | bash` — um erro aqui quebra a porta de entrada do projeto.
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck --severity=warning \
+            install.sh \
+            uninstall.sh \
+            scripts/package.sh \
+            scripts/smoke-package.sh \
+            plugin/bin-path.sh \
+            plugin/hooks/run-hook.sh
+
+  # Empacota de verdade e confere que o tarball resultante roda: o
+  # servidor precisa achar a UI e o `plugin/` a partir do próprio
+  # executável, fora do clone. É o teste que pega regressão de path
+  # antes dela virar release quebrada.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui-next/package-lock.json
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: v2
+      - run: bash scripts/package.sh
+      - name: tarball extraído roda fora do clone
+        run: bash scripts/smoke-package.sh

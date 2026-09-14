@@ -14,7 +14,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use api_cli::{apply_install, apply_uninstall, read_settings, write_settings, InstallConfig};
+use api_cli::{
+    apply_install, apply_uninstall, read_settings, write_settings, InstallConfig, McpLauncher,
+};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -95,7 +97,7 @@ fn parity_install_empty_settings_bytes_identical() {
         &mut s,
         &InstallConfig {
             install_dir,
-            node_bin,
+            mcp: McpLauncher::Node { node_bin },
         },
     );
     write_settings(&path, &s).unwrap();
@@ -146,7 +148,7 @@ fn parity_install_preserves_user_keys() {
         &mut s,
         &InstallConfig {
             install_dir,
-            node_bin,
+            mcp: McpLauncher::Node { node_bin },
         },
     );
     write_settings(&path, &s).unwrap();
@@ -188,7 +190,7 @@ fn parity_uninstall_after_install_bytes_identical() {
         &mut s,
         &InstallConfig {
             install_dir,
-            node_bin,
+            mcp: McpLauncher::Node { node_bin },
         },
     );
     write_settings(&path, &s).unwrap();

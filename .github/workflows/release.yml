@@ -1,0 +1,147 @@
+name: release
+
+# Publica os tarballs que o `install.sh` baixa. Dispara ao empurrar uma
+# tag `vX.Y.Z`; `workflow_dispatch` existe pra reprocessar uma tag já
+# existente sem precisar recriá-la.
+#
+# Só actions oficiais da GitHub aqui: é o workflow que produz os binários
+# que as pessoas instalam com `curl | bash`, então quanto menos código de
+# terceiros no caminho, melhor. Cache de build fica no `ci.yml`.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag já existente a (re)publicar, ex.: v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  # A versão do asset sai do Cargo.toml; a tag é só o endereço da
+  # release. O job `check-version` garante que as duas não divirjam.
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tag bate com a version do workspace
+        run: |
+          version="$(sed -n 's/^version *= *"\(.*\)"/\1/p' v2/Cargo.toml | head -1)"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG não bate com version $version em v2/Cargo.toml"
+            exit 1
+          fi
+          echo "✓ $TAG"
+
+  # A UI é buildada UMA vez e reaproveitada por todos os targets: bytes
+  # idênticos em todas as plataformas, e ninguém paga `npm ci` 4 vezes.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui-next/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui-next
+      - run: npm run build
+        working-directory: ui-next
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui-next/dist
+          retention-days: 1
+
+  build:
+    needs: [ui, check-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux sai estático (musl): roda em qualquer distro sem
+          # depender da glibc do host.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-22.04
+          # Runner ARM nativo (grátis em repo público). Se algum dia
+          # sumir, trocar por cross-compile com `cross`.
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-22.04-arm
+          # Os dois targets darwin saem do runner arm64 — o Xcode traz
+          # as duas fatias do SDK, então x86_64 é cross-compile nativo e
+          # não dependemos de runner Intel (que a GitHub vem aposentando).
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # `rusqlite` com feature `bundled` compila SQLite em C — em musl
+      # isso exige o cross-compiler do musl, não o gcc do sistema.
+      - name: musl toolchain
+        if: endsWith(matrix.target, '-musl')
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          echo "CC_${TARGET//-/_}=musl-gcc" >> "$GITHUB_ENV"
+
+      # `rustup` roda com cwd em v2/ pra respeitar o rust-toolchain.toml
+      # — o mesmo pin que o package.sh usa no cargo build.
+      - name: rust target
+        working-directory: v2
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: ui-next/dist
+
+      - run: bash scripts/package.sh --skip-ui --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tarball-*
+          path: dist
+          merge-multiple: true
+
+      # Um SHA256SUMS único, além do `.sha256` por arquivo que o
+      # install.sh consome. Serve pra quem quer conferir tudo de uma vez.
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          cat ./*.tar.gz.sha256 | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: publicar release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "$TAG" --generate-notes
+          fi

@@ -79,6 +79,11 @@ pub use stdin::{get_cwd, read_stdin, read_stdin_from_str};
 
 pub mod schema;
 
+// Sem equivalente no `.cjs`: resolve os assets do produto instalado
+// (`plugin/`, `ui/`), que no mundo Node vinham sempre de um clone git.
+pub mod install;
+pub use install::{install_root, plugin_dir, ui_dist_dir};
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;

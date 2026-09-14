@@ -24,3 +24,6 @@ Thumbs.db
 .seed-*.pid
 .seed-*.port
 .claude-project-memory/network.json
+
+# Tarballs de release montados por scripts/package.sh
+/dist/

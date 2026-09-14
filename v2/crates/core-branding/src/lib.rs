@@ -5,11 +5,11 @@
 //!
 //! ## Por que existe
 //!
-//! project-mem é vendido como binário closed-source e pode ser
-//! white-labeled por clientes. Tudo que é **identidade exposta**
-//! (nome mostrado no CLI, URL do dashboard, endpoint de update)
-//! mora aqui num único lugar — mudar o branding não requer
-//! recompilação com search/replace.
+//! project-mem é distribuído como binário e pode ser white-labeled
+//! por quem fizer fork. Tudo que é **identidade exposta** (nome
+//! mostrado no CLI, URL do dashboard, endpoint de update) mora aqui
+//! num único lugar — mudar o branding não requer recompilação com
+//! search/replace.
 //!
 //! O arquivo é lido em tempo de boot, não embutido no binário:
 //! um mesmo binário Pro roda com `settings.toml` diferente em

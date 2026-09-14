@@ -3,8 +3,9 @@
 //! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.claude-project-memory`
 //! - Porta: `$PROJECT_MEM_PORT` (default 37778)
 //! - Bind: resolvido via `<memDir>/network.json`
-//! - UI: `ui-next/dist/` (build via `cd ui-next && npm run build`).
-//!   Sem dist, `/` retorna 503 com instrução.
+//! - UI e `plugin/`: resolvidos a partir do próprio executável via
+//!   `core_paths::install` — `<root>/ui` no tarball, `<repo>/ui-next/dist`
+//!   no clone git. Sem dist, `/` retorna 503 com instrução de build.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -60,24 +61,21 @@ async fn main() -> ExitCode {
         .map(PathBuf::from)
         .unwrap_or_else(|_| project_root.join(MEM_DIR_NAME));
 
-    // `ui-next/dist` mora **dentro do clone do plugin** (junto do binário),
-    // NÃO no projeto-alvo. Quando o user ajusta `project_root` via UI pra
-    // apontar pro workspace (ex.: `~/dev/paag`), procurar dist lá quebra
-    // (some). Resolvemos via `mem_dir_base` (find_project_root(cwd)) que
-    // é sempre o clone do plugin.
-    let dist_candidate = mem_dir_base.join("ui-next").join("dist");
-    let dist_dir = if dist_candidate.join("index.html").exists() {
-        Some(dist_candidate)
-    } else {
-        None
-    };
+    // UI e `plugin/` são assets da **instalação**, não do projeto-alvo:
+    // quando o user aponta `project_root` pro workspace (ex.: `~/dev/paag`)
+    // eles continuam onde o binário mora. `core_paths::install` resolve a
+    // raiz a partir do próprio executável, cobrindo tanto o clone git
+    // (`<repo>/v2/target/release/`) quanto o tarball (`<root>/plugin/bin/`).
+    //
+    // Fallback em `mem_dir_base` (find_project_root(cwd)) preserva o
+    // comportamento antigo pra quem roda o binário de um path solto de
+    // dentro do clone.
+    let dist_dir =
+        core_paths::ui_dist_dir().or_else(|| core_paths::install::resolve_ui_dist(&mem_dir_base));
 
     // `plugin_dir` aponta pra raiz da pasta `plugin/` (onde ficam `seeds/`,
-    // `pipelines/`, `best-practices/`, etc). Node resolve via `__dirname/..`;
-    // aqui via env `PROJECT_MEM_PLUGIN_DIR` com fallback compile-time.
-    let plugin_dir = std::env::var("PROJECT_MEM_PLUGIN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../plugin")));
+    // `pipelines/`, `best-practices/`, etc). Node resolve via `__dirname/..`.
+    let plugin_dir = core_paths::plugin_dir().unwrap_or_else(|| mem_dir_base.join("plugin"));
 
     let vault = Arc::new(FileVaultStore::new());
     // `runtime_cfg_dir` é o dir binary-local onde o startup do seed escreve

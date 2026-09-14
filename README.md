@@ -1,7 +1,7 @@
 # claude-project-memory
 
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange.svg)](./LICENSE)
 
 > ⚠️ **Em desenvolvimento ativo** — funcional, mas ainda em evolução. Feedbacks, bugs e PRs são bem-vindos. Abra uma [issue](https://github.com/poupar-ai/open-poupar.ai/issues) se encontrar algum problema.
 
@@ -88,6 +88,10 @@ Ao encerrar → resumo da sessão gerado automaticamente
 ---
 
 ## Instalação
+
+> **Licença:** uso livre para fins **não-comerciais** (pessoal, estudo, ONG,
+> escola, órgão público). Uso em empresa exige licença comercial — veja
+> [Licença](#licença).
 
 ### Via curl (recomendado)
 
@@ -503,8 +507,8 @@ Os binários acham `plugin/` e `ui/` a partir do **próprio executável**
 | Armazenamento | `~/.claude-mem/` (global na máquina) | `.claude-project-memory/` (dentro de cada projeto) |
 | Formato | SQLite + Chroma (binário) | JSONL (texto puro) |
 | Git | Não commitável diretamente | Feito para commitar e compartilhar |
-| Worker | Processo Bun em background | Sem worker — scripts Node.js diretos |
-| Dependências | Bun, tree-sitter, SQLite, Chroma | Apenas Node.js |
+| Worker | Processo Bun em background | Sem worker — hooks são binários de execução curta |
+| Dependências | Bun, tree-sitter, SQLite, Chroma | Nenhuma — binário estático |
 | Busca | Semântica via embeddings | Full-text + grafo de padrões |
 | Compartilhamento | Memória pessoal de cada dev | Compartilhada via git com o time |
 
@@ -694,7 +698,7 @@ scripts/package.sh && scripts/smoke-package.sh
 
 ## Apoie o projeto
 
-O **claude-project-memory** é gratuito e open source. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
+O **claude-project-memory** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/schedylabs)
 
@@ -720,4 +724,26 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Licença
 
-MIT — veja [LICENSE](./LICENSE).
+[**PolyForm Noncommercial 1.0.0**](https://polyformproject.org/licenses/noncommercial/1.0.0/) — veja [LICENSE](./LICENSE).
+
+O código é aberto para ler, estudar, modificar e redistribuir, mas **só pode
+ser usado para fins não-comerciais**. Na prática:
+
+| Uso | Permitido |
+|---|---|
+| Projetos pessoais, hobby, estudo, pesquisa | ✅ |
+| ONGs, escolas, universidades, órgãos públicos, saúde | ✅ |
+| Fork, modificação e redistribuição (mantendo a licença e o aviso) | ✅ |
+| Usar no trabalho de uma empresa, mesmo internamente | ❌ |
+| Vender, hospedar como serviço ou embutir num produto pago | ❌ |
+
+Formalmente isso **não** é uma licença open source pela definição da
+[OSI](https://opensource.org/osd) — que exige não discriminar campo de atuação.
+O termo correto é *source available*. O código está todo aqui, é auditável e
+aceita contribuições; o que a licença restringe é o uso comercial.
+
+**Precisa usar comercialmente?** Existe licença comercial — escreva para
+**maisbitlabs@gmail.com**.
+
+Contribuições são bem-vindas sob os mesmos termos: ao abrir um PR você licencia
+sua contribuição para o projeto sob a PolyForm Noncommercial 1.0.0.

@@ -39,7 +39,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 repository = "https://github.com/poupar-ai/open-poupar.ai"
 
 [workspace.dependencies]

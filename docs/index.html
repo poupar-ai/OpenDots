@@ -327,11 +327,11 @@
     </p>
 
     <div class="badges">
-      <a class="badge" href="https://github.com/schedylabs/claude-project-memory">
+      <a class="badge" href="https://github.com/poupar-ai/open-poupar.ai">
         GitHub
       </a>
-      <a class="badge" href="https://github.com/schedylabs/claude-project-memory/blob/main/LICENSE">
-        MIT License
+      <a class="badge" href="https://github.com/poupar-ai/open-poupar.ai/blob/main/LICENSE">
+        PolyForm Noncommercial 1.0.0
       </a>
       <a class="badge sponsor" href="https://github.com/sponsors/schedylabs">
         ♥ Sponsor
@@ -340,7 +340,7 @@
 
     <div class="callout">
       ⚠ Under active development — functional but evolving.
-      <a href="https://github.com/schedylabs/claude-project-memory/issues">Open an issue</a> if you find a problem.
+      <a href="https://github.com/poupar-ai/open-poupar.ai/issues">Open an issue</a> if you find a problem.
     </div>
 
     <!-- Overview -->
@@ -367,25 +367,51 @@
     <!-- Installation -->
     <h2 id="install">Installation</h2>
 
-    <h3>Via Claude Code (recommended)</h3>
+    <div class="callout">
+      <strong>License:</strong> free for <strong>noncommercial</strong> use
+      (personal, study, nonprofits, schools, government). Company use requires a
+      commercial license —
+      <a href="https://github.com/poupar-ai/open-poupar.ai/blob/main/LICENSE">details</a>.
+    </div>
+
+    <h3>Via curl (recommended)</h3>
+
+    <p><strong>Requirements:</strong> <a href="https://claude.ai/code">Claude Code</a>.
+    That's all — the binaries ship precompiled, so no Node, Rust or git needed.</p>
+
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash</code></pre>
+
+    <p>
+      Detects your OS/architecture, verifies the SHA-256, installs into
+      <code>~/.local/share/project-mem</code> and registers the plugin in
+      <code>~/.claude/settings.json</code>. Prebuilt for Linux (x86_64/ARM64,
+      static) and macOS (Intel/Apple Silicon).
+    </p>
+
+    <p>To uninstall (your projects' memory is left untouched):</p>
+
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash</code></pre>
+
+    <h3>Via Claude Code</h3>
 
     <p>Open Claude Code and ask:</p>
 
-    <pre><code>Install the plugin schedylabs/claude-project-memory</code></pre>
+    <pre><code>Install the plugin poupar-ai/open-poupar.ai</code></pre>
 
     <p>Or run directly in the terminal:</p>
 
-    <pre><code>claude plugins marketplace add schedylabs/claude-project-memory
+    <pre><code>claude plugins marketplace add poupar-ai/open-poupar.ai
 claude plugins install project-mem@project-mem</code></pre>
 
     <p>Restart Claude Code. That's it.</p>
 
-    <h3>Manual</h3>
+    <h3>From source</h3>
 
-    <p><strong>Requirements:</strong> <a href="https://claude.ai/code">Claude Code</a> and Node.js.</p>
+    <p><strong>Requirements:</strong> <a href="https://claude.ai/code">Claude Code</a>,
+    Rust 1.88 and Node.js (the UI is built with Vite).</p>
 
-    <pre><code>git clone git@github.com:schedylabs/claude-project-memory.git
-cd claude-project-memory
+    <pre><code>git clone https://github.com/poupar-ai/open-poupar.ai.git
+cd open-poupar.ai
 make install</code></pre>
 
     <pre><code>make status     # check installation

@@ -3,7 +3,7 @@
 //! Porta literal de `readJsonl`, `appendJsonl` e `readLastJsonlLine` do
 //! `plugin/scripts/lib.cjs`. Usado por `observations.jsonl`,
 //! `sessions.jsonl`, `messages/YYYY-MM-DD.jsonl`, `agent_chats/*.jsonl`,
-//! `human_logs/*.jsonl` e outros arquivos append-only do project-mem.
+//! `human_logs/*.jsonl` e outros arquivos append-only do open-poupar.
 //!
 //! ## Decisões de paridade não-óbvias
 //!

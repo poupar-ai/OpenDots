@@ -1,5 +1,5 @@
 //! Rotas `/api/auth/server-token` — gerencia o token global do servidor
-//! usado pelo middleware quando `PROJECT_MEM_REQUIRE_TOKEN=1` no env.
+//! usado pelo middleware quando `POUPAR_REQUIRE_TOKEN=1` no env.
 //!
 //! - `GET    /api/auth/server-token`          → `{configured, preview}`
 //! - `POST   /api/auth/server-token/generate` → gera UUID v4, grava,
@@ -67,7 +67,7 @@ async fn get_token(Extension(tc): Extension<TenantContext>) -> Response {
         Some(t) => (true, Some(token_preview(t))),
         None => (false, None),
     };
-    let enforced = std::env::var("PROJECT_MEM_REQUIRE_TOKEN").ok().as_deref() == Some("1");
+    let enforced = std::env::var("POUPAR_REQUIRE_TOKEN").ok().as_deref() == Some("1");
     json_response(
         StatusCode::OK,
         json!({

@@ -1,8 +1,0 @@
-{"ts":"2026-05-15T19:09:03.795Z","type":"request","prompt_chars":19455,"user_chars":3,"history_turns":0,"model":"opus-4.6"}
-{"ts":"2026-05-15T19:09:08.150Z","type":"response","response_chars":33,"duration_ms":4319,"code":0,"stderr_preview":null,"sigilo_redacted":null}
-{"ts":"2026-05-15T19:09:18.261Z","type":"request","prompt_chars":19571,"user_chars":36,"history_turns":2,"model":"opus-4.6"}
-{"ts":"2026-05-15T19:09:49.473Z","type":"violation","stage":"integrity","kind":"humans_manifest","path":"/home/zion/dev/paag/claude-project-memory/.claude-project-memory/humans.json","change":"modified","size_delta":0,"message":"agente oracle Modified arquivo crítico (humans_manifest): humans.json"}
-{"ts":"2026-05-15T19:09:49.473Z","type":"violation","stage":"sigilo","reason":"dense_leak","hits":["server.cjs","sessions.jsonl","claude-project-memory"],"mid_stream_killed":true,"message":"agente oracle tentou vazar arquitetura — resposta redigida"}
-{"ts":"2026-05-15T19:09:49.473Z","type":"response","response_chars":201,"duration_ms":31191,"code":0,"stderr_preview":null,"sigilo_redacted":true}
-{"ts":"2026-05-15T19:09:57.189Z","type":"request","prompt_chars":19809,"user_chars":10,"history_turns":4,"model":"opus-4.6"}
-{"ts":"2026-05-15T19:10:03.178Z","type":"response","response_chars":323,"duration_ms":5965,"code":0,"stderr_preview":null,"sigilo_redacted":null}

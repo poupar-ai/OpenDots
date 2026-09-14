@@ -21,11 +21,11 @@ TARBALL="${1:-}"
 if [ -z "$TARBALL" ]; then
   target="$(cd v2 && rustc -vV | sed -n 's/^host: //p')"
   version="$(sed -n 's/^version *= *"\(.*\)"/\1/p' v2/Cargo.toml | head -1)"
-  TARBALL="dist/project-mem-${version}-${target}.tar.gz"
+  TARBALL="dist/open-poupar-${version}-${target}.tar.gz"
 fi
 [ -f "$TARBALL" ] || { echo "smoke: tarball não existe: $TARBALL" >&2; exit 1; }
 
-PORT="${PMEM_SMOKE_PORT:-38571}"
+PORT="${POUPAR_SMOKE_PORT:-38571}"
 WORK="$(mktemp -d)"
 HTTP_PID=""
 
@@ -54,39 +54,39 @@ git -C "$PROJ" init -q
 # ─── hooks ───────────────────────────────────────────────────────────
 #
 # O dispatcher tem que escolher o binário (e não o `.cjs`), e a
-# observação tem que cair no `.claude-project-memory` do PROJETO.
+# observação tem que cair no `.poupar` do PROJETO.
 
-resolved="$(CLAUDE_PLUGIN_ROOT="$ROOT/plugin" bash "$ROOT/plugin/bin-path.sh" --installed pmem-hook-observe)" \
-  || fail "bin-path.sh não achou pmem-hook-observe na instalação"
-[ "$resolved" = "$ROOT/plugin/bin/pmem-hook-observe" ] \
+resolved="$(CLAUDE_PLUGIN_ROOT="$ROOT/plugin" bash "$ROOT/plugin/bin-path.sh" --installed poupar-hook-observe)" \
+  || fail "bin-path.sh não achou poupar-hook-observe na instalação"
+[ "$resolved" = "$ROOT/plugin/bin/poupar-hook-observe" ] \
   || fail "bin-path.sh resolveu pro lugar errado: $resolved"
 pass "bin-path.sh resolve o binário instalado"
 
 printf '{"session_id":"smoke","tool_name":"Bash","tool_input":{"command":"pytest -q"},"tool_response":{"exit_code":0,"stdout":"3 passed"},"cwd":"%s"}' "$PROJ" \
   | CLAUDE_PLUGIN_ROOT="$ROOT/plugin" bash "$ROOT/plugin/hooks/run-hook.sh" observe \
   || fail "hook observe saiu com erro"
-grep -q '"cmd":"pytest -q"' "$PROJ/.claude-project-memory/observations.jsonl" \
+grep -q '"cmd":"pytest -q"' "$PROJ/.poupar/observations.jsonl" \
   || fail "observação não foi gravada no projeto"
-pass "hook observe grava no .claude-project-memory do projeto"
+pass "hook observe grava no .poupar do projeto"
 
 # ─── MCP ─────────────────────────────────────────────────────────────
 
 printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' \
-  | "$ROOT/plugin/bin/pmem-mcp" \
+  | "$ROOT/plugin/bin/poupar-mcp" \
   | grep -q '"protocolVersion"' \
-  || fail "pmem-mcp não respondeu ao handshake"
-pass "pmem-mcp responde ao handshake"
+  || fail "poupar-mcp não respondeu ao handshake"
+pass "poupar-mcp responde ao handshake"
 
 # ─── CLI ─────────────────────────────────────────────────────────────
 #
 # Numa instalação com binário, o MCP tem que ser registrado nativo —
 # se cair no Node, o usuário sem Node fica sem MCP e nada avisa.
 
-CLAUDE_CONFIG_DIR="$WORK/claude" "$ROOT/plugin/bin/pmem" install "$ROOT" >/dev/null \
-  || fail "pmem install falhou"
-grep -q '"command": ".*/plugin/bin/pmem-mcp"' "$WORK/claude/settings.json" \
-  || fail "pmem install registrou o MCP via Node, não o binário nativo"
-pass "pmem install registra o MCP nativo"
+CLAUDE_CONFIG_DIR="$WORK/claude" "$ROOT/plugin/bin/poupar" install "$ROOT" >/dev/null \
+  || fail "poupar install falhou"
+grep -q '"command": ".*/plugin/bin/poupar-mcp"' "$WORK/claude/settings.json" \
+  || fail "poupar install registrou o MCP via Node, não o binário nativo"
+pass "poupar install registra o MCP nativo"
 
 # ─── HTTP + UI ───────────────────────────────────────────────────────
 
@@ -94,14 +94,14 @@ pass "pmem install registra o MCP nativo"
 # `curl` abaixo respondem, mas quem responde é o outro servidor — e o
 # smoke "passa" ou falha por motivo errado. Aborta antes de começar.
 if curl -sf --max-time 2 "http://127.0.0.1:$PORT/api/data" >/dev/null 2>&1; then
-  fail "porta $PORT já está ocupada por outro pmem-http. Libere ou use PMEM_SMOKE_PORT."
+  fail "porta $PORT já está ocupada por outro poupar-http. Libere ou use POUPAR_SMOKE_PORT."
 fi
 
-echo "==> subindo pmem-http na porta $PORT"
+echo "==> subindo poupar-http na porta $PORT"
 # `exec` para que $! seja o PID do servidor, e não o do subshell — sem
 # isso o `kill` do cleanup mata a casca e deixa o servidor órfão
 # segurando a porta pro próximo run.
-( cd "$PROJ" && exec env PROJECT_MEM_PORT="$PORT" "$ROOT/plugin/bin/pmem-http" >"$WORK/http.log" 2>&1 ) &
+( cd "$PROJ" && exec env POUPAR_PORT="$PORT" "$ROOT/plugin/bin/poupar-http" >"$WORK/http.log" 2>&1 ) &
 HTTP_PID=$!
 
 for _ in $(seq 1 60); do
@@ -111,8 +111,8 @@ for _ in $(seq 1 60); do
   sleep 0.25
 done
 curl -sf "http://127.0.0.1:$PORT/api/data" >/dev/null 2>&1 \
-  || { cat "$WORK/http.log" >&2; fail "pmem-http não subiu"; }
-pass "pmem-http subiu"
+  || { cat "$WORK/http.log" >&2; fail "poupar-http não subiu"; }
+pass "poupar-http subiu"
 
 index="$(curl -fsS "http://127.0.0.1:$PORT/")"
 # A página de fallback ("rode o build") cita ui-next/dist. Se ela apareceu,

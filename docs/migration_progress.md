@@ -1,4 +1,4 @@
-# Migration Progress — project-mem Node→Rust
+# Migration Progress — open-poupar Node→Rust
 
 > Rastreio vivo do port `plugin/scripts/*.cjs` → `v2/crates/domain-*`.
 > Atualizado a cada sub-etapa. Sobrevive a restarts da máquina.
@@ -63,7 +63,7 @@ Nada novo até terminar paridade do existente.
 
 | # | Origem `.cjs` | Linhas | Destino Rust | Ordem | Status |
 |---|---|---|---|---|---|
-| F4-01 | `scripts/install.cjs` + `uninstall.cjs` + `status.cjs` | 160 | `api-cli` (`pmem install`/`uninstall`/`status`) | 1 | ✅ |
+| F4-01 | `scripts/install.cjs` + `uninstall.cjs` + `status.cjs` | 160 | `api-cli` (`poupar install`/`uninstall`/`status`) | 1 | ✅ |
 | F4-02 | `plugin/scripts/queue.cjs` | 149 | `core-queue` | 2 | ✅ |
 | F4-03 | `plugin/scripts/{session-init,session-end,observe,startup}.cjs` | 933 | `api-hooks` (4 binários thin: leem stdin JSON, chamam domain-session + adapters, escrevem efeitos) | 3 | ✅ |
 | F4-04 | `plugin/mcp/server.cjs` | 285 | `api-mcp` (stdio, tools `mem.*`) | 4 | ✅ |
@@ -210,9 +210,9 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
     `misc_routes.rs`. Cada um expõe `*_router() -> Router<AppState>`
     merged no `build_router()`.
   - `AppState.plugin_dir` adicionado — resolve `PIPE_DIR`/`SEEDS_DIR`/
-    `BP_DIR` via `PROJECT_MEM_PLUGIN_DIR` env no bin com fallback
+    `BP_DIR` via `POUPAR_PLUGIN_DIR` env no bin com fallback
     compile-time (`CARGO_MANIFEST_DIR/../../../plugin`).
-  - Parity tests setam `PROJECT_MEM_PLUGIN_DIR` pro dir real
+  - Parity tests setam `POUPAR_PLUGIN_DIR` pro dir real
     `plugin/` pra ambos os servers enxergarem o mesmo catálogo.
   - Tempdirs distintos por server (state fs-local pra cada run).
 - **Decisões**:
@@ -304,7 +304,7 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   paths + bind + serve). `AppState` injeta `Arc<dyn Clock>` pra
   testabilidade futura; `SystemClock` default em prod.
 - **Parity strategy**: fixture em tempdir compartilhado, 2 instâncias
-  (node `server.cjs` + `pmem-http`) em portas livres distintas, `curl`
+  (node `server.cjs` + `poupar-http`) em portas livres distintas, `curl`
   subprocess GET/PUT em cada uma, compara `{status, body}` com
   `strip_volatile` removendo `port`/`activeHost`/`lanIps`.
 - **Tests de parity cobertos**:
@@ -345,7 +345,7 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   JSON-RPC (`handle_rpc`) é testável via `StubCtx` sem tocar FS.
 - **Parity strategy**: dois tempdirs com fixture idêntica, mesmo
   script JSON-RPC newline-delimited empilhado em `node server.cjs` e
-  `pmem-mcp`, stdout parseado linha-a-linha e comparado como
+  `poupar-mcp`, stdout parseado linha-a-linha e comparado como
   `Vec<Value>` (ordem importa — `preserve_order` garante match
   byte-a-byte de `jsonrpc`/`id`/`result`).
 - **Tests de parity cobertos** (15 casos):
@@ -378,10 +378,10 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   (9 observe + 8 session-end + 8 session-init + 8 startup), zero
   falhas, zero regressão.
 - Todos os 4 binários de hook portados:
-  - `pmem-hook-startup` (126 linhas `.cjs`) — banner + MCP check
-  - `pmem-hook-observe` (182 linhas) — PostToolUse
-  - `pmem-hook-session-end` (214 linhas) — SessionEnd
-  - `pmem-hook-session-init` (411 linhas) — UserPromptSubmit
+  - `poupar-hook-startup` (126 linhas `.cjs`) — banner + MCP check
+  - `poupar-hook-observe` (182 linhas) — PostToolUse
+  - `poupar-hook-session-end` (214 linhas) — SessionEnd
+  - `poupar-hook-session-init` (411 linhas) — UserPromptSubmit
 - **Padrão aplicado**: lib pura (`src/*.rs`) + thin bin (`src/bin/*.rs`).
   Toda decisão testável mora na lib; bin só parseia stdin, chama lib,
   imprime stdout, toca FS/git quando necessário.
@@ -392,7 +392,7 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   - `estimate_tokens` via `encode_utf16().count()` (UTF-16 match com
     `String.length` do JS, já resolvido no `core-paths::tokens`).
   - `render_final_context` usa `\n\n---\n` como separador entre
-    blocos e rodapé `<!-- project-mem: ~N/Mt -->` com lista de
+    blocos e rodapé `<!-- open-poupar: ~N/Mt -->` com lista de
     skipped quando budget estoura.
   - Git context: branch + modified (top 10) + 5 commits recentes
     via `Command::new("git")` — falha silenciosa se não for repo.
@@ -460,12 +460,12 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   rodando `scripts/{install,uninstall}.cjs` com `CLAUDE_CONFIG_DIR` env
   apontando pra tempdir isolado)
 - clippy limpo, `cargo fmt` aplicado
-- **Escopo**: primeiro crate inbound da Fase 4. Binário único `pmem`
+- **Escopo**: primeiro crate inbound da Fase 4. Binário único `poupar`
   com 3 subcomandos (`install`, `uninstall`, `status`) substituindo os
   3 `scripts/*.cjs` (~160 linhas totais).
 - **Decisões**:
   - Lib pura (`apply_install` / `apply_uninstall` / `describe_status`
-    / `StatusReport::render`) separada do binário (thin main `pmem.rs`).
+    / `StatusReport::render`) separada do binário (thin main `poupar.rs`).
     Toda decisão testável fica na lib — binário só resolve paths,
     chama lib, escreve stdout/stderr e escolhe exit code.
   - `node_bin` substitui `process.execPath` do `.cjs` — Rust não tem
@@ -487,10 +487,10 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   - Install preserva `theme`, outros `enabledPlugins`, outros `mcpServers`
   - Install + uninstall round-trip volta ao fixture original (bytes iguais)
   - Uninstall em `settings.json` ausente: ambos no-op (arquivo não é criado)
-  - Binário `pmem` compilado (`target/debug/pmem install …`) bate com
+  - Binário `poupar` compilado (`target/debug/poupar install …`) bate com
     Node (e2e, pulado se bin não existe)
 - **Fora de escopo**: `.cjs` de upgrade/migration (não existem hoje),
-  `pmem rollback`/`pmem upgrade` (features v2-only futuras).
+  `poupar rollback`/`poupar upgrade` (features v2-only futuras).
 - **Achados novos**: nenhum — semântica `.cjs` mapeou limpo.
 
 ### ✅ `adapter-fs` — 2026-04-19
@@ -564,7 +564,7 @@ Próxima: F4-05f (chat SSE + spawn Claude + queue drain + handoff)._
   - Bundle exportado em Node é importado em Rust
   - Bundle exportado em Rust é importado em Node
   - `.gitignore` não é re-escrito no lado Rust quando Node já criou
-- **Fora de escopo** (adapter futuro/app layer): CLI `pmem rollback`
+- **Fora de escopo** (adapter futuro/app layer): CLI `poupar rollback`
   para PMV1 backup, migração on-disk de `.legacy-backup/<ts>/`,
   cache LRU se múltiplos vaults forem abertos em paralelo.
 - **Achados novos**: nenhum — todos os desvios já rastreados em

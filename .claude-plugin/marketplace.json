@@ -1,9 +1,9 @@
 {
-  "name": "project-mem",
+  "name": "open-poupar",
   "owner": { "name": "Tiago" },
   "plugins": [
     {
-      "name": "project-mem",
+      "name": "open-poupar",
       "source": "./plugin",
       "description": "Per-project git-committable memory for Claude Code. Stores observations as JSONL inside the project repo.",
       "version": "1.0.0"

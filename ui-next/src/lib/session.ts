@@ -2,7 +2,7 @@
 // login/criação). Guardado em sessionStorage — vale enquanto a aba viver.
 // É enviado como `Authorization: Bearer` nas rotas autenticadas (handoff).
 
-const KEY = 'pmem.human.token';
+const KEY = 'poupar.human.token';
 
 export function setHumanToken(token: string | null): void {
   try {

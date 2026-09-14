@@ -4,7 +4,7 @@
 # can_talk_to check + destructive scan + append_chat + agent_logs +
 # bus.emit + enqueue → response.
 #
-# Requer PROJECT_MEM_DEV_MODE=1 (server precisa expor /api/_dev/mint_token
+# Requer POUPAR_DEV_MODE=1 (server precisa expor /api/_dev/mint_token
 # pra emitir o JWT do agente "manager" usado nas requests).
 #
 # Uso: ./bench-handoff.sh [N_REQUESTS]
@@ -15,16 +15,16 @@ export LC_NUMERIC=C
 N="${1:-500}"
 PORT="${PORT:-37998}"
 TMP="$(mktemp -d)"
-BIN="${BIN:-$(pwd)/v2/target/release/pmem-http}"
+BIN="${BIN:-$(pwd)/v2/target/release/poupar-http}"
 
 if [[ ! -x "$BIN" ]]; then
   echo "binário não encontrado: $BIN"
-  echo "rode: cargo build --release --manifest-path v2/Cargo.toml --bin pmem-http"
+  echo "rode: cargo build --release --manifest-path v2/Cargo.toml --bin poupar-http"
   exit 1
 fi
 
 cleanup() {
-  pkill -P $$ pmem-http 2>/dev/null || true
+  pkill -P $$ poupar-http 2>/dev/null || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -37,7 +37,7 @@ echo "mem_dir=$TMP"
 echo ""
 
 # ── Start server em DEV MODE ───────────────────────────────────────────
-PROJECT_MEM_DEV_MODE=1 PROJECT_MEM_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/server.log" &
+POUPAR_DEV_MODE=1 POUPAR_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/server.log" &
 SERVER_PID=$!
 for _ in $(seq 1 30); do
   if curl -s -o /dev/null --max-time 1 "$URL/" 2>/dev/null; then break; fi

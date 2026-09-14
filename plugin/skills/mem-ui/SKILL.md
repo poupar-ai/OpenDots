@@ -3,7 +3,7 @@ name: mem-ui
 description: Sobe a interface web local pra visualizar a memória do projeto.
 ---
 
-# /mem-ui — Interface web do project-mem
+# /mem-ui — Interface web do open-poupar
 
 Sobe a interface web local para visualizar a memória do projeto atual.
 
@@ -17,12 +17,12 @@ Se já estiver rodando, informe o usuário e abra `http://localhost:37778`. Não
 
 ## 2. Encontre o servidor
 
-O servidor é o binário `pmem-http`. Ele mora em lugares diferentes conforme
+O servidor é o binário `poupar-http`. Ele mora em lugares diferentes conforme
 a instalação (tarball vs. clone), então resolva pelo helper:
 
 ```bash
 _R="${CLAUDE_PLUGIN_ROOT}"
-_SRV="$(bash "$_R/bin-path.sh" pmem-http)" && echo "$_SRV"
+_SRV="$(bash "$_R/bin-path.sh" poupar-http)" && echo "$_SRV"
 ```
 
 Se o comando falhar, a instalação não tem o binário — foi um clone sem
@@ -49,7 +49,7 @@ curl -sf http://localhost:37778/api/data > /dev/null 2>&1 && echo "ok" || echo "
 
 **Se a porta 37778 estiver ocupada:**
 ```bash
-PROJECT_MEM_PORT=37779 "$_SRV" &
+POUPAR_PORT=37779 "$_SRV" &
 ```
 
 ## 4. Informe o usuário
@@ -61,4 +61,4 @@ Diga:
   - **Sessões** — histórico com datas e resumos
   - **Observações** — todas as edições e comandos com busca
 - Que a UI atualiza automaticamente a cada 10 segundos
-- Para parar: feche o terminal ou rode `pkill -f pmem-http`
+- Para parar: feche o terminal ou rode `pkill -f poupar-http`

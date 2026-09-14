@@ -1,6 +1,6 @@
-# project-mem v2
+# open-poupar v2
 
-Port em Rust do plugin `project-mem` (Node.js CJS em `../plugin/`).
+Port em Rust do plugin `open-poupar` (Node.js CJS em `../plugin/`).
 
 > **Status:** skeleton (Fase 0). Ainda não executável.
 > **Plano completo:** [`../docs/migrato_to_rust.md`](../docs/migrato_to_rust.md).

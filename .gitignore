@@ -3,15 +3,15 @@ ui-next/node_modules/
 ui-next/dist/
 
 # Memory directory — commit or ignore, your choice.
-# Committing .claude-project-memory/ shares full project context with the team.
+# Committing .poupar/ shares full project context with the team.
 # Ignoring it keeps memory local to each developer's machine.
-# .claude-project-memory/
+# .poupar/
 
 # Temporary session flags (always ignore)
-.claude-project-memory/tmp/
+.poupar/tmp/
 
 # Stats cache (regenerated automatically)
-.claude-project-memory/stats.json
+.poupar/stats.json
 
 # Auto-synced Claude context (regenerated from PROJECT.md each session)
 .claude/CLAUDE.md
@@ -23,7 +23,11 @@ Thumbs.db
 # cluster/seed — pidfiles e network config local
 .seed-*.pid
 .seed-*.port
-.claude-project-memory/network.json
+.poupar/network.json
 
 # Tarballs de release montados por scripts/package.sh
 /dist/
+
+# Backups e notas de sessão — podem conter caminhos locais e dados de projeto
+/bkp/
+/docs/sessions/

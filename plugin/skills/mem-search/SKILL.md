@@ -15,16 +15,16 @@ Busca no histórico de sessões e observações do projeto atual.
 git rev-parse --show-toplevel
 ```
 
-O diretório de memória é `<raiz>/.claude-project-memory/`. Se não existir, informe que este projeto ainda não tem histórico e sugira rodar `/mem-setup`.
+O diretório de memória é `<raiz>/.poupar/`. Se não existir, informe que este projeto ainda não tem histórico e sugira rodar `/mem-setup`.
 
 ## 2. Leia os dados
 
 Leia os arquivos que existirem:
-- `.claude-project-memory/sessions.jsonl` — registros de sessão (type: "start" ou "end", pode ter `kind`)
-- `.claude-project-memory/observations.jsonl` — observações (type: "file_edit", "bash", "note"; file_edit pode ter `diff`; bash pode ter `output_summary`)
-- `.claude-project-memory/decisions.jsonl` — decisões registradas (`what`, `why`)
-- `.claude-project-memory/corrections.jsonl` — correções detectadas (`prompt`, `previous_action`)
-- `.claude-project-memory/gotchas.jsonl` — armadilhas (`description`, `file`, `command`, `failure_hint`)
+- `.poupar/sessions.jsonl` — registros de sessão (type: "start" ou "end", pode ter `kind`)
+- `.poupar/observations.jsonl` — observações (type: "file_edit", "bash", "note"; file_edit pode ter `diff`; bash pode ter `output_summary`)
+- `.poupar/decisions.jsonl` — decisões registradas (`what`, `why`)
+- `.poupar/corrections.jsonl` — correções detectadas (`prompt`, `previous_action`)
+- `.poupar/gotchas.jsonl` — armadilhas (`description`, `file`, `command`, `failure_hint`)
 
 ## 3. Execute a busca
 

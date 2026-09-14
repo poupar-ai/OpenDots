@@ -1,4 +1,4 @@
-//! `pmem-hook-observe` — thin entrypoint do `PostToolUse`.
+//! `poupar-hook-observe` — thin entrypoint do `PostToolUse`.
 //!
 //! Paridade com `plugin/scripts/observe.cjs`:
 //! 1. Lê JSON do stdin.
@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     }
 
     let ts = now_iso();
-    let agent_id = env::var("CLAUDE_PROJECT_MEM_AGENT")
+    let agent_id = env::var("CLAUDE_POUPAR_AGENT")
         .ok()
         .filter(|s| !s.is_empty());
 

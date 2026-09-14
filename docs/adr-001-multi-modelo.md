@@ -14,7 +14,7 @@ de subprocess via `TokioCommand::new("claude")` em 2 hot paths:
 - `v2/crates/api-http/src/agent_runner.rs::run_headless_turn`
 
 O nome do binário, args (`-p`, `--output-format`, `--model`,
-`--allowed-tools`, `--disallowed-tools`), env vars (`CLAUDE_PROJECT_MEM_*`),
+`--allowed-tools`, `--disallowed-tools`), env vars (`CLAUDE_POUPAR_*`),
 e formato de output (stdout = resposta plain) são todos amarrados ao
 Claude CLI.
 
@@ -27,7 +27,7 @@ Novita AI, NVIDIA NIM, etc.) — usuário troca com `hermes model`.
 **Manter Claude CLI hardcoded por enquanto.** Não introduzir abstração
 de provider agora. Razões:
 
-1. **Identidade do projeto**: somos "claude-project-memory" — plugin
+1. **Identidade do projeto**: somos "open-poupar.ai" — plugin
    pro Claude Code. Lock-in com Claude é coerente com o nome e o
    contexto de uso. Usuário que escolhe nosso plugin já decidiu usar
    Claude.

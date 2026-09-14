@@ -1,7 +1,7 @@
 //! # domain-architect
 //!
 //! Porta Rust de `plugin/scripts/architect.cjs` — o **Arquiteto** é um
-//! agente meta do project-mem que entrevista o humano e gera "seeds"
+//! agente meta do open-poupar que entrevista o humano e gera "seeds"
 //! customizados (packs de agentes) pro negócio dele.
 //!
 //! ## Escopo (Fase 4)
@@ -29,7 +29,7 @@ pub const ARCHITECT_AGENT: &str = "architect";
 
 /// Prompt que vai no mini-context do arquiteto. Texto literal do
 /// `architect.cjs:22-49`.
-pub const ARCHITECT_PROMPT: &str = "Você é o Arquiteto — agente meta do project-mem.
+pub const ARCHITECT_PROMPT: &str = "Você é o Arquiteto — agente meta do open-poupar.
 
 Seu papel é entrevistar o humano para entender o negócio dele e desenhar um
 TIME DE AGENTES customizado (um \"seed\"). Você:

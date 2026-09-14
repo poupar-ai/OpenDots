@@ -2,10 +2,10 @@
 # package.sh — monta o tarball de release consumido pelo `install.sh`.
 #
 # Produz, em `dist/`:
-#   project-mem-<versão>-<target>.tar.gz
-#   project-mem-<versão>-<target>.tar.gz.sha256
+#   open-poupar-<versão>-<target>.tar.gz
+#   open-poupar-<versão>-<target>.tar.gz.sha256
 #
-# O tarball tem uma raiz única (`project-mem-<versão>-<target>/`) para
+# O tarball tem uma raiz única (`open-poupar-<versão>-<target>/`) para
 # que extrair num diretório qualquer nunca espalhe arquivo solto:
 #
 #   <raiz>/
@@ -13,12 +13,11 @@
 #   ├── plugin/
 #   │   ├── bin/                          ← binários compilados
 #   │   ├── hooks/ skills/ seeds/ ...     ← assets do plugin
-#   │   └── scripts/ mcp/                 ← implementação .cjs (skills que ainda usam Node)
 #   ├── ui/                               ← build do Vite (ui-next/dist)
 #   └── VERSION
 #
 # O layout é o que `core_paths::install` procura a partir do próprio
-# executável: `plugin/bin/pmem-http` sobe dois níveis e acha a raiz pelo
+# executável: `plugin/bin/poupar-http` sobe dois níveis e acha a raiz pelo
 # marcador `.claude-plugin/marketplace.json`.
 #
 # O cargo roda com cwd em `v2/` para que `v2/rust-toolchain.toml` valha —
@@ -53,13 +52,13 @@ done
 # Binários que compõem a release. Precisa bater com os `[[bin]]` dos
 # crates `api-*` — o build falha alto se algum sumir.
 BINARIES=(
-  pmem
-  pmem-http
-  pmem-mcp
-  pmem-hook-startup
-  pmem-hook-observe
-  pmem-hook-session-init
-  pmem-hook-session-end
+  poupar
+  poupar-http
+  poupar-mcp
+  poupar-hook-startup
+  poupar-hook-observe
+  poupar-hook-session-init
+  poupar-hook-session-end
 )
 
 VERSION="$(sed -n 's/^version *= *"\(.*\)"/\1/p' v2/Cargo.toml | head -1)"
@@ -76,18 +75,18 @@ else
   BIN_DIR="v2/target/$TARGET/release"
 fi
 
-NAME="project-mem-${VERSION}-${TARGET}"
+NAME="open-poupar-${VERSION}-${TARGET}"
 STAGE="dist/$NAME"
 
-echo "==> project-mem $VERSION → $TARGET"
+echo "==> open-poupar $VERSION → $TARGET"
 
 if [ "$SKIP_CARGO" = "0" ]; then
   echo "==> cargo build --release"
   ( cd v2 && cargo build --release \
       "${CARGO_TARGET_ARGS[@]}" \
-      --bin pmem --bin pmem-http --bin pmem-mcp \
-      --bin pmem-hook-startup --bin pmem-hook-observe \
-      --bin pmem-hook-session-init --bin pmem-hook-session-end )
+      --bin poupar --bin poupar-http --bin poupar-mcp \
+      --bin poupar-hook-startup --bin poupar-hook-observe \
+      --bin poupar-hook-session-init --bin poupar-hook-session-end )
 fi
 
 if [ "$SKIP_UI" = "0" ]; then
@@ -111,9 +110,7 @@ for bin in "${BINARIES[@]}"; do
 done
 
 # Assets do plugin. `plugin/bin/` já foi preenchido acima e não existe no
-# repo, então não há colisão. `scripts/` e `mcp/` (.cjs) entram porque
-# alguns skills — /mem-agents, /mem-index — ainda fazem `require()` neles;
-# quem não tem Node perde só esses skills, não o plugin.
+# repo, então não há colisão no `cp -R`.
 cp -R plugin/. "$STAGE/plugin/"
 cp .claude-plugin/marketplace.json "$STAGE/.claude-plugin/"
 cp LICENSE README.md "$STAGE/"

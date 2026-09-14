@@ -1,6 +1,6 @@
 //! Port de validação de licença.
 //!
-//! project-mem é comercial closed-source com 4 tiers (Free/Basic/Pro/
+//! open-poupar é comercial closed-source com 4 tiers (Free/Basic/Pro/
 //! Business). A licença é um JWT Ed25519 assinado pelo Firebase
 //! Cloud Functions, com:
 //!

@@ -1,89 +1,43 @@
-# claude-project-memory
+# open-poupar.ai
 
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
+**A edição aberta da [poupar.ai](https://poupar.ai) — memória persistente e um time de
+agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.**
+
+[![poupar.ai](https://img.shields.io/badge/poupar.ai-site-2F6FED)](https://poupar.ai)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange.svg)](./LICENSE)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
 
-> ⚠️ **Em desenvolvimento ativo** — funcional, mas ainda em evolução. Feedbacks, bugs e PRs são bem-vindos. Abra uma [issue](https://github.com/poupar-ai/open-poupar.ai/issues) se encontrar algum problema.
+![O time de agentes do open-poupar.ai trabalhando](docs/assets/demo-agentes.gif)
 
-**Plugin para [Claude Code](https://claude.ai/code) que mantém memória persistente por projeto**, armazenada como arquivos de texto simples dentro do próprio repositório — versionável no git, legível por humanos, sem serviços externos, sem banco de dados.
+## O que faz
 
-Cada projeto tem sua própria memória. O time inteiro compartilha o contexto ao clonar o repo.
+Toda vez que você abre o Claude Code, ele começa do zero. O open-poupar.ai resolve isso
+com duas coisas que funcionam juntas:
 
----
+**1. Memória que mora no repositório.** Cada edição, comando e decisão vira uma linha de
+JSONL dentro de `.claude-project-memory/`, no seu próprio projeto. No começo de cada
+sessão isso é injetado de volta no contexto do Claude — ele já abre sabendo a stack, os
+padrões, as decisões e as armadilhas do projeto. Como é texto puro versionado no git,
+`git diff` mostra o que a memória aprendeu, e quem clonar o repo herda o contexto inteiro.
 
-## Filosofia
+**2. Um time de agentes, não um assistente só.** Você define papéis — manager, oracle,
+arquiteto, revisor, tester, devs por senioridade, especialistas — cada um com seu modelo,
+suas ferramentas, seu escopo e seu contexto. Eles conversam entre si, delegam, escalam
+para você quando travam, e tudo fica registrado. O canvas acima é a UI local onde você
+acompanha e conversa com o time.
 
-O plugin organiza a memória do projeto em **camadas de identidade**, da mais volátil à mais estável:
+Concretamente, ele:
 
-```
-           ┌────────────────────────┐
-           │   ✨  SOUL.md          │  ← ALMA: valores, filosofia, voz, não-negociáveis
-           │   (raramente muda)     │     — quem o projeto é
-           └────────────────────────┘
-           ┌────────────────────────┐
-           │   PROJECT.md           │  ← IDENTIDADE FACTUAL: stack, estrutura, padrões
-           │   (muda por release)   │     — o que o projeto é
-           └────────────────────────┘
-       ┌───────────────────────────────┐
-       │   DECISIONS / GOTCHAS /       │  ← APRENDIZADO: decisões, armadilhas, glossário
-       │   GLOSSARY                    │     — o que o projeto escolheu
-       └───────────────────────────────┘
-     ┌────────────────────────────────────┐
-     │   decisions / corrections /        │  ← LOGS: append-only, alimentado por hooks
-     │   gotchas (JSONL)                  │     e slash commands
-     └────────────────────────────────────┘
-   ┌──────────────────────────────────────────┐
-   │   observations.jsonl + graph.json        │  ← SINAL BRUTO: edições, diffs, comandos,
-   │                                          │     padrões detectados
-   └──────────────────────────────────────────┘
-```
+| | |
+|---|---|
+| **Grava** | edições (com `git diff --numstat`), comandos (com resumo de saída de teste/lint), correções suas e armadilhas `falha → conserto → sucesso` |
+| **Injeta** | SOUL/PROJECT/DECISIONS/GOTCHAS, sessões recentes, estado do git, índice de código e padrões do grafo — com orçamento de tokens por prioridade |
+| **Detecta** | arquivos mais quentes, acoplamentos (arquivos editados juntos) e workflows recorrentes (`editar X → rodar Y`) |
+| **Orquestra** | time de agentes com handoff, subagentes paralelos, cron, pipelines e fila com retry |
+| **Protege** | cofre criptografado por projeto, identidade Ed25519 por agente, allowlist de comandos e bloqueio de operação destrutiva |
 
-### As camadas
-
-- **Alma** (`SOUL.md`) — a identidade do projeto: valores, filosofia, voz, anti-padrões. Responde **"no que esse projeto acredita?"**. Raramente muda. É a **lente** pela qual os fatos são interpretados — por isso é injetada antes de qualquer coisa.
-- **Identidade factual** (`PROJECT.md`) — stack, arquitetura, padrões, como rodar. Responde **"o que esse projeto é?"**. Muda por release.
-- **Aprendizado** (`DECISIONS.md`, `GOTCHAS.md`, `GLOSSARY.md`) — renderizado automaticamente a partir dos JSONLs ao final de cada sessão.
-- **Logs curados** (`decisions.jsonl`, `corrections.jsonl`, `gotchas.jsonl`) — fatos pontuais alimentados por hooks (correções detectadas, armadilhas descobertas em `fail→retry→success`) e por slash commands (`/mem-decision`).
-- **Sinal bruto** (`observations.jsonl` + `graph.json`) — capturado automaticamente pelos hooks: edições com `git diff --numstat`, comandos com resumo de saída de testes/lint, e padrões derivados (arquivos ativos, acoplamentos, workflows).
-
-### A ideia central
-
-> O Claude não tem que lembrar. Mas também não deveria repetir erros, nem perder o "por quê" das decisões, **nem esquecer quem é o projeto**.
-
-O plugin é o contrato entre sessões — e entre você, seu time e o Claude.
-
----
-
-## O problema
-
-Toda vez que você abre o Claude Code, ele começa do zero. Não sabe:
-
-- O que foi feito nas sessões anteriores
-- Quais padrões e convenções o projeto usa
-- Decisões técnicas que foram tomadas e por quê
-- O que está em andamento
-
-Isso leva a respostas genéricas, violações de padrões estabelecidos e retrabalho constante para "re-ensinar" o contexto.
-
-## A solução
-
-O **claude-project-memory** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
-
-```
-Você abre o Claude Code
-        ↓
-Banner: "🧠 project-man | meu-projeto | 12 sessões · 340 obs | PROJECT.md ✓"
-        ↓
-Você digita o primeiro prompt
-        ↓
-Claude já recebe: PROJECT.md + sessões recentes + observações anteriores + padrões do grafo
-        ↓
-Responde com contexto completo do projeto desde o primeiro message
-        ↓
-Cada edição e comando é gravado silenciosamente em background
-        ↓
-Ao encerrar → resumo da sessão gerado automaticamente
-```
+Roda inteiro na sua máquina: sem conta, sem nuvem, sem telemetria. O binário é estático e
+não depende de runtime nenhum.
 
 ---
 
@@ -195,6 +149,82 @@ compilado e não precisa de Node. Duas coisas opcionais ainda chamam Node
 quando você as usa: os skills `/mem-agents` e `/mem-index`, e o CLI de seed
 (`plugin/scripts/seed.cjs setup`). Sem Node instalado o plugin funciona; só
 esses extras ficam indisponíveis.
+
+---
+
+## Filosofia
+
+O plugin organiza a memória do projeto em **camadas de identidade**, da mais volátil à mais estável:
+
+```
+           ┌────────────────────────┐
+           │   ✨  SOUL.md          │  ← ALMA: valores, filosofia, voz, não-negociáveis
+           │   (raramente muda)     │     — quem o projeto é
+           └────────────────────────┘
+           ┌────────────────────────┐
+           │   PROJECT.md           │  ← IDENTIDADE FACTUAL: stack, estrutura, padrões
+           │   (muda por release)   │     — o que o projeto é
+           └────────────────────────┘
+       ┌───────────────────────────────┐
+       │   DECISIONS / GOTCHAS /       │  ← APRENDIZADO: decisões, armadilhas, glossário
+       │   GLOSSARY                    │     — o que o projeto escolheu
+       └───────────────────────────────┘
+     ┌────────────────────────────────────┐
+     │   decisions / corrections /        │  ← LOGS: append-only, alimentado por hooks
+     │   gotchas (JSONL)                  │     e slash commands
+     └────────────────────────────────────┘
+   ┌──────────────────────────────────────────┐
+   │   observations.jsonl + graph.json        │  ← SINAL BRUTO: edições, diffs, comandos,
+   │                                          │     padrões detectados
+   └──────────────────────────────────────────┘
+```
+
+### As camadas
+
+- **Alma** (`SOUL.md`) — a identidade do projeto: valores, filosofia, voz, anti-padrões. Responde **"no que esse projeto acredita?"**. Raramente muda. É a **lente** pela qual os fatos são interpretados — por isso é injetada antes de qualquer coisa.
+- **Identidade factual** (`PROJECT.md`) — stack, arquitetura, padrões, como rodar. Responde **"o que esse projeto é?"**. Muda por release.
+- **Aprendizado** (`DECISIONS.md`, `GOTCHAS.md`, `GLOSSARY.md`) — renderizado automaticamente a partir dos JSONLs ao final de cada sessão.
+- **Logs curados** (`decisions.jsonl`, `corrections.jsonl`, `gotchas.jsonl`) — fatos pontuais alimentados por hooks (correções detectadas, armadilhas descobertas em `fail→retry→success`) e por slash commands (`/mem-decision`).
+- **Sinal bruto** (`observations.jsonl` + `graph.json`) — capturado automaticamente pelos hooks: edições com `git diff --numstat`, comandos com resumo de saída de testes/lint, e padrões derivados (arquivos ativos, acoplamentos, workflows).
+
+### A ideia central
+
+> O Claude não tem que lembrar. Mas também não deveria repetir erros, nem perder o "por quê" das decisões, **nem esquecer quem é o projeto**.
+
+O plugin é o contrato entre sessões — e entre você, seu time e o Claude.
+
+---
+
+## O problema
+
+Toda vez que você abre o Claude Code, ele começa do zero. Não sabe:
+
+- O que foi feito nas sessões anteriores
+- Quais padrões e convenções o projeto usa
+- Decisões técnicas que foram tomadas e por quê
+- O que está em andamento
+
+Isso leva a respostas genéricas, violações de padrões estabelecidos e retrabalho constante para "re-ensinar" o contexto.
+
+## A solução
+
+O **open-poupar.ai** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
+
+```
+Você abre o Claude Code
+        ↓
+Banner: "🧠 project-man | meu-projeto | 12 sessões · 340 obs | PROJECT.md ✓"
+        ↓
+Você digita o primeiro prompt
+        ↓
+Claude já recebe: PROJECT.md + sessões recentes + observações anteriores + padrões do grafo
+        ↓
+Responde com contexto completo do projeto desde o primeiro message
+        ↓
+Cada edição e comando é gravado silenciosamente em background
+        ↓
+Ao encerrar → resumo da sessão gerado automaticamente
+```
 
 ---
 
@@ -500,21 +530,42 @@ Os binários acham `plugin/` e `ui/` a partir do **próprio executável**
 
 ---
 
-## Comparação com claude-mem
+## Onde ele se diferencia
 
-|  | [claude-mem](https://github.com/thedotmack/claude-mem) | claude-project-memory |
-|--|---|---|
-| Armazenamento | `~/.claude-mem/` (global na máquina) | `.claude-project-memory/` (dentro de cada projeto) |
-| Formato | SQLite + Chroma (binário) | JSONL (texto puro) |
-| Git | Não commitável diretamente | Feito para commitar e compartilhar |
-| Worker | Processo Bun em background | Sem worker — hooks são binários de execução curta |
-| Dependências | Bun, tree-sitter, SQLite, Chroma | Nenhuma — binário estático |
-| Busca | Semântica via embeddings | Full-text + grafo de padrões |
-| Compartilhamento | Memória pessoal de cada dev | Compartilhada via git com o time |
+O espaço de "memória para agente de código" tem três famílias, e elas resolvem problemas
+diferentes. Vale entender em qual você está entrando antes de escolher.
 
-Os dois podem coexistir — servem propósitos diferentes.
+**Serviços hospedados** (Supermemory, Mem0 e afins, inclusive como provider do Hermes
+Agent) — memória fica num serviço externo, com busca semântica e perfil que atravessa
+projetos e ferramentas. Você ganha recall entre contextos; paga com dependência de rede,
+conta e um terceiro guardando o que seu time discute.
 
----
+**Plugins de memória local** (do `MEMORY.md` curado ao SQLite com embeddings) — arquivo ou
+banco na sua máquina, injetado no início da sessão. Simples e privado; a memória costuma
+ser pessoal daquela máquina e o escopo é lembrar fatos.
+
+**open-poupar.ai** — memória versionada *dentro do repositório* **e** um time de agentes
+operando sobre ela.
+
+O que decorre disso, concretamente:
+
+| | open-poupar.ai |
+|---|---|
+| **Onde a memória vive** | `.claude-project-memory/` no seu repo — `git diff` mostra o que ela aprendeu, `git blame` mostra quando, e quem clona herda o contexto |
+| **De quem é a memória** | do projeto, não da máquina: o time inteiro compartilha pelo git, sem sync nem servidor |
+| **Formato** | JSONL e Markdown legíveis — `grep`, `jq` e qualquer editor funcionam; nada de blob binário |
+| **Escopo** | além de lembrar fatos: time de agentes com papéis, handoff, subagentes paralelos, cron, pipelines e fila com retry |
+| **Dependências** | binário estático — sem conta, sem nuvem, sem telemetria, sem runtime |
+| **Se o projeto sumir** | a memória continua legível: são arquivos de texto no seu repo, sem formato proprietário |
+
+O custo honesto dessa escolha: a memória **não** atravessa projetos nem máquinas
+automaticamente (é justamente o que o git resolve, e o que um serviço hospedado faz por
+você), e a busca é full-text com BM25 (SQLite FTS5) mais um grafo de padrões — não
+embeddings semânticos. Se o que você quer é um perfil único te seguindo por todas as
+ferramentas, um serviço hospedado atende melhor. Se você quer que **o repositório** saiba
+de si mesmo e que um time opere sobre ele, é aqui.
+
+Os dois modelos coexistem — resolvem camadas diferentes.
 
 ## Débitos técnicos a resolver
 
@@ -698,7 +749,7 @@ scripts/package.sh && scripts/smoke-package.sh
 
 ## Apoie o projeto
 
-O **claude-project-memory** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
+O **open-poupar.ai** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/schedylabs)
 
@@ -718,7 +769,7 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Palavras-chave
 
-`claude-code` `claude-code-plugin` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph`
+`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph`
 
 ---
 

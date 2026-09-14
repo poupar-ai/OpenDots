@@ -27,3 +27,7 @@ Thumbs.db
 
 # Tarballs de release montados por scripts/package.sh
 /dist/
+
+# Backups e notas de sessão — podem conter caminhos locais e dados de projeto
+/bkp/
+/docs/sessions/

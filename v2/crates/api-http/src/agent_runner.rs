@@ -175,8 +175,8 @@ async fn run_headless_turn(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("CLAUDE_POUPAR_SUBAGENT", "1")
-        .env("CLAUDE_POUPAR_AGENT", agent)
+        .env("POUPAR_SUBAGENT", "1")
+        .env("POUPAR_AGENT", agent)
         .kill_on_drop(true);
     // Mesmo flow do chat_send_handler — token Ed25519 quando vault
     // permite. Auto-handoff entre agentes precisa autenticar igual

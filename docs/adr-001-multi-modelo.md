@@ -14,7 +14,7 @@ de subprocess via `TokioCommand::new("claude")` em 2 hot paths:
 - `v2/crates/api-http/src/agent_runner.rs::run_headless_turn`
 
 O nome do binário, args (`-p`, `--output-format`, `--model`,
-`--allowed-tools`, `--disallowed-tools`), env vars (`CLAUDE_POUPAR_*`),
+`--allowed-tools`, `--disallowed-tools`), env vars (`POUPAR_*`),
 e formato de output (stdout = resposta plain) são todos amarrados ao
 Claude CLI.
 

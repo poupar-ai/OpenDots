@@ -68,11 +68,27 @@ detect_target() {
 
 # ─── release ─────────────────────────────────────────────────────────
 
+# Imprime a última tag publicada em stdout. O motivo de falhar vai no
+# código de saída, e não numa variável: a função é chamada dentro de
+# `$(...)`, que roda em subshell — variável setada aqui não chega ao
+# chamador.
+#
+#   0  tag em stdout
+#   3  repositório sem nenhuma release (404)
+#   4  não consegui falar com a API (rede, proxy, rate limit)
+#   5  API respondeu, mas sem `tag_name`
 latest_tag() {
-  # Sem jq: a API devolve "tag_name": "v0.1.0" numa linha só.
-  curl -fsSL "$API_BASE/repos/$REPO/releases/latest" \
-    | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' \
-    | head -1
+  local body http tag
+  body="$(curl -sSL -w '\n%{http_code}' "$API_BASE/repos/$REPO/releases/latest" 2>/dev/null)" || return 4
+  http="${body##*$'\n'}"
+  body="${body%$'\n'*}"
+
+  [ "$http" = "404" ] && return 3
+  [ "$http" = "200" ] || return 4
+
+  tag="$(printf '%s' "$body" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -1)"
+  [ -n "$tag" ] || return 5
+  printf '%s' "$tag"
 }
 
 sha256_of() {
@@ -95,8 +111,27 @@ main() {
   tag="$VERSION"
   if [ -z "$tag" ]; then
     info "procurando a última release de $REPO"
-    tag="$(latest_tag)" || true
-    [ -n "$tag" ] || die "não consegui descobrir a última release. Passe POUPAR_VERSION=vX.Y.Z"
+    local rc=0
+    tag="$(latest_tag)" || rc=$?
+    if [ "$rc" != "0" ]; then
+      case "$rc" in
+        3) warn "o repositório $REPO ainda não publicou nenhuma release" ;;
+        4) warn "não consegui falar com $API_BASE (rede, proxy ou rate limit)" ;;
+        *) warn "a API respondeu sem 'tag_name'" ;;
+      esac
+      say
+      say "  Se você é quem mantém o projeto: publique a primeira release com"
+      say "      git tag v0.1.0 && git push origin v0.1.0"
+      say "  O workflow de release compila os binários e publica os tarballs."
+      say
+      say "  Se você quer instalar uma versão específica que já existe:"
+      say "      curl -fsSL <url>/install.sh | POUPAR_VERSION=v0.1.0 bash"
+      say
+      say "  Enquanto não há release, dá pra instalar do código-fonte:"
+      say "      git clone https://github.com/$REPO.git && cd ${REPO##*/}"
+      say "      make build && make install"
+      die "instalação abortada — nada a baixar"
+    fi
   fi
 
   # A tag é `vX.Y.Z`; o asset usa a versão sem o `v`.

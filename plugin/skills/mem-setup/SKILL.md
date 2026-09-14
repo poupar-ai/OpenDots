@@ -1,11 +1,11 @@
 ---
 name: mem-setup
-description: Analisa o projeto em profundidade e cria/atualiza .claude-project-memory/PROJECT.md pra manter consistência em sessões futuras.
+description: Analisa o projeto em profundidade e cria/atualiza .poupar/PROJECT.md pra manter consistência em sessões futuras.
 ---
 
 # /mem-setup — Onboarding do projeto
 
-Você vai analisar este projeto em profundidade e criar (ou atualizar) o arquivo `.claude-project-memory/PROJECT.md`, que será injetado em toda sessão futura para manter consistência total com os padrões do projeto.
+Você vai analisar este projeto em profundidade e criar (ou atualizar) o arquivo `.poupar/PROJECT.md`, que será injetado em toda sessão futura para manter consistência total com os padrões do projeto.
 
 ## 1. Encontre a raiz do projeto
 
@@ -63,7 +63,7 @@ Depois pergunte:
 
 Aguarde a resposta antes de criar o arquivo.
 
-## 4. Crie `.claude-project-memory/PROJECT.md`
+## 4. Crie `.poupar/PROJECT.md`
 
 Use exatamente esta estrutura:
 
@@ -110,5 +110,5 @@ Use exatamente esta estrutura:
 Após criar o PROJECT.md:
 
 1. Informe ao dev onde o arquivo foi criado e o que foi capturado em cada seção.
-2. Sugira commitar: `git add .claude-project-memory/PROJECT.md && git commit -m "docs: add project memory"`
+2. Sugira commitar: `git add .poupar/PROJECT.md && git commit -m "docs: add project memory"`
 3. O plugin vai sincronizar automaticamente o conteúdo para `.claude/CLAUDE.md` na próxima sessão, garantindo que o Claude leia o contexto nativamente.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bench HTTP do pmem-http: TCP vs Unix socket.
+# Bench HTTP do poupar-http: TCP vs Unix socket.
 #
 # Endpoint testado: GET /api/auth/server-token (leve, sem dependência
 # de vault unlocked, retorna JSON pequeno). Bate N requests em loop
@@ -16,17 +16,17 @@ export LC_NUMERIC=C  # awk/printf usam ponto decimal, não vírgula (locale-safe
 N="${1:-2000}"
 PORT="${PORT:-37999}"
 TMP="$(mktemp -d)"
-SOCK="$TMP/pmem.sock"
-BIN="${BIN:-$(pwd)/v2/target/release/pmem-http}"
+SOCK="$TMP/poupar.sock"
+BIN="${BIN:-$(pwd)/v2/target/release/poupar-http}"
 
 if [[ ! -x "$BIN" ]]; then
   echo "binário não encontrado: $BIN"
-  echo "rode: cargo build --release --manifest-path v2/Cargo.toml --bin pmem-http"
+  echo "rode: cargo build --release --manifest-path v2/Cargo.toml --bin poupar-http"
   exit 1
 fi
 
 cleanup() {
-  pkill -P $$ pmem-http 2>/dev/null || true
+  pkill -P $$ poupar-http 2>/dev/null || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -50,16 +50,16 @@ run_loop() {
   printf "  %d reqs em %.2fs → %.0f req/s (%.0f req/min)\n" "$n" "$elapsed" "$rps" "$per_min"
 }
 
-echo "== bench HTTP pmem-http =="
+echo "== bench HTTP poupar-http =="
 echo "N=$N requests por modo"
 echo "binário: $BIN"
 echo ""
 
 # ── TCP ────────────────────────────────────────────────────────────────
 echo "[TCP] subindo em 127.0.0.1:$PORT ..."
-PROJECT_MEM_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/tcp.log" &
+POUPAR_PORT="$PORT" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/tcp.log" &
 TCP_PID=$!
-# Espera bind (pmem-http imprime "escutando em" pra stderr).
+# Espera bind (poupar-http imprime "escutando em" pra stderr).
 for _ in $(seq 1 20); do
   if grep -q "escutando em" "$TMP/tcp.log" 2>/dev/null; then break; fi
   sleep 0.1
@@ -80,7 +80,7 @@ sleep 0.3
 # ── Unix socket ────────────────────────────────────────────────────────
 echo ""
 echo "[Unix] subindo em $SOCK ..."
-PROJECT_MEM_BIND_UNIX="$SOCK" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/unix.log" &
+POUPAR_BIND_UNIX="$SOCK" CLAUDE_CWD="$TMP" "$BIN" 2>"$TMP/unix.log" &
 UNIX_PID=$!
 for _ in $(seq 1 20); do
   if [[ -S "$SOCK" ]]; then break; fi

@@ -1,11 +1,11 @@
 ---
 name: mem-soul
-description: Cria ou atualiza .claude-project-memory/SOUL.md — camada de identidade do projeto (valores, filosofia, voz, não-negociáveis).
+description: Cria ou atualiza .poupar/SOUL.md — camada de identidade do projeto (valores, filosofia, voz, não-negociáveis).
 ---
 
 # /mem-soul — Alma do projeto
 
-Cria ou atualiza `.claude-project-memory/SOUL.md`, que é a **camada de identidade** do projeto — valores, filosofia, voz e não-negociáveis que vão além do que é factual (stack, estrutura, decisões pontuais).
+Cria ou atualiza `.poupar/SOUL.md`, que é a **camada de identidade** do projeto — valores, filosofia, voz e não-negociáveis que vão além do que é factual (stack, estrutura, decisões pontuais).
 
 **Entrada:** $ARGUMENTS — opcional. Se vazio, inicia o onboarding completo. Se for `add: <texto>` ou `update: <seção>`, atualiza pontualmente.
 
@@ -24,13 +24,13 @@ A alma responde **"no que esse projeto acredita?"**. A memória responde **"o qu
 git rev-parse --show-toplevel
 ```
 
-O arquivo é `<raiz>/.claude-project-memory/SOUL.md`.
+O arquivo é `<raiz>/.poupar/SOUL.md`.
 
 ## 2. Se `$ARGUMENTS` está vazio — onboarding da alma
 
 **Antes de perguntar, leia o que já existe:**
 
-- `.claude-project-memory/PROJECT.md` (se existir — dá contexto factual)
+- `.poupar/PROJECT.md` (se existir — dá contexto factual)
 - `README.md` da raiz
 - Arquivos de negócio/plano se existirem (ex: `business/`, `docs/vision.md`, `docs/product.md`)
 
@@ -101,7 +101,7 @@ Leia a seção atual, mostre ao dev, pergunte o que mudar, edite.
 ## 6. Ao final
 
 - Mostre o conteúdo final do `SOUL.md` ao dev
-- Sugira commit: `git add .claude-project-memory/SOUL.md && git commit -m "docs: atualiza alma do projeto"`
+- Sugira commit: `git add .poupar/SOUL.md && git commit -m "docs: atualiza alma do projeto"`
 - Informe: "A partir da próxima sessão, a alma é injetada no topo do contexto do Claude — antes do PROJECT.md."
 
 ## Não confundir com

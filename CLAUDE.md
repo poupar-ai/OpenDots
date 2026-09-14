@@ -1,4 +1,4 @@
-# claude-project-memory — Contexto para Claude Code
+# open-poupar.ai — Contexto para Claude Code
 
 ## O que é este projeto
 
@@ -33,7 +33,7 @@ scripts/
 
 ## Convenções críticas
 
-- **Nunca use `path.join(x, '.claude-project-memory')` diretamente** — sempre use `getMemDir(cwd)` de `lib.cjs`. O nome do diretório é a constante `MEM_DIR_NAME` em `lib.cjs`.
+- **Nunca use `path.join(x, '.poupar')` diretamente** — sempre use `getMemDir(cwd)` de `lib.cjs`. O nome do diretório é a constante `MEM_DIR_NAME` em `lib.cjs`.
 - **Flag files de sessão ficam em `tmp/`** — `getTmpDir(memDir)` de `lib.cjs`.
 - **Para ler a última observação, use `readLastJsonlLine(file)`** — não leia o arquivo inteiro.
 - **Para contar sessões/observações no banner, use `loadStats(memDir)`** — não leia os JSONL.
@@ -136,7 +136,7 @@ SessionEnd       → session-end.cjs  → sessions.jsonl (resumo) + limpa tmp/
 <raiz-do-projeto>/
 ├── .claude/
 │   └── CLAUDE.md                       ← sincronizado de PROJECT.md (leitura nativa do Claude)
-└── .claude-project-memory/
+└── .poupar/
     ├── PROJECT.md                       ← contexto permanente do projeto
     ├── config.json                      ← metadados (project, version, created_at)
     ├── sessions.jsonl                   ← {type:"start"|"end", session_id, ...}

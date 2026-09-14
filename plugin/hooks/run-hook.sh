@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
-# run-hook.sh — despacha um hook do project-mem para a implementação
-# disponível na instalação corrente.
+# run-hook.sh — despacha um hook do open-poupar.ai para o binário
+# correspondente.
 #
-# Existem dois layouts oficiais e eles rodam runtimes diferentes:
-#
-#   tarball (curl | bash)     clone git (make install)
-#   <root>/plugin/bin/          <repo>/plugin/scripts/*.cjs
-#     pmem-hook-<nome>            rodados por Node
-#
-# O binário compilado vence quando está instalado — só existe no tarball,
-# então a instalação por clone continua no caminho `.cjs` de sempre, sem
-# mudança de comportamento. Pra testar o build local de dentro do clone,
-# aponte `PROJECT_MEM_BIN_DIR=v2/target/release`.
+# Os hooks do Claude Code apontam pra cá em vez de pro binário direto
+# porque o caminho muda conforme o layout da instalação: `plugin/bin/`
+# no tarball, `v2/target/release/` no clone. Quem resolve isso é o
+# `bin-path.sh`.
 #
 # uso: run-hook.sh <session-init|observe|session-end|startup>
 #
 # stdin (JSON do Claude Code) é repassado intacto; stdout/stderr e o
-# exit code são os da implementação escolhida.
+# exit code são os do binário.
 
 set -u
 
@@ -28,20 +22,10 @@ fi
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-# 1. Binário compilado (`--installed`: sem dev build — ver bin-path.sh).
-if bin="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/bin-path.sh" --installed "pmem-hook-$HOOK")"; then
+if bin="$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/bin-path.sh" "poupar-hook-$HOOK")"; then
   exec "$bin"
 fi
 
-# 2. Fallback Node. Prefere a versão mais nova sob o nvm — a instalação
-#    padrão do macOS/Linux deixa `node` fora do PATH de processos não
-#    interativos, e o hook roda sem shell de login.
-script="$PLUGIN_ROOT/scripts/$HOOK.cjs"
-if [ -f "$script" ]; then
-  NODE_BIN="$(ls "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)"
-  [ -z "$NODE_BIN" ] && NODE_BIN="node"
-  exec "$NODE_BIN" "$script"
-fi
-
-echo "run-hook.sh: nenhuma implementação para o hook '$HOOK' em $PLUGIN_ROOT" >&2
+echo "run-hook.sh: binário poupar-hook-$HOOK não encontrado a partir de $PLUGIN_ROOT." >&2
+echo "  Instalação por clone precisa de 'make build' antes." >&2
 exit 127

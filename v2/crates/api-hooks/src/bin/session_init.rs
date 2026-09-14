@@ -1,4 +1,4 @@
-//! `pmem-hook-session-init` — thin entrypoint do `UserPromptSubmit`.
+//! `poupar-hook-session-init` — thin entrypoint do `UserPromptSubmit`.
 //!
 //! Paridade com `plugin/scripts/session-init.cjs`:
 //! 1. Lê stdin (session_id, prompt, cwd).
@@ -217,7 +217,7 @@ fn main() -> ExitCode {
     }
 
     // 7. Token budget.
-    let budget = std::env::var("PROJECT_MEM_TOKEN_BUDGET")
+    let budget = std::env::var("POUPAR_TOKEN_BUDGET")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(4000);

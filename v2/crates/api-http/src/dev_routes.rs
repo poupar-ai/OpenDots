@@ -1,8 +1,8 @@
 //! Endpoints de DEV / benchmark — só montados no router quando a env
-//! `PROJECT_MEM_DEV_MODE=1` está setada no startup. Sem isso, as rotas
+//! `POUPAR_DEV_MODE=1` está setada no startup. Sem isso, as rotas
 //! não existem (404) e o código é morto pra prod.
 //!
-//! **NÃO LIGAR PROJECT_MEM_DEV_MODE EM PROD**: o endpoint `mint_token`
+//! **NÃO LIGAR POUPAR_DEV_MODE EM PROD**: o endpoint `mint_token`
 //! permite forjar identidade de qualquer agente cadastrado, quebrando
 //! a garantia de não-impersonação do handoff.
 //!
@@ -24,7 +24,7 @@ use crate::tenant::TenantContext;
 use crate::{json_error, json_response, AppState};
 
 pub fn is_dev_mode() -> bool {
-    std::env::var("PROJECT_MEM_DEV_MODE").ok().as_deref() == Some("1")
+    std::env::var("POUPAR_DEV_MODE").ok().as_deref() == Some("1")
 }
 
 /// Router das rotas dev. Retorna vazio quando `is_dev_mode()` é false —
@@ -62,7 +62,7 @@ async fn mint_token_handler(
                 "ok": true,
                 "agent": agent,
                 "token": token,
-                "warning": "DEV mode — endpoint não existe sem PROJECT_MEM_DEV_MODE=1",
+                "warning": "DEV mode — endpoint não existe sem POUPAR_DEV_MODE=1",
             }),
         ),
         None => json_error(

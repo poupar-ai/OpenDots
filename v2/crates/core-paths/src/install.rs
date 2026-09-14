@@ -1,7 +1,7 @@
 //! # install — onde o *produto instalado* mora no disco
 //!
 //! Os demais módulos de `core-paths` resolvem a **memória do projeto**
-//! (`<project_root>/.claude-project-memory`), que é dado do usuário.
+//! (`<project_root>/.poupar`), que é dado do usuário.
 //! Este resolve a outra metade: os **assets do próprio plugin**
 //! (`plugin/`, `ui/`) que acompanham os binários.
 //!
@@ -12,7 +12,7 @@
 //! derivável do `cwd` ou fixado em tempo de compilação
 //! (`concat!(env!("CARGO_MANIFEST_DIR"), "/../../../plugin")`). Nenhuma
 //! das duas heurísticas sobrevive a um binário baixado por `curl` e
-//! extraído em `~/.local/share/pmem`: o `cwd` é o projeto do usuário e o
+//! extraído em `~/.local/share/poupar`: o `cwd` é o projeto do usuário e o
 //! `CARGO_MANIFEST_DIR` é o diretório da máquina que compilou.
 //!
 //! A âncora estável é o **próprio executável**. Os dois layouts oficiais
@@ -24,8 +24,8 @@
 //! ├── .claude-plugin/              ├── .claude-plugin/
 //! │   └── marketplace.json         │   └── marketplace.json
 //! ├── plugin/                      ├── plugin/
-//! │   └── bin/pmem-http            ├── ui-next/dist/
-//! └── ui/                          └── v2/target/release/pmem-http
+//! │   └── bin/poupar-http            ├── ui-next/dist/
+//! └── ui/                          └── v2/target/release/poupar-http
 //! ```
 //!
 //! Em ambos, subir os ancestrais do executável até achar
@@ -48,14 +48,14 @@ use std::path::{Path, PathBuf};
 const ROOT_MARKER: &[&str] = &[".claude-plugin", "marketplace.json"];
 
 /// Quantos ancestrais do executável inspecionar. O layout mais profundo
-/// é o do clone git (`<repo>/v2/target/release/pmem-http` → 4 níveis);
+/// é o do clone git (`<repo>/v2/target/release/poupar-http` → 4 níveis);
 /// 6 dá folga para `target/<triple>/release/` sem sair varrendo o disco
 /// inteiro até `/` e casar com um marketplace alheio.
 const MAX_ANCESTORS: usize = 6;
 
 /// Lê uma env var tratando string vazia como ausente.
 ///
-/// `PROJECT_MEM_HOME=` (vazio) é a forma usual de "desliga esse
+/// `POUPAR_HOME=` (vazio) é a forma usual de "desliga esse
 /// override" em shell script; sem isso viraria `PathBuf::from("")`, que
 /// resolve para o cwd e leva a erro silencioso.
 fn env_path(key: &str) -> Option<PathBuf> {
@@ -86,19 +86,19 @@ pub fn find_install_root_from(start: &Path) -> Option<PathBuf> {
 
 /// Raiz da instalação — o diretório que contém `plugin/` e a UI.
 ///
-/// 1. `$PROJECT_MEM_HOME`, se apontar para um diretório existente.
+/// 1. `$POUPAR_HOME`, se apontar para um diretório existente.
 /// 2. Derivada do executável em curso (ver [`find_install_root_from`]).
 /// 3. `None` — binário rodando fora de qualquer árvore reconhecível
 ///    (ex.: copiado solto para `/usr/local/bin`). Cabe ao caller decidir
 ///    o fallback; nenhum path é chutado aqui.
 pub fn install_root() -> Option<PathBuf> {
-    if let Some(home) = env_path("PROJECT_MEM_HOME") {
+    if let Some(home) = env_path("POUPAR_HOME") {
         if home.is_dir() {
             return Some(home);
         }
     }
     let exe = std::env::current_exe().ok()?;
-    // `canonicalize` resolve o symlink de `~/.local/bin/pmem` para o
+    // `canonicalize` resolve o symlink de `~/.local/bin/poupar` para o
     // binário real dentro da árvore de instalação — sem isso a subida
     // de ancestrais começaria em `~/.local/bin` e não acharia nada.
     let exe = exe.canonicalize().unwrap_or(exe);
@@ -108,11 +108,11 @@ pub fn install_root() -> Option<PathBuf> {
 /// Diretório `plugin/` — seeds, pipelines, best-practices, skills,
 /// `agent-bin/`, `hooks/`.
 ///
-/// 1. `$PROJECT_MEM_PLUGIN_DIR` (override cru, sem checagem de
-///    existência — paridade com o comportamento anterior do `pmem-http`).
+/// 1. `$POUPAR_PLUGIN_DIR` (override cru, sem checagem de
+///    existência — paridade com o comportamento anterior do `poupar-http`).
 /// 2. `<install_root>/plugin`.
 pub fn plugin_dir() -> Option<PathBuf> {
-    env_path("PROJECT_MEM_PLUGIN_DIR").or_else(|| install_root().map(|r| r.join("plugin")))
+    env_path("POUPAR_PLUGIN_DIR").or_else(|| install_root().map(|r| r.join("plugin")))
 }
 
 /// Resolve o diretório da UI buildada dentro de uma raiz conhecida.
@@ -121,7 +121,7 @@ pub fn plugin_dir() -> Option<PathBuf> {
 /// (mais raso, sem `node_modules` por perto), o clone git tem a saída do
 /// Vite em `ui-next/dist/`. Ambos são checados pela presença do
 /// `index.html` — diretório vazio conta como ausente, que é o que faz o
-/// `pmem-http` mostrar a página "rode o build" em vez de servir 404.
+/// `poupar-http` mostrar a página "rode o build" em vez de servir 404.
 ///
 /// Pura, para teste direto com `tempfile`.
 pub fn resolve_ui_dist(root: &Path) -> Option<PathBuf> {
@@ -130,12 +130,12 @@ pub fn resolve_ui_dist(root: &Path) -> Option<PathBuf> {
         .find(|dir| dir.join("index.html").is_file())
 }
 
-/// Diretório servido como front estático pelo `pmem-http`.
+/// Diretório servido como front estático pelo `poupar-http`.
 ///
-/// 1. `$PROJECT_MEM_UI_DIR`, se contiver `index.html`.
+/// 1. `$POUPAR_UI_DIR`, se contiver `index.html`.
 /// 2. `<install_root>/ui` ou `<install_root>/ui-next/dist`.
 pub fn ui_dist_dir() -> Option<PathBuf> {
-    if let Some(dir) = env_path("PROJECT_MEM_UI_DIR") {
+    if let Some(dir) = env_path("POUPAR_UI_DIR") {
         if dir.join("index.html").is_file() {
             return Some(dir);
         }

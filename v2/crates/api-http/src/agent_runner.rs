@@ -175,23 +175,23 @@ async fn run_headless_turn(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("CLAUDE_PROJECT_MEM_SUBAGENT", "1")
-        .env("CLAUDE_PROJECT_MEM_AGENT", agent)
+        .env("CLAUDE_POUPAR_SUBAGENT", "1")
+        .env("CLAUDE_POUPAR_AGENT", agent)
         .kill_on_drop(true);
     // Mesmo flow do chat_send_handler — token Ed25519 quando vault
     // permite. Auto-handoff entre agentes precisa autenticar igual
     // ao chat originado pelo humano.
     if let Some(token) = crate::agent_keys::mint_token_for(agent, vault, mem_dir) {
-        cmd.env("PROJECT_MEM_AGENT_TOKEN", token);
+        cmd.env("POUPAR_AGENT_TOKEN", token);
     }
-    // `plugin_dir/agent-bin` no PATH — agente chama `pmem handoff ...`
+    // `plugin_dir/agent-bin` no PATH — agente chama `poupar handoff ...`
     // sem expor $VAR na linha de comando (sandbox `simple_expansion` do
     // Claude Code rejeita qualquer Bash com expansão de variável). O
-    // wrapper `pmem` lê o token do env internamente.
+    // wrapper `poupar` lê o token do env internamente.
     let agent_bin = plugin_dir.join("agent-bin");
     let path_now = std::env::var("PATH").unwrap_or_default();
     cmd.env("PATH", format!("{}:{}", agent_bin.display(), path_now));
-    cmd.env("PROJECT_MEM_PORT", port.to_string());
+    cmd.env("POUPAR_PORT", port.to_string());
     for (k, v) in build_agent_env(mem_dir, vault, agent, &agent_cfg) {
         cmd.env(k, v);
     }

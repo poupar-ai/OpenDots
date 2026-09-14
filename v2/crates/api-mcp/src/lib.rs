@@ -1,6 +1,6 @@
 //! # api-mcp
 //!
-//! MCP server para `claude-project-memory`. Expõe 4 tools via
+//! MCP server para `open-poupar.ai`. Expõe 4 tools via
 //! JSON-RPC 2.0 sobre stdio (newline-delimited):
 //!
 //! - `mem_context`      — PROJECT.md + sessões + observações + grafo
@@ -51,7 +51,7 @@ pub fn tools_list_json() -> Value {
         },
         {
             "name": "mem_read_project",
-            "description": "Returns the content of .claude-project-memory/PROJECT.md — permanent project documentation including stack, architecture, conventions, and known decisions.",
+            "description": "Returns the content of .poupar/PROJECT.md — permanent project documentation including stack, architecture, conventions, and known decisions.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -388,7 +388,7 @@ pub fn handle_rpc(msg: &Value, ctx: &dyn ToolContext) -> Option<RpcResponse> {
             json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "claude-project-memory", "version": "1.0.0" }
+                "serverInfo": { "name": "open-poupar.ai", "version": "1.0.0" }
             }),
         ));
     }
@@ -780,7 +780,7 @@ mod tests {
         .unwrap();
         let v: Value = serde_json::from_str(&resp.body).unwrap();
         assert_eq!(v["result"]["protocolVersion"], "2024-11-05");
-        assert_eq!(v["result"]["serverInfo"]["name"], "claude-project-memory");
+        assert_eq!(v["result"]["serverInfo"]["name"], "open-poupar.ai");
     }
 
     #[test]

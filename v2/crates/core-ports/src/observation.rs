@@ -2,7 +2,7 @@
 //!
 //! Usado por `observations.jsonl`, `sessions.jsonl`, `agent_chats/*.jsonl`,
 //! `human_logs/*.jsonl`, `messages/YYYY-MM-DD.jsonl` e mais. Todo arquivo
-//! de memória do project-mem que é **sequência imutável de eventos** passa
+//! de memória do open-poupar que é **sequência imutável de eventos** passa
 //! por este port.
 //!
 //! ## Por que o payload é `serde_json::Value`

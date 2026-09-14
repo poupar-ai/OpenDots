@@ -1,6 +1,6 @@
 //! Port de canal de updates.
 //!
-//! O binário project-mem checa updates contra um manifest assinado
+//! O binário open-poupar checa updates contra um manifest assinado
 //! (mesma master key Ed25519 usada nas licenças). O manifest lista
 //! artefatos por target (linux-x64, darwin-arm64, etc.) com SHA-256
 //! para verificação pós-download.

@@ -73,7 +73,7 @@ async fn create_handler(
     let schedule = v.get("schedule").and_then(Value::as_str).unwrap_or("");
     let run_at_ms = v.get("run_at_ms").and_then(Value::as_u64);
     // Conveniência: `run_in_seconds` (relativo a agora) gera `run_at_ms`.
-    // Usado pelo wrapper pmem (`pmem cron at "2m" ...`) e pela UI
+    // Usado pelo wrapper poupar (`poupar cron at "2m" ...`) e pela UI
     // ("Daqui a quanto tempo"). Aceita zero ou negativo? Sem clamp —
     // o scheduler dispara no próximo tick se já passou.
     let run_in_seconds = v.get("run_in_seconds").and_then(Value::as_i64);

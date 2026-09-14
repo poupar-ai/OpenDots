@@ -105,7 +105,7 @@ Quando decidir acionar um agente que **está** na sua `can_talk_to`, use `Bash` 
 
 ```bash
 curl -s -X POST http://localhost:37778/api/agents/handoff \\
-  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \\
+  -H "Authorization: Bearer $POUPAR_AGENT_TOKEN" \\
   -H 'Content-Type: application/json' \\
   -d '{"from":"devs_junior_fe","to":"<target>","message":"<mensagem curta e direta>"}'
 ```
@@ -120,7 +120,7 @@ proativamente quando souber que vai mandar mais de uns 10 num turn.
 
 ```bash
 curl -s -X POST http://localhost:37778/api/agents/handoff_batch \
-  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H "Authorization: Bearer $POUPAR_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"items":[
         {"to":"alvo1","message":"..."},
@@ -141,7 +141,7 @@ prompt+context próprios — você só vê o resultado final.
 ```bash
 # Spawn um — retorna `subagent_id`, status="running":
 curl -s -X POST http://localhost:37778/api/agents/subagent/spawn \
-  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H "Authorization: Bearer $POUPAR_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"resumir o arquivo X em 3 bullets","timeout_secs":120,"tools":["Read"]}'
 
@@ -150,7 +150,7 @@ curl -s http://localhost:37778/api/agents/subagent/<subagent_id>
 
 # Batch N em paralelo (máx 20 por batch, 10 em flight por agente):
 curl -s -X POST http://localhost:37778/api/agents/subagent/spawn_batch \
-  -H "Authorization: Bearer $PROJECT_MEM_AGENT_TOKEN" \
+  -H "Authorization: Bearer $POUPAR_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"tasks":[{"prompt":"A","tools":["Read"]},{"prompt":"B","tools":["Read"]}]}'
 

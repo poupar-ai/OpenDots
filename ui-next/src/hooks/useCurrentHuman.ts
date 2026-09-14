@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getHuman, heartbeatHuman, type HumanProfile } from '@/lib/humans';
 
-const STORAGE_KEY = 'project-mem:current-human-id';
+const STORAGE_KEY = 'open-poupar:current-human-id';
 const HEARTBEAT_MS = 45_000;
 
 export function useCurrentHuman() {

@@ -31,31 +31,41 @@ Declara os papéis de agentes deste projeto (Manager, Oracle, e especialistas). 
 
 Integradores não têm MCPs. Motores sempre requerem confirmação do Manager antes de agir. Bombeiros só diagnosticam — correção passa por Manager + motor.
 
-## 1. Encontre o memDir
+## 1. Prepare o acesso
+
+O manifesto de agentes é manipulado pela API local do `poupar-http`, não
+por edição direta do JSON — a API valida, versiona e escreve o log de
+auditoria junto.
 
 ```bash
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-MEM="$ROOT/.claude-project-memory"
+MEM="$ROOT/.poupar"
+API="http://localhost:${POUPAR_PORT:-37778}"
+
+# a UI/servidor precisa estar no ar
+curl -sf "$API/api/data" >/dev/null || echo "servidor parado — rode /mem-ui primeiro"
 ```
 
 ## 2. Se `$ARGUMENTS` está vazio — listar agentes
 
 ```bash
-node -e "
-  const { loadManifest, countInvocations } = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  const cfg = loadManifest('$MEM');
-  if (!cfg) { console.log('nenhum agente declarado. Rode /mem-agents init pra criar os defaults.'); process.exit(0); }
-  const { counts = {}, recent = {} } = countInvocations('$MEM');
-  console.log('Manager:', cfg.manager, '| Oracle:', cfg.oracle);
-  console.log('Regra:', cfg.rule || '(nenhuma)');
-  console.log();
-  for (const [name, a] of Object.entries(cfg.agents)) {
-    const n = counts[name] || 0;
-    const last = recent[name] ? ' · último uso ' + recent[name].slice(0,10) : '';
-    console.log('•', a.emoji || '', name, '—', a.role);
-    console.log('    modelo:', a.model, '| invocações:', n + last);
-  }
-"
+curl -sf "$API/api/data" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["agents"]
+m = d.get("manifest") or {}
+ag = m.get("agents") or {}
+if not ag:
+    print("nenhum agente declarado. Rode /mem-agents init pra criar os defaults.")
+    raise SystemExit
+counts, recent = d.get("counts") or {}, d.get("recent") or {}
+print("Manager:", m.get("manager"), "| Oracle:", m.get("oracle"))
+print("Regra:", m.get("rule") or "(nenhuma)")
+print()
+for name, a in ag.items():
+    last = f" · último uso {recent[name][:10]}" if recent.get(name) else ""
+    print("•", a.get("emoji",""), name, "—", a.get("role",""))
+    print("    modelo:", a.get("model"), "| invocações:", counts.get(name,0), last, sep=" ")
+'
 ```
 
 ## 3. Se `$ARGUMENTS` = `init`
@@ -63,16 +73,28 @@ node -e "
 Mostra os defaults que serão criados, pergunta confirmação, então chama:
 
 ```bash
-node -e "
-  const { initDefaults } = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  const cfg = initDefaults('$MEM', { overwrite: false });
-  console.log('Agentes criados:', Object.keys(cfg.agents).join(', '));
-"
+curl -sf -X POST "$API/api/agents" \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{ "name": "<nome>", "type": "<specialist|integrator|motor|firefighter>",
+  "emoji": "<emoji>", "role": "<uma linha>", "model": "<modelo>",
+  "tools": ["Read","Grep","Glob"], "can_talk_to": ["manager"] }
+JSON
+```
+
+O corpo aceita os mesmos campos do manifesto (seção 8). Depois de criar,
+grave o mini-contexto do agente:
+
+```bash
+curl -sf -X PUT "$API/api/agents/<nome>/context" \
+  -H 'Content-Type: text/plain' --data-binary @- <<'MD'
+<conteúdo do agents/<nome>.md>
+MD
 ```
 
 Informe o dev:
 - Papéis criados (Manager 🎯, Oracle 🔮, Architect 🏛, Reviewer 🔍, Tester 🧪, Designer 🎨)
-- Cada um tem mini-contexto em `.claude-project-memory/agents/<nome>.md` — pode editar pra personalizar pro projeto
+- Cada um tem mini-contexto em `.poupar/agents/<nome>.md` — pode editar pra personalizar pro projeto
 - A partir da próxima sessão, o bloco **"Agentes do projeto"** é injetado no contexto do Claude
 
 **Com `--force`:** sobrescreve mini-contextos existentes também. Pergunte antes.
@@ -97,19 +119,23 @@ Conduza uma conversa curta:
 Depois chame:
 
 ```bash
-node -e "
-  const a = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  a.addAgent('$MEM', '<nome>', {
-    type: 'specialist',
-    emoji: '<emoji>',
-    model: '<modelo>',
-    role:  '<papel>',
-    tools: [/* lista */],
-    can_talk_to: ['manager'/*, ...*/],
-    context: '# <nome>\\n\\n## Responsabilidade\\n<papel>\\n\\n## Princípios\\n- ...'
-  });
-  console.log('ok');
-"
+curl -sf -X POST "$API/api/agents" \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{ "name": "<nome>", "type": "<specialist|integrator|motor|firefighter>",
+  "emoji": "<emoji>", "role": "<uma linha>", "model": "<modelo>",
+  "tools": ["Read","Grep","Glob"], "can_talk_to": ["manager"] }
+JSON
+```
+
+O corpo aceita os mesmos campos do manifesto (seção 8). Depois de criar,
+grave o mini-contexto do agente:
+
+```bash
+curl -sf -X PUT "$API/api/agents/<nome>/context" \
+  -H 'Content-Type: text/plain' --data-binary @- <<'MD'
+<conteúdo do agents/<nome>.md>
+MD
 ```
 
 ## 5a. Se `$ARGUMENTS` = `add integrator <nome>`
@@ -130,32 +156,23 @@ Conduza:
 Depois chame:
 
 ```bash
-node -e "
-  const a = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  const ctx = a.integratorTemplate({
-    name:     '<nome>',
-    service:  '<serviço>',
-    description: 'Conhece a API do <serviço>. Informa sobre endpoints, formatos, erros, webhooks.',
-    docs_url: '<url>',
-    base_url: '<url>',
-    auth:     '<descrição da autenticação>',
-    env_vars: [/* nomes */],
-    endpoints: [/* { method, path, purpose } */],
-    webhooks:  [/* { event, purpose } */],
-    gotchas:   []
-  });
-  a.addAgent('$MEM', '<nome>', {
-    type: 'integrator',
-    emoji: '🔌',
-    model: 'sonnet',
-    role:  'Integrator para <serviço>. Informa sobre a API, não age.',
-    tools: ['Read', 'Grep', 'Glob'],
-    mcps:  [],
-    can_talk_to: ['manager'],
-    context: ctx
-  });
-  console.log('ok');
-"
+curl -sf -X POST "$API/api/agents" \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{ "name": "<nome>", "type": "<specialist|integrator|motor|firefighter>",
+  "emoji": "<emoji>", "role": "<uma linha>", "model": "<modelo>",
+  "tools": ["Read","Grep","Glob"], "can_talk_to": ["manager"] }
+JSON
+```
+
+O corpo aceita os mesmos campos do manifesto (seção 8). Depois de criar,
+grave o mini-contexto do agente:
+
+```bash
+curl -sf -X PUT "$API/api/agents/<nome>/context" \
+  -H 'Content-Type: text/plain' --data-binary @- <<'MD'
+<conteúdo do agents/<nome>.md>
+MD
 ```
 
 ## 5b. Se `$ARGUMENTS` = `add motor <nome>`
@@ -176,31 +193,23 @@ Conduza:
 Depois chame:
 
 ```bash
-node -e "
-  const a = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  const ctx = a.motorTemplate({
-    name:   '<nome>',
-    action: '<ação>',
-    description: 'Motor que executa <ação> no mundo real via MCP.',
-    mcps:   [/* nomes */],
-    tools:  [/* ferramentas */],
-    env_vars: [/* nomes */],
-    allowed_actions:   [/* ... */],
-    forbidden_actions: [/* ... */],
-    requires_manager_approval: true
-  });
-  a.addAgent('$MEM', '<nome>', {
-    type: 'motor',
-    emoji: '⚙️',
-    model: 'sonnet',
-    role:  '<papel curto>',
-    tools: [/* ferramentas */],
-    mcps:  [/* nomes */],
-    can_talk_to: ['manager'],
-    context: ctx
-  });
-  console.log('ok');
-"
+curl -sf -X POST "$API/api/agents" \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{ "name": "<nome>", "type": "<specialist|integrator|motor|firefighter>",
+  "emoji": "<emoji>", "role": "<uma linha>", "model": "<modelo>",
+  "tools": ["Read","Grep","Glob"], "can_talk_to": ["manager"] }
+JSON
+```
+
+O corpo aceita os mesmos campos do manifesto (seção 8). Depois de criar,
+grave o mini-contexto do agente:
+
+```bash
+curl -sf -X PUT "$API/api/agents/<nome>/context" \
+  -H 'Content-Type: text/plain' --data-binary @- <<'MD'
+<conteúdo do agents/<nome>.md>
+MD
 ```
 
 **Importante sobre MCPs:** o plugin **nunca** lê, guarda ou transmite credenciais. Ele só referencia o NOME do MCP server. A configuração (URL, tokens, env vars) vive em `~/.claude/settings.json` e é responsabilidade do Engenheiro. O mini-contexto do motor serve pra dizer ao Claude **quando** acionar o MCP e com **quais restrições**, não **como** autenticar.
@@ -224,57 +233,39 @@ Conduza:
 Depois chame:
 
 ```bash
-node -e "
-  const a = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  const ctx = a.firefighterTemplate({
-    name: '<nome>',
-    service: '<serviço>',
-    description: 'Bombeiro para <serviço>. Reativo — escuta logs e dispara triage.',
-    datadog_query: '<query>',
-    threshold: 5,
-    window_minutes: 5,
-    cooldown_seconds: 900,
-    max_triages_per_hour: 4,
-    runbook: [/* bullets */],
-    escalation: [/* bullets */]
-  });
-  a.addAgent('$MEM', '<nome>', {
-    type: 'firefighter',
-    emoji: '🚒',
-    model: 'sonnet',
-    role:  'Bombeiro de <serviço>. Escuta Datadog, dispara triage ao cruzar threshold.',
-    tools: ['Read', 'Grep', 'Glob'],
-    mcps:  [],
-    can_talk_to: ['manager'],
-    watch: {
-      source: 'datadog',
-      query: '<query>',
-      threshold: 5,
-      window_minutes: 5,
-      cooldown_seconds: 900,
-      max_triages_per_hour: 4,
-      env_vars: ['DD_API_KEY', 'DD_APP_KEY', 'DD_SITE']
-    },
-    context: ctx
-  });
-  console.log('ok — rode poller com: node ${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/firefighter.cjs watch');
-"
+curl -sf -X POST "$API/api/agents" \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{ "name": "<nome>", "type": "<specialist|integrator|motor|firefighter>",
+  "emoji": "<emoji>", "role": "<uma linha>", "model": "<modelo>",
+  "tools": ["Read","Grep","Glob"], "can_talk_to": ["manager"] }
+JSON
+```
+
+O corpo aceita os mesmos campos do manifesto (seção 8). Depois de criar,
+grave o mini-contexto do agente:
+
+```bash
+curl -sf -X PUT "$API/api/agents/<nome>/context" \
+  -H 'Content-Type: text/plain' --data-binary @- <<'MD'
+<conteúdo do agents/<nome>.md>
+MD
 ```
 
 **Rodar o poller:**
 
 ```bash
 # Loop contínuo (padrão: 60s)
-node ${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/firefighter.cjs watch
+curl -sf "$API/api/data" >/dev/null  # firefighter roda dentro do poupar-http
 
 # Uma iteração só (útil pra testar)
-node ${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/firefighter.cjs watch --once
+curl -sf "$API/api/data" >/dev/null  # firefighter roda dentro do poupar-http
 
 # Dry-run: consulta Datadog, avalia threshold, NÃO dispara claude
-node ${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/firefighter.cjs watch --once --dry-run
+curl -sf "$API/api/data" >/dev/null  # firefighter roda dentro do poupar-http
 
 # Só um bombeiro específico
-node ${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/firefighter.cjs watch --agent <nome>
+curl -sf "$API/api/data" >/dev/null  # firefighter roda dentro do poupar-http
 ```
 
 Precisa das env vars `DD_API_KEY`, `DD_APP_KEY` e opcionalmente `DD_SITE` (padrão `datadoghq.com`). O poller lê do ambiente — **nunca** guarda valores.
@@ -287,14 +278,13 @@ Mostre o agente atual + contexto, pergunte o que mudar, edite.
 
 ## 7. Se `$ARGUMENTS` = `remove <nome>`
 
-- Se for Manager ou Oracle: avise que são papéis obrigatórios do sistema. Pergunte 2x se tem certeza. Se confirmar, remove.
-- Demais: remove direto do manifest + apaga `agents/<nome>.md`:
+- Se for Manager ou Oracle: avise que são papéis obrigatórios do sistema. A API recusa (400).
+- `handoff` é reservado — a API recusa (405).
+- Demais: remove do manifest + apaga `agents/<nome>.md`:
 
 ```bash
-node -e "
-  const a = require('${CLAUDE_PLUGIN_ROOT:-/home/tiago/pessoal/project-mem/plugin}/scripts/agents.cjs');
-  console.log(a.removeAgent('$MEM', '<nome>') ? 'removido' : 'não encontrado');
-"
+curl -sf -X DELETE "$API/api/agents/<nome>" \
+  && echo "removido" || echo "não encontrado (404) ou protegido"
 ```
 
 ## 8. Estrutura do `agents.json`

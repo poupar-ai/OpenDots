@@ -356,7 +356,7 @@ function BestPracticeForm({ mode, existingIds, initial, onClose, onSaved }: Form
               {isEdit ? `editar ${effectiveId}` : 'nova best-practice'}
             </div>
             <p className="text-xs text-muted-foreground">
-              fica em <code className="font-mono">.claude-project-memory/best-practices/&lt;id&gt;/</code> — versionada junto com o projeto
+              fica em <code className="font-mono">.poupar/best-practices/&lt;id&gt;/</code> — versionada junto com o projeto
             </p>
           </div>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={tryClose}>

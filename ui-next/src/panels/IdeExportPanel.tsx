@@ -38,7 +38,7 @@ export function IdeExportPanel({ onClose }: Props) {
               <Code2 className="h-4 w-4" /> Exportar para IDE
             </div>
             <p className="text-xs text-muted-foreground">
-              gera os agentes no formato nativo de cada editor. fonte única: .claude-project-memory/
+              gera os agentes no formato nativo de cada editor. fonte única: .poupar/
             </p>
           </div>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>

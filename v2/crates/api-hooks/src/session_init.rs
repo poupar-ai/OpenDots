@@ -93,7 +93,7 @@ pub fn build_correction_record(
 
 /// Onboarding estático. Replica string literal do `.cjs:94-103`.
 pub fn onboarding_message() -> &'static str {
-    "## 🆕 Novo projeto detectado pelo project-mem\n\nEste é o primeiro uso do **project-mem** neste projeto. Antes de responder ao pedido do usuário:\n\n1. Analise a estrutura do projeto (arquivos raiz, manifesto de dependências, pastas principais, 2-3 arquivos de código).\n2. Apresente um resumo: stack, arquitetura, convenções identificadas, como rodar/testar.\n3. Pergunte ao desenvolvedor: **\"Há convenções, restrições ou contexto importante que devo saber sobre este projeto?\"**\n4. Com base na análise + resposta do dev, crie o arquivo `.claude-project-memory/PROJECT.md` usando o skill `/mem-setup` como referência de estrutura.\n\n> Após criar o PROJECT.md, ele será injetado automaticamente em todas as sessões futuras."
+    "## 🆕 Novo projeto detectado pelo open-poupar\n\nEste é o primeiro uso do **open-poupar** neste projeto. Antes de responder ao pedido do usuário:\n\n1. Analise a estrutura do projeto (arquivos raiz, manifesto de dependências, pastas principais, 2-3 arquivos de código).\n2. Apresente um resumo: stack, arquitetura, convenções identificadas, como rodar/testar.\n3. Pergunte ao desenvolvedor: **\"Há convenções, restrições ou contexto importante que devo saber sobre este projeto?\"**\n4. Com base na análise + resposta do dev, crie o arquivo `.poupar/PROJECT.md` usando o skill `/mem-setup` como referência de estrutura.\n\n> Após criar o PROJECT.md, ele será injetado automaticamente em todas as sessões futuras."
 }
 
 /// Bloco: lê conteúdo cru de um `.md`, strip a primeira linha `# ...`,
@@ -426,12 +426,12 @@ pub fn render_final_context(
     if !skipped.is_empty() {
         let names: Vec<String> = skipped.iter().map(|b| b.name.clone()).collect();
         parts.push(format!(
-            "\n\n<!-- project-mem: ~{total_tokens}/{budget}t · omitido: {} -->",
+            "\n\n<!-- open-poupar: ~{total_tokens}/{budget}t · omitido: {} -->",
             names.join(", ")
         ));
     } else if !included.is_empty() {
         parts.push(format!(
-            "\n\n<!-- project-mem: ~{total_tokens}/{budget}t -->"
+            "\n\n<!-- open-poupar: ~{total_tokens}/{budget}t -->"
         ));
     }
     parts.join("\n")
@@ -915,7 +915,7 @@ mod tests {
         assert!(got.contains("AA"));
         assert!(got.contains("BB"));
         assert!(got.contains("---"));
-        assert!(got.contains("<!-- project-mem: ~4/100t -->"));
+        assert!(got.contains("<!-- open-poupar: ~4/100t -->"));
     }
 
     #[test]

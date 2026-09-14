@@ -1,4 +1,4 @@
-# Migração project-mem → Rust (hexagonal)
+# Migração open-poupar → Rust (hexagonal)
 
 > Plano de migração do plugin Node.js (CJS) para binário Rust distribuído.
 > Status: planejamento. Nenhuma fase iniciada.
@@ -8,14 +8,14 @@
 
 ## 1. Objetivo
 
-Portar todo o produto project-mem (~11.100 linhas .cjs) para Rust, em arquitetura hexagonal, para permitir:
+Portar todo o produto open-poupar (~11.100 linhas .cjs) para Rust, em arquitetura hexagonal, para permitir:
 
 - **Distribuição como binário fechado** (não open-source) — usuário instala via `curl` / installer nativo.
 - **Segurança**: code signing OS-level, master key embutido, licença server-side.
 - **Baixo custo**: roda local-first na máquina do cliente. O servidor só valida licença e assina updates.
 - **Acoplar/desacoplar adapters**: trocar storage, auth, telemetria sem mexer no domínio.
 
-**Nome interno do projeto continua `project-mem`.** Nome de binário, UI, URLs de update, logo e domínio vêm de um arquivo `settings.toml` (ou `branding.toml`) — permite rebrand sem rebuild do core.
+**Nome interno do projeto continua `open-poupar`.** Nome de binário, UI, URLs de update, logo e domínio vêm de um arquivo `settings.toml` (ou `branding.toml`) — permite rebrand sem rebuild do core.
 
 ### 1.1. Regra não-negociável — paridade 100%
 
@@ -26,8 +26,8 @@ Isso vale para:
 - **Hooks do Claude Code** (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SessionEnd`) — mesmo stdout/exitCode, mesmos effects em disco.
 - **REST** `/api/v1/*` — mesmos paths, métodos, headers, status codes, bodies (byte-a-byte) e ordem de chaves em JSON quando houver clientes sensíveis.
 - **MCP stdio** — mesmos tools (`mem.*`), mesmos schemas, mesmo handshake.
-- **Comandos CLI** (`pmem install`, `status`, `uninstall`) — mesmo output visual, mesmos exit codes, mesmos side-effects em `~/.claude/settings.json`.
-- **Arquivos em disco** — mesma estrutura (`.claude-project-memory/`, `tmp/`, JSONL append-only), mesmos formatos de vault: lê `PMV1` (legado, encriptado por senha) e `PMV2` (atual, device-key + scrypt auth); grava `PMV2`. `PMVEXP1` para bundles de export/import. Nada perdido.
+- **Comandos CLI** (`poupar install`, `status`, `uninstall`) — mesmo output visual, mesmos exit codes, mesmos side-effects em `~/.claude/settings.json`.
+- **Arquivos em disco** — mesma estrutura (`.poupar/`, `tmp/`, JSONL append-only), mesmos formatos de vault: lê `PMV1` (legado, encriptado por senha) e `PMV2` (atual, device-key + scrypt auth); grava `PMV2`. `PMVEXP1` para bundles de export/import. Nada perdido.
 - **UI** — **zero mudança no front.** O `plugin/ui/index.html` (1.390 linhas, HTML/CSS/JS inline auto-contido) é embutido no binário via `include_str!` e servido por Axum byte-a-byte igual ao hoje.
 - **Skills** (`/mem-setup`, `/mem-search`, `/mem-ui`) — mesmo contrato.
 - **Eventos de bus, sigilo, integrity, firefighter** — mesmos gatilhos, mesmos payloads.
@@ -38,7 +38,7 @@ Isso vale para:
 2. **Testes de paridade cross-language** (#74) — runner dedicado que spawna `node <script>.cjs` e binário Rust contra os mesmos fixtures, diff byte-a-byte nas saídas (stdout, arquivos, JSON responses).
 3. **Golden files** — snapshots de respostas REST, tool responses MCP, arquivos gerados em disco.
 4. **Cutover só depois de paridade** (#76) — `.cjs` permanece na árvore até o teste de paridade estar 100% verde.
-5. **Rollback** (`pmem rollback`) — desfaz migração de vault se algo der errado.
+5. **Rollback** (`poupar rollback`) — desfaz migração de vault se algo der errado.
 
 ---
 
@@ -69,9 +69,9 @@ Isso vale para:
 | Router (bus) | `router.cjs` | 137 | (absorvido em domain-bus) |
 | Skills install | `skills-install.cjs` | 125 | `crates/adapter-skills` |
 | Sigilo | `sigilo.cjs` | 174 | `crates/domain-sigilo` |
-| Install CLI | `scripts/install.cjs` | 62 | `crates/api-cli` (`pmem install`) |
-| Uninstall CLI | `scripts/uninstall.cjs` | 53 | `crates/api-cli` (`pmem uninstall`) |
-| Status CLI | `scripts/status.cjs` | 43 | `crates/api-cli` (`pmem status`) |
+| Install CLI | `scripts/install.cjs` | 62 | `crates/api-cli` (`poupar install`) |
+| Uninstall CLI | `scripts/uninstall.cjs` | 53 | `crates/api-cli` (`poupar uninstall`) |
+| Status CLI | `scripts/status.cjs` | 43 | `crates/api-cli` (`poupar status`) |
 
 **Total portado**: ~10.800 linhas de domínio + ~300 linhas de infra + ~160 linhas de CLI raiz.
 
@@ -139,7 +139,7 @@ Isso vale para:
 - **Escreve** `PMV2`. Nenhum formato novo é introduzido pela port.
 - **Migração lazy `PMV1` → `PMV2`** no primeiro `unlock(password)` (igual ao `.cjs`): decripta com senha, gera device-key, re-encripta, grava auth block scrypt.
 - **Backup** do arquivo `vault.enc` antes de migrar: `.legacy-backup/<timestamp>/vault.enc`.
-- **Rollback** via `pmem rollback <timestamp>`.
+- **Rollback** via `poupar rollback <timestamp>`.
 - **Bundles de export/import** (`PMVEXP1`): AES-GCM com key derivada via scrypt da senha do bundle — compatibilidade byte-a-byte com o formato emitido pelo `.cjs`.
 
 ### 4.2. API REST
@@ -222,7 +222,7 @@ Permite rebrand completo sem rebuild.
 
 ```toml
 [product]
-internal_name = "project-mem"   # fixo no código
+internal_name = "open-poupar"   # fixo no código
 display_name  = "Catclaw"        # aparece em UI, banner, CLI help
 binary_name   = "catclaw"        # nome do binário compilado
 logo_path     = "assets/logo.png"
@@ -348,7 +348,7 @@ Gargalo real está em **#47–#58** (fase 2). São 12 domínios, alguns grandes 
 Todo o port fica isolado em `v2/` para **não tocar na versão atual em produção**. O `.cjs` segue funcionando normalmente até a paridade estar 100% (#74) e o cutover ser feito (#76).
 
 ```
-project-mem/
+open-poupar/
 ├── plugin/                 # .cjs em produção — NÃO MEXER até cutover (#76)
 ├── scripts/                # .cjs install/status/uninstall — NÃO MEXER até cutover (#76)
 ├── plugin/ui/              # `index.html` atual — embutido no binário Rust, sem alterar front

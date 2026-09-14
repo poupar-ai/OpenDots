@@ -1,7 +1,7 @@
-//! `pmem-http` — binário do servidor HTTP.
+//! `poupar-http` — binário do servidor HTTP.
 //!
-//! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.claude-project-memory`
-//! - Porta: `$PROJECT_MEM_PORT` (default 37778)
+//! - cwd = `process.cwd()`, mem_dir = `findProjectRoot(cwd)/.poupar`
+//! - Porta: `$POUPAR_PORT` (default 37778)
 //! - Bind: resolvido via `<memDir>/network.json`
 //! - UI e `plugin/`: resolvidos a partir do próprio executável via
 //!   `core_paths::install` — `<root>/ui` no tarball, `<repo>/ui-next/dist`
@@ -18,7 +18,7 @@ use core_paths::{find_project_root, read_scope_project_root, MEM_DIR_NAME};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> ExitCode {
-    let port: u16 = std::env::var("PROJECT_MEM_PORT")
+    let port: u16 = std::env::var("POUPAR_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_PORT);
@@ -42,7 +42,7 @@ async fn main() -> ExitCode {
     //      verdade é o workspace onde ele foi colocado.
     //   3. Fallback: `mem_dir_base` (cwd cru).
     // O smart default cobre a instalação típica (seed clona em
-    // `<workspace>/claude-project-memory/`) sem exigir scope.json.
+    // `<workspace>/open-poupar.ai/`) sem exigir scope.json.
     let default_project_root = if cwd.join(".claude-plugin").is_dir() {
         cwd.parent().map(Path::to_path_buf).unwrap_or_else(|| mem_dir_base.clone())
     } else {
@@ -53,11 +53,11 @@ async fn main() -> ExitCode {
     // `mem_dir` oficial é **project-scoped**, alinhado com hooks
     // (session_init/observe/session_end), seeds_applier, MCP server e tudo
     // mais que escreve memória. Versão anterior usava `mem_dir_base` —
-    // resultava em writers gravando em <project_root>/.claude-project-memory/
-    // enquanto a API lia de <clone>/.claude-project-memory/ (paths divergentes,
-    // agents/sessions/observations sumiam da UI). `PROJECT_MEM_DIR` ainda
+    // resultava em writers gravando em <project_root>/.poupar/
+    // enquanto a API lia de <clone>/.poupar/ (paths divergentes,
+    // agents/sessions/observations sumiam da UI). `POUPAR_DIR` ainda
     // override pra testes/setups custom.
-    let mem_dir = std::env::var("PROJECT_MEM_DIR")
+    let mem_dir = std::env::var("POUPAR_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| project_root.join(MEM_DIR_NAME));
 
@@ -140,7 +140,7 @@ async fn main() -> ExitCode {
 
     let app = build_router(state);
 
-    // Bind: por default TCP em $bind_host:$port. Env PROJECT_MEM_BIND_UNIX
+    // Bind: por default TCP em $bind_host:$port. Env POUPAR_BIND_UNIX
     // sobrescreve pra Unix socket (endurece contra ataques same-LAN —
     // ninguém na rede consegue chegar). UI quebra em modo Unix-only
     // (browser não fala unix); pra ter UI + Unix simultâneos, rodar
@@ -150,7 +150,7 @@ async fn main() -> ExitCode {
     // ambos simultâneos no MESMO processo precisa upgrade pra axum 0.8
     // (breaking em ~100 handlers — fora de escopo aqui).
     #[cfg(unix)]
-    if let Ok(unix_path) = std::env::var("PROJECT_MEM_BIND_UNIX") {
+    if let Ok(unix_path) = std::env::var("POUPAR_BIND_UNIX") {
         if !unix_path.is_empty() {
             let _ = std::fs::remove_file(&unix_path);
             // Truque pra axum 0.7 aceitar Unix: criar TcpListener "fake"
@@ -167,7 +167,7 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    eprintln!("pmem-http escutando em http://{addr}");
+    eprintln!("poupar-http escutando em http://{addr}");
     if let Err(e) = axum::serve(tcp_listener, app).await {
         eprintln!("servidor caiu: {e}");
         return ExitCode::FAILURE;
@@ -190,7 +190,7 @@ async fn serve_unix(path: &str, app: axum::Router) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    eprintln!("pmem-http escutando em unix://{path}");
+    eprintln!("poupar-http escutando em unix://{path}");
 
     use tower::ServiceExt;
     loop {

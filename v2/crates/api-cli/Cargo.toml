@@ -6,11 +6,13 @@ rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "pmem"
-path = "src/bin/pmem.rs"
+name = "poupar"
+path = "src/bin/poupar.rs"
 
 [dependencies]
 clap = { workspace = true }
+core-paths = { path = "../core-paths" }
+domain-indexer = { path = "../domain-indexer" }
 serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror = { workspace = true }
 

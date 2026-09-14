@@ -5,7 +5,7 @@
 //!
 //! ## Por que existe
 //!
-//! project-mem é distribuído como binário e pode ser rebrandeado sem
+//! open-poupar é distribuído como binário e pode ser rebrandeado sem
 //! recompilar. Tudo que é **identidade exposta** (nome mostrado no
 //! CLI, URL do dashboard, endpoint de update) mora aqui num único
 //! lugar — mudar o branding não requer search/replace no código.
@@ -35,7 +35,7 @@ pub struct Product {
     pub internal_name: String,
     /// Nome mostrado ao usuário (pode variar por whitelabel).
     pub display_name: String,
-    /// Nome do executável instalado (`pmem`, `mem`, etc.).
+    /// Nome do executável instalado (`poupar`, `mem`, etc.).
     pub binary_name: String,
     /// Path relativo do logo exibido na UI/instalador.
     pub logo_path: String,
@@ -98,9 +98,9 @@ mod tests {
 
     const EXAMPLE: &str = r#"
 [product]
-internal_name = "project-mem"
-display_name = "project-mem"
-binary_name = "pmem"
+internal_name = "open-poupar"
+display_name = "open-poupar"
+binary_name = "poupar"
 logo_path = "assets/logo.png"
 
 [urls]
@@ -118,8 +118,8 @@ target = "x86_64-unknown-linux-gnu"
     #[test]
     fn parses_example() {
         let b = Branding::from_toml(EXAMPLE).unwrap();
-        assert_eq!(b.product.internal_name, "project-mem");
-        assert_eq!(b.product.binary_name, "pmem");
+        assert_eq!(b.product.internal_name, "open-poupar");
+        assert_eq!(b.product.binary_name, "poupar");
         assert_eq!(b.urls.website, "https://example.invalid");
         assert_eq!(b.build.channel, "dev");
     }

@@ -45,6 +45,31 @@ fn mcp_command_bate_com_o_helper_publico() {
 }
 
 #[test]
+fn mcp_bin_no_clone_aponta_pro_build_do_cargo() {
+    // `make install` registra a raiz do clone, onde não existe
+    // `plugin/bin/` — o binário mora em `v2/target/release/`.
+    let dir = tempfile::tempdir().unwrap();
+    let release = dir.path().join("v2/target/release");
+    std::fs::create_dir_all(&release).unwrap();
+    std::fs::write(release.join("poupar-mcp"), "").unwrap();
+    assert_eq!(mcp_bin(dir.path()), release.join("poupar-mcp"));
+}
+
+#[test]
+fn mcp_bin_prefere_plugin_bin_quando_existem_os_dois() {
+    let dir = tempfile::tempdir().unwrap();
+    for sub in ["plugin/bin", "v2/target/release"] {
+        let d = dir.path().join(sub);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("poupar-mcp"), "").unwrap();
+    }
+    assert_eq!(
+        mcp_bin(dir.path()),
+        dir.path().join("plugin/bin/poupar-mcp")
+    );
+}
+
+#[test]
 fn install_preserves_unrelated_user_keys() {
     let mut s = json!({
         "theme": "dark",

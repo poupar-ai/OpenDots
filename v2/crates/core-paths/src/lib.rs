@@ -455,11 +455,10 @@ mod tests {
     #[test]
     fn mem_dir_appends_constant_to_project_root() {
         let tmp = TempDir::new().unwrap();
-        let got = mem_dir(tmp.path());
-        let expected = tmp.path().canonicalize().unwrap().join(MEM_DIR_NAME);
-        assert_eq!(
-            got.canonicalize().ok().unwrap_or(got.clone()),
-            expected.canonicalize().ok().unwrap_or(expected)
-        );
+        // Canonicaliza a raiz antes: no macOS o tmp é symlink
+        // (/tmp → /private/tmp) e `.poupar` ainda não existe pra
+        // canonicalizar depois.
+        let root = tmp.path().canonicalize().unwrap();
+        assert_eq!(mem_dir(&root), root.join(MEM_DIR_NAME));
     }
 }

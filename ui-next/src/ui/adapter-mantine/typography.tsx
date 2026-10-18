@@ -46,10 +46,12 @@ export function Title({ order = 4, children }: TitleProps) {
 export interface CodeProps {
   children: ReactNode;
   style?: CSSProperties;
+  /** Bloco (`<pre>`) em vez de inline. */
+  block?: boolean;
 }
 
-export function Code({ children, style }: CodeProps) {
-  return <MCode style={style}>{children}</MCode>;
+export function Code({ children, style, block }: CodeProps) {
+  return <MCode style={style} block={block}>{children}</MCode>;
 }
 
 // ── Badge ───────────────────────────────────────────────────────────────────

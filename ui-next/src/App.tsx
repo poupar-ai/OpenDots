@@ -213,7 +213,7 @@ export default function App() {
       {cronOpen && (
         <CronPanel onClose={() => setCronOpen(false)} agents={agents} />
       )}
-      {mcpsOpen && <McpRegistryPanel onClose={() => setMcpsOpen(false)} />}
+      {mcpsOpen && <McpRegistryPanel onClose={() => setMcpsOpen(false)} agentNames={Object.keys(agents?.manifest.agents ?? {})} />}
       {networkOpen && (
         <NetworkPanel onClose={() => setNetworkOpen(false)} />
       )}

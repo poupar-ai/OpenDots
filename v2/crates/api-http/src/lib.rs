@@ -22,6 +22,7 @@ pub mod cron_scheduler;
 pub mod data_route;
 pub mod training_export_routes;
 pub mod destructive_routes;
+pub mod github_tools_routes;
 pub mod handoff_routes;
 pub mod human_keys;
 pub mod humans_routes;
@@ -352,6 +353,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(subagent_routes::subagent_router())
         .merge(humans_routes::humans_router())
         .merge(mcp_routes::mcp_router())
+        .merge(github_tools_routes::github_tools_router())
         .merge(agents_routes::agents_router())
         .merge(chat_routes::chat_router())
         .merge(chat_send_routes::chat_send_router())

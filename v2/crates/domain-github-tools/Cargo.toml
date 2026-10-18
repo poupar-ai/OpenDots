@@ -1,0 +1,15 @@
+[package]
+name = "domain-github-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Repositório do GitHub como ferramenta de agente: parse da URL, detecção
+# do tipo de projeto e montagem da def de MCP. Lógica pura — clone,
+# download e build ficam na camada de API.
+[dependencies]
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror = { workspace = true }
+toml = { workspace = true }

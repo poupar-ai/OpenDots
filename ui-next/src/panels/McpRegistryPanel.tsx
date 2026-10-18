@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Plug, Plus, Trash2, Pencil } from 'lucide-react';
-import { ActionIcon, Badge, Button, Group, Modal, Stack, Text } from '@/ui';
+import { Github, Plug, Plus, Trash2, Pencil } from 'lucide-react';
+import { ActionIcon, Badge, Box, Button, Group, Modal, Paper, Stack, Text } from '@/ui';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { listMcps } from '@/lib/agents';
 import { deleteMcp, type RegisteredMcp } from '@/lib/mcps';
 import { McpForm } from './McpForm';
+import { GithubToolForm } from './GithubToolForm';
 
 interface Props {
   onClose: () => void;
+  /** Agentes do time — destino das ferramentas vindas do GitHub. */
+  agentNames?: string[];
 }
 
-export function McpRegistryPanel({ onClose }: Props) {
+export function McpRegistryPanel({ onClose, agentNames = [] }: Props) {
   const [list, setList] = useState<RegisteredMcp[]>([]);
   // null = lista; { name: null } = novo; { name: 'x' } = editar.
   const [editing, setEditing] = useState<{ name: string | null } | null>(null);
+  const [fromGithub, setFromGithub] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -48,7 +53,18 @@ export function McpRegistryPanel({ onClose }: Props) {
         </Group>
       }
     >
-      {editing ? (
+      {fromGithub ? (
+        <GithubToolForm
+          agentNames={agentNames}
+          onCancel={() => setFromGithub(false)}
+          onSaved={(r) => {
+            setFromGithub(false);
+            const who = r.attached?.length ? ` para ${r.attached.join(', ')}` : '';
+            setNotice(`"${r.mcp.name}" instalado${who}.`);
+            void refresh();
+          }}
+        />
+      ) : editing ? (
         <McpForm
           editName={editing.name}
           onCancel={() => setEditing(null)}
@@ -61,34 +77,46 @@ export function McpRegistryPanel({ onClose }: Props) {
               MCPs registrados aqui são compartilhados com todos os agentes e
               materializados no <code>.mcp.json</code> do projeto (conexão real).
             </Text>
-            <Button size="compact-sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={() => setEditing({ name: null })}>
-              novo
-            </Button>
+            <Group gap="xs" wrap="nowrap">
+              <Button size="compact-sm" variant="light" leftIcon={<Github size={14} />} onClick={() => { setNotice(null); setFromGithub(true); }}>
+                do GitHub
+              </Button>
+              <Button size="compact-sm" leftIcon={<Plus size={14} />} onClick={() => setEditing({ name: null })}>
+                novo
+              </Button>
+            </Group>
           </Group>
           {err && <Text size="xs" color="danger">{err}</Text>}
+          {notice && <Text size="xs" color="success">{notice}</Text>}
           {list.length === 0 ? (
             <Text size="sm" muted>Nenhum MCP registrado ainda.</Text>
           ) : (
             <Stack gap={6}>
               {list.map((m) => (
-                <div key={m.name} className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-medium">{m.name}</span>
-                      <Badge color="gray" variant="light" size="sm">{m.transport}</Badge>
-                      <Badge color={m.storage === 'vault' ? 'warning' : 'info'} variant="light" size="sm">
-                        {m.storage === 'vault' ? 'cofre' : 'banco'}
-                      </Badge>
-                    </div>
-                    {m.description && <p className="truncate text-xs text-muted-foreground">{m.description}</p>}
-                  </div>
-                  <ActionIcon variant="subtle" color="gray" label="editar" onClick={() => setEditing({ name: m.name })}>
-                    <Pencil className="h-4 w-4" />
-                  </ActionIcon>
-                  <ActionIcon variant="subtle" color="danger" label="remover" onClick={() => void remove(m.name)}>
-                    <Trash2 className="h-4 w-4" />
-                  </ActionIcon>
-                </div>
+                <Paper key={m.name} withBorder padding="xs" px="sm">
+                  <Group gap="xs" wrap="nowrap">
+                    <Box style={{ minWidth: 0, flex: 1 }}>
+                      <Group gap={6} wrap="nowrap">
+                        <Text fw={500} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</Text>
+                        <Badge color="gray" variant="light" size="sm">{m.transport}</Badge>
+                        <Badge color={m.storage === 'vault' ? 'warning' : 'info'} variant="light" size="sm">
+                          {m.storage === 'vault' ? 'cofre' : 'banco'}
+                        </Badge>
+                      </Group>
+                      {m.description && (
+                        <Text size="xs" muted style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.description}
+                        </Text>
+                      )}
+                    </Box>
+                    <ActionIcon variant="subtle" color="gray" label="editar" onClick={() => setEditing({ name: m.name })}>
+                      <Pencil size={16} />
+                    </ActionIcon>
+                    <ActionIcon variant="subtle" color="danger" label="remover" onClick={() => void remove(m.name)}>
+                      <Trash2 size={16} />
+                    </ActionIcon>
+                  </Group>
+                </Paper>
               ))}
             </Stack>
           )}

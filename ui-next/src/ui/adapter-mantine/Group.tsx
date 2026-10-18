@@ -9,15 +9,18 @@ export interface GroupProps {
   justify?: 'flex-start' | 'center' | 'flex-end' | 'space-between' | 'space-around';
   align?: 'flex-start' | 'center' | 'flex-end' | 'baseline' | 'stretch';
   wrap?: 'wrap' | 'nowrap';
+  /** Filhos dividem a largura igualmente. */
+  grow?: boolean;
 }
 
-export function Group({ gap = 'sm', justify, align, wrap, children }: GroupProps) {
+export function Group({ gap = 'sm', justify, align, wrap, grow, children }: GroupProps) {
   return (
     <MGroup
       gap={typeof gap === 'number' ? gap : spacingToMantine[gap]}
       justify={justify}
       align={align}
       wrap={wrap}
+      grow={grow}
     >
       {children}
     </MGroup>

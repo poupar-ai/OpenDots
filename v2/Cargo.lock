@@ -196,6 +196,7 @@ dependencies = [
  "domain-bus",
  "domain-cron",
  "domain-destructive",
+ "domain-github-tools",
  "domain-graph",
  "domain-humans",
  "domain-ide-adapters",
@@ -665,6 +666,15 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "domain-github-tools"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

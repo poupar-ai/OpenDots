@@ -25,6 +25,7 @@ domain-best-practices = { path = "../domain-best-practices" }
 domain-bus = { path = "../domain-bus" }
 domain-cron = { path = "../domain-cron" }
 domain-destructive = { path = "../domain-destructive" }
+domain-github-tools = { path = "../domain-github-tools" }
 domain-graph = { path = "../domain-graph" }
 domain-humans = { path = "../domain-humans" }
 domain-ide-adapters = { path = "../domain-ide-adapters" }

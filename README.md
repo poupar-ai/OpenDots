@@ -4,7 +4,7 @@
 agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.**
 
 [![poupar.ai](https://img.shields.io/badge/poupar.ai-site-2F6FED)](https://poupar.ai)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange.svg)](./LICENSE)
+[![License: PolyForm Noncommercial + Internal Use](https://img.shields.io/badge/License-PolyForm%20NC%20%2B%20Internal%20Use-orange.svg)](#licença)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
 
 ![O time de agentes do open-poupar.ai trabalhando](docs/assets/demo-agentes.gif)
@@ -21,10 +21,15 @@ padrões, as decisões e as armadilhas do projeto. Como é texto puro versionado
 `git diff` mostra o que a memória aprendeu, e quem clonar o repo herda o contexto inteiro.
 
 **2. Um time de agentes, não um assistente só.** Você define papéis — manager, oracle,
-arquiteto, revisor, tester, devs por senioridade, especialistas — cada um com seu modelo,
-suas ferramentas, seu escopo e seu contexto. Eles conversam entre si, delegam, escalam
-para você quando travam, e tudo fica registrado. O canvas acima é a UI local onde você
-acompanha e conversa com o time.
+arquiteto, revisor, tester, devs por senioridade, especialistas — cada um com seu modelo
+(padrão: **Claude Opus 5.5**), suas ferramentas, seu escopo e seu contexto. Eles conversam
+entre si, delegam, escalam para você quando travam, e tudo fica registrado. O canvas acima
+é a UI local onde você acompanha e conversa com o time.
+
+**3. Qualquer repositório do GitHub vira ferramenta.** Cole a URL, marque quais agentes
+podem usar, pronto — inclusive **navegação na internet** com o
+[Lightpanda](https://github.com/lightpanda-io/browser). Veja
+[Ferramentas do GitHub](#ferramentas-do-github-e-navegação-web).
 
 Concretamente, ele:
 
@@ -34,6 +39,7 @@ Concretamente, ele:
 | **Injeta** | SOUL/PROJECT/DECISIONS/GOTCHAS, sessões recentes, estado do git, índice de código e padrões do grafo — com orçamento de tokens por prioridade |
 | **Detecta** | arquivos mais quentes, acoplamentos (arquivos editados juntos) e workflows recorrentes (`editar X → rodar Y`) |
 | **Orquestra** | time de agentes com handoff, subagentes paralelos, cron, pipelines e fila com retry |
+| **Conecta** | qualquer repo do GitHub como ferramenta (MCP) de agentes escolhidos, fixado num commit — e navegação web com Lightpanda |
 | **Protege** | cofre criptografado por projeto, identidade Ed25519 por agente, allowlist de comandos e bloqueio de operação destrutiva |
 
 Roda inteiro na sua máquina: sem conta, sem nuvem, sem telemetria. O binário é estático e
@@ -43,8 +49,9 @@ não depende de runtime nenhum.
 
 ## Instalação
 
-> **Licença:** uso livre para fins **não-comerciais** (pessoal, estudo, ONG,
-> escola, órgão público). Uso em empresa exige licença comercial — veja
+> **Licença:** grátis para uso pessoal, estudo, ONG, escola, órgão público **e
+> uso interno em empresa**. Oferecer a terceiros (vender, SaaS, embutir em
+> produto) exige licença comercial, com 5% do faturamento — veja
 > [Licença](#licença).
 
 ### Via curl (recomendado)
@@ -91,6 +98,22 @@ Para desinstalar (a memória dos seus projetos **não** é tocada):
 curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
 ```
 
+### Setup interativo
+
+Prefere ser guiado? O `setup.sh` pergunta como instalar (release pronta ou
+código-fonte), onde, e se pode registrar no `~/.claude/settings.json` —
+mostra as 3 chaves que vai adicionar e faz backup do arquivo antes.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/setup.sh | bash
+
+# ou, de dentro de um clone (já sugere compilar dali):
+bash setup.sh
+```
+
+Sem terminal interativo (CI, Docker sem `-t`) ele recusa e aponta pro
+`install.sh`, que é o caminho sem perguntas.
+
 Prefere não canalizar um script pro shell? Baixe, leia, execute:
 
 ```bash
@@ -111,7 +134,12 @@ claude plugins marketplace add poupar-ai/open-poupar.ai
 claude plugins install open-poupar@open-poupar
 ```
 
-Reinicie o Claude Code. Pronto.
+Reinicie o Claude Code.
+
+> ⚠️ **Limitação atual:** esse caminho clona o repositório sem os binários
+> compilados, então os hooks não encontram `poupar-hook-*` e a memória não é
+> gravada. Até isso ser resolvido, prefira o [curl](#via-curl-recomendado), o
+> [setup interativo](#setup-interativo) ou o [código-fonte](#do-código-fonte).
 
 ### Do código-fonte
 
@@ -146,6 +174,51 @@ scripts/smoke-package.sh                        # confere que o tarball roda
 Não precisa. O runtime inteiro — hooks, MCP server, servidor HTTP, CLI e
 indexador — é Rust compilado num binário estático. Node só entra pra buildar
 a UI a partir do fonte, e mesmo isso o tarball já traz pronto.
+
+## Ferramentas do GitHub e navegação web
+
+Qualquer repositório do GitHub pode virar uma ferramenta dos seus agentes. Na UI, abra
+**mcps → do GitHub**, cole a URL, clique em **analisar**, marque quem pode usar e
+**instale**:
+
+![Instalando o Lightpanda como navegador dos agentes pesquisador e marketing](docs/assets/ferramenta-do-github-lightpanda.gif)
+
+O que acontece por baixo:
+
+1. O repo é baixado **fixado no commit atual** (ou na branch/tag/commit que você
+   informar). Atualizar é registrar de novo — nunca acontece sozinho.
+2. O tipo do projeto é detectado e vira um servidor MCP stdio:
+
+   | Projeto | Como roda |
+   |---|---|
+   | `lightpanda-io/browser` | baixa o binário da release e roda `lightpanda mcp` (navegador headless com 30+ ferramentas: `goto`, `markdown`, `click`, `fill`, `screenshot`…) |
+   | `package.json` com `bin` | `npx -y --package=github:dono/repo#<sha> <bin>` |
+   | monorepo (`packages/*`) | `npx -y --package=<pacote>@<versão> <bin>` |
+   | `pyproject.toml` com `[project.scripts]` | `uvx --from git+https://github.com/dono/repo@<sha> <script>` |
+   | `Cargo.toml` | `cargo install --git … --rev <sha>` e roda o binário |
+   | `go.mod` | `go run <módulo>@<sha>` |
+   | qualquer outro | você informa o comando; `{repo}` vira o caminho do código baixado |
+
+3. A ferramenta entra no catálogo de MCPs do projeto (`.poupar/mcps.json` →
+   `.mcp.json`) e no `mcps[]` **só dos agentes marcados**. Esse é o controle de
+   permissão: cada agente recebe `mcp__<nome>` no `--allowed-tools` dele, os outros não.
+
+Na prática: o `pesquisador`, que tem o Lightpanda, abre páginas de verdade, como a
+release mais recente do próprio Lightpanda ou as manchetes do dia. Já o `dev`, que não
+tem o navegador, recebe a permissão negada:
+
+![O agente pesquisador navegando com o Lightpanda e o agente dev sem acesso ao navegador](docs/assets/agente-navegando-com-lightpanda.gif)
+
+Binários e checkouts ficam fora do repositório, em
+`~/.local/share/open-poupar/tools/` (ou `$POUPAR_TOOLS_DIR`).
+
+Pela API: `POST /api/tools/github` com
+`{ "url": "...", "agents": ["pesquisador"] }` (`"*"` = todos) e `"dry_run": true` para
+só detectar.
+
+> **Atenção:** uma ferramenta roda com as permissões do seu usuário. Instale só repos em
+> que você confia. O Lightpanda é AGPL-3.0, por isso é baixado na sua máquina, e não
+> embutido no open-poupar.
 
 ## Filosofia
 
@@ -767,26 +840,28 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Licença
 
-[**PolyForm Noncommercial 1.0.0**](https://polyformproject.org/licenses/noncommercial/1.0.0/) — veja [LICENSE](./LICENSE).
+Três licenças, escolha a que cobre o seu uso:
 
-O código é aberto para ler, estudar, modificar e redistribuir, mas **só pode
-ser usado para fins não-comerciais**. Na prática:
+| Uso | Licença | Custo |
+|---|---|---|
+| Projetos pessoais, hobby, estudo, pesquisa | [PolyForm Noncommercial 1.0.0](./LICENSE) | grátis |
+| ONGs, escolas, universidades, órgãos públicos, saúde | [PolyForm Noncommercial 1.0.0](./LICENSE) | grátis |
+| Usar no trabalho de uma empresa, mesmo internamente (inclusive modificado) | [PolyForm Internal Use 1.0.0](./LICENSE-INTERNAL-USE) | grátis |
+| Vender, hospedar como serviço ou embutir num produto oferecido a terceiros | [Licença comercial](./COMMERCIAL-LICENSE.md), mediante solicitação | 5% do faturamento da oferta |
 
-| Uso | Permitido |
-|---|---|
-| Projetos pessoais, hobby, estudo, pesquisa | ✅ |
-| ONGs, escolas, universidades, órgãos públicos, saúde | ✅ |
-| Fork, modificação e redistribuição (mantendo a licença e o aviso) | ✅ |
-| Usar no trabalho de uma empresa, mesmo internamente | ❌ |
-| Vender, hospedar como serviço ou embutir num produto pago | ❌ |
+Em todos os casos você pode **modificar**, desde que **mantenha a marca
+original** — o nome "open-poupar.ai", os avisos `Required Notice:` e a
+atribuição. Veja [TRADEMARKS.md](./TRADEMARKS.md).
 
 Formalmente isso **não** é uma licença open source pela definição da
 [OSI](https://opensource.org/osd) — que exige não discriminar campo de atuação.
 O termo correto é *source available*. O código está todo aqui, é auditável e
-aceita contribuições; o que a licença restringe é o uso comercial.
+aceita contribuições; o que se cobra é oferecer o software a terceiros.
 
-**Precisa usar comercialmente?** Existe licença comercial — escreva para
-**maisbitlabs@gmail.com**.
+**Vai oferecer para clientes?** Solicite a licença comercial em
+**maisbitlabs@gmail.com** — os termos estão em
+[COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md).
 
-Contribuições são bem-vindas sob os mesmos termos: ao abrir um PR você licencia
-sua contribuição para o projeto sob a PolyForm Noncommercial 1.0.0.
+Contribuições são bem-vindas: ao abrir um PR você licencia sua contribuição
+para o projeto sob as três licenças acima, incluindo o direito de a
+Schedylabs concedê-la na licença comercial.

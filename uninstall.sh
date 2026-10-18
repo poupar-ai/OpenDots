@@ -18,7 +18,7 @@ BIN_DIR="${POUPAR_LINK_DIR:-$HOME/.local/bin}"
 
 # Mesma lista do install.sh — remover só o que foi instalado deixa
 # intacto qualquer coisa que o usuário tenha colocado em POUPAR_HOME.
-OWNED=(.claude-plugin plugin ui VERSION TARGET LICENSE README.md)
+OWNED=(.claude-plugin plugin ui VERSION TARGET LICENSE LICENSE-INTERNAL-USE COMMERCIAL-LICENSE.md TRADEMARKS.md README.md)
 
 say()  { printf '%s\n' "$*"; }
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }

@@ -19,6 +19,7 @@ members = [
     "crates/domain-cron",
     "crates/domain-destructive",
     "crates/domain-firefighter",
+    "crates/domain-github-tools",
     "crates/domain-graph",
     "crates/domain-humans",
     "crates/domain-ide-adapters",
@@ -39,7 +40,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-license = "PolyForm-Noncommercial-1.0.0"
+license = "PolyForm-Noncommercial-1.0.0 OR LicenseRef-PolyForm-Internal-Use-1.0.0 OR LicenseRef-Commercial"
 repository = "https://github.com/poupar-ai/open-poupar.ai"
 
 [workspace.dependencies]

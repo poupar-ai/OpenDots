@@ -45,7 +45,7 @@ pub fn default_manifest() -> Value {
             "manager": {
                 "type": "core",
                 "emoji": "🎯",
-                "model": "opus-4.7",
+                "model": "opus-5.5",
                 "role": "Orquestrador central. Recebe ordens do Engenheiro, distribui tarefas, consolida resultados, comunica decisões.",
                 "context_file": "agents/manager.md",
                 "tools": ["Task", "Read", "Write", "Edit", "Bash", "Grep", "Glob"],
@@ -64,7 +64,7 @@ pub fn default_manifest() -> Value {
             "oracle": {
                 "type": "core",
                 "emoji": "🔮",
-                "model": "opus-4.6",
+                "model": "opus-5.5",
                 "role": "Conhece todo o projeto — fonte de verdade sobre código, arquitetura e histórico. Responde, não dá ordens.",
                 "context_file": "agents/oracle.md",
                 "tools": ["Read", "Grep", "Glob"],
@@ -80,7 +80,7 @@ pub fn default_manifest() -> Value {
             "architect": {
                 "type": "specialist",
                 "emoji": "🏛",
-                "model": "opus-4.6",
+                "model": "opus-5.5",
                 "role": "Decisões de arquitetura, trade-offs de design, ADRs.",
                 "context_file": "agents/architect.md",
                 "tools": ["Read", "Grep", "Glob", "Write"],
@@ -98,7 +98,7 @@ pub fn default_manifest() -> Value {
             "reviewer": {
                 "type": "specialist",
                 "emoji": "🔍",
-                "model": "sonnet-4.6",
+                "model": "opus-5.5",
                 "role": "Revisa PRs, aponta bugs, sugere melhorias. Segurança e clareza.",
                 "context_file": "agents/reviewer.md",
                 "tools": ["Read", "Grep", "Glob"],
@@ -115,7 +115,7 @@ pub fn default_manifest() -> Value {
             "tester": {
                 "type": "specialist",
                 "emoji": "🧪",
-                "model": "sonnet-4.6",
+                "model": "opus-5.5",
                 "role": "Escreve testes, roda suites, reporta regressões. Unit + integration.",
                 "context_file": "agents/tester.md",
                 "tools": ["Read", "Write", "Edit", "Bash", "Grep"],
@@ -131,7 +131,7 @@ pub fn default_manifest() -> Value {
             "designer": {
                 "type": "specialist",
                 "emoji": "🎨",
-                "model": "sonnet-4.6",
+                "model": "opus-5.5",
                 "role": "UI/UX, layout, acessibilidade, consistência visual.",
                 "context_file": "agents/designer.md",
                 "tools": ["Read", "Write", "Edit", "Grep", "Glob"],
@@ -148,7 +148,7 @@ pub fn default_manifest() -> Value {
             "pipeline_writer": {
                 "type": "core",
                 "emoji": "✨",
-                "model": "opus-4.6",
+                "model": "opus-5.5",
                 "role": "Transforma descrições humanas em pipelines YAML reproduzíveis. Conversa com os agentes envolvidos pra entender o fluxo, depois grava pipeline.yaml pronto pra rodar.",
                 "context_file": "agents/pipeline_writer.md",
                 "tools": ["Read", "Write", "Edit", "Grep", "Glob", "Bash"],

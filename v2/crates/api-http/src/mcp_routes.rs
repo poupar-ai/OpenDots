@@ -23,13 +23,14 @@ use std::fs;
 use std::path::Path;
 
 use axum::body::Bytes;
-use axum::extract::{Path as AxPath, State};
+use axum::extract::{Extension, Path as AxPath, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
 use serde_json::{json, Map, Value};
 
+use crate::tenant::TenantContext;
 use crate::{json_error, json_response, AppState};
 
 pub fn mcp_router() -> Router<AppState> {
@@ -308,8 +309,57 @@ async fn get_one_handler(State(st): State<AppState>, AxPath(name): AxPath<String
     }
 }
 
+/// Persiste uma def já validada (cofre ou `mcps.json`) e materializa no
+/// `.mcp.json`. Compartilhado com `github_tools_routes`.
+pub(crate) fn register_def(
+    mem_dir: &Path,
+    project_root: &Path,
+    vault: &std::sync::Arc<dyn core_ports::VaultStore>,
+    def: &Value,
+) -> Result<(), (StatusCode, String)> {
+    let name = def.get("name").and_then(Value::as_str).unwrap_or_default();
+    let storage = match def.get("storage").and_then(Value::as_str) {
+        Some("vault") => "vault",
+        _ => "db",
+    };
+    if storage == "vault" {
+        let secret = serde_json::to_string(def).unwrap_or_default();
+        if let Err(e) = vault.set_secret(mem_dir, &vault_secret_name(name), &secret) {
+            return Err((
+                StatusCode::CONFLICT,
+                format!("falha ao salvar no cofre (destrancado?): {e}"),
+            ));
+        }
+    } else {
+        // Re-registro mudando vault→db: apaga o secret órfão pra não deixar
+        // a def antiga (possivelmente sensível) parada no cofre. No-op se não existir.
+        let _ = vault.delete_secret(mem_dir, &vault_secret_name(name));
+    }
+    let mut reg = load_registry(mem_dir);
+    if let Some(m) = reg.get_mut("mcps").and_then(Value::as_object_mut) {
+        m.insert(name.to_string(), stub_of(def, storage));
+    }
+    save_registry(mem_dir, &mut reg)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("mcps.json: {e}")))?;
+
+    // Conexão real: materializa no .mcp.json do projeto.
+    materialize(project_root, name, Some(mcp_json_entry(def)))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!(".mcp.json: {e}")))
+}
+
+pub(crate) fn is_registered(mem_dir: &Path, name: &str) -> bool {
+    load_registry(mem_dir)
+        .get("mcps")
+        .and_then(|m| m.get(name))
+        .is_some()
+}
+
 /// `POST /api/mcps` — registra/atualiza um MCP e materializa no .mcp.json.
-async fn register_handler(State(st): State<AppState>, body: Bytes) -> Response {
+async fn register_handler(
+    State(st): State<AppState>,
+    Extension(tc): Extension<TenantContext>,
+    body: Bytes,
+) -> Response {
     let v: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(_) => return json_error(StatusCode::BAD_REQUEST, "invalid json"),
@@ -344,38 +394,15 @@ async fn register_handler(State(st): State<AppState>, body: Bytes) -> Response {
     });
     {
         let o = def.as_object_mut().unwrap();
-        for k in ["command", "args", "url", "env", "headers"] {
+        for k in ["command", "args", "url", "env", "headers", "source"] {
             if let Some(val) = v.get(k) {
                 o.insert(k.into(), val.clone());
             }
         }
     }
 
-    // Persiste conforme o storage.
-    if storage == "vault" {
-        let secret = serde_json::to_string(&def).unwrap_or_default();
-        if let Err(e) = st.vault.set_secret(&st.mem_dir, &vault_secret_name(&name), &secret) {
-            return json_error(
-                StatusCode::CONFLICT,
-                &format!("falha ao salvar no cofre (destrancado?): {e}"),
-            );
-        }
-    } else {
-        // Re-registro mudando vault→db: apaga o secret órfão pra não deixar
-        // a def antiga (possivelmente sensível) parada no cofre. No-op se não existir.
-        let _ = st.vault.delete_secret(&st.mem_dir, &vault_secret_name(&name));
-    }
-    let mut reg = load_registry(&st.mem_dir);
-    if let Some(m) = reg.get_mut("mcps").and_then(Value::as_object_mut) {
-        m.insert(name.clone(), stub_of(&def, storage));
-    }
-    if let Err(e) = save_registry(&st.mem_dir, &mut reg) {
-        return json_error(StatusCode::INTERNAL_SERVER_ERROR, &format!("mcps.json: {e}"));
-    }
-
-    // Conexão real: materializa no .mcp.json do projeto.
-    if let Err(e) = materialize(&st.project_root, &name, Some(mcp_json_entry(&def))) {
-        return json_error(StatusCode::INTERNAL_SERVER_ERROR, &format!(".mcp.json: {e}"));
+    if let Err((code, msg)) = register_def(&tc.mem_dir, &st.project_root, &st.vault, &def) {
+        return json_error(code, &msg);
     }
 
     json_response(StatusCode::OK, json!({ "ok": true, "mcp": def }))

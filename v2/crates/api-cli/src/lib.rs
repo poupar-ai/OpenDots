@@ -111,8 +111,25 @@ pub fn write_settings(path: &Path, settings: &Value) -> Result<(), Error> {
 /// Existe como função (e não literal espalhado) porque o `install.sh`, o
 /// smoke do tarball e o registro no `settings.json` precisam concordar
 /// byte-a-byte sobre onde o binário está.
+///
+/// Mesma ordem do `plugin/bin-path.sh`: `plugin/bin/` (tarball) primeiro;
+/// se não existir e houver build em `v2/target/release/` (clone + `make
+/// install`), usa o build. Sem nenhum dos dois, devolve o caminho do
+/// tarball — é onde o `install.sh` vai colocar o binário.
 pub fn mcp_bin(install_dir: &Path) -> PathBuf {
-    install_dir.join("plugin").join("bin").join("poupar-mcp")
+    let installed = install_dir.join("plugin").join("bin").join("poupar-mcp");
+    if installed.exists() {
+        return installed;
+    }
+    let dev_build = install_dir
+        .join("v2")
+        .join("target")
+        .join("release")
+        .join("poupar-mcp");
+    if dev_build.exists() {
+        return dev_build;
+    }
+    installed
 }
 
 /// Parâmetros para o `apply_install`.

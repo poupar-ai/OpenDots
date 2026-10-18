@@ -8,6 +8,7 @@
 //! Ordem das chaves do objeto agente é preservada (IndexMap via
 //! `serde_json` com `preserve_order`) para byte-paridade com o `.cjs`.
 
+use crate::model::DEFAULT_MODEL;
 use crate::{load_manifest, manifest_path, sanitize_scope, save_manifest, AGENT_TYPES};
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -125,7 +126,7 @@ pub fn add_agent(mem_dir: &Path, name: &str, config: &Value) -> Result<Value, Ad
 
     let emoji_default = default_emoji_for(type_);
     let emoji = js_str_or(config, "emoji", emoji_default);
-    let model = js_str_or(config, "model", "sonnet-4.6");
+    let model = js_str_or(config, "model", DEFAULT_MODEL);
     let role = js_str_or(config, "role", "");
     let tools = js_arr_or(
         config,
@@ -352,7 +353,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let r = add_agent(tmp.path(), "foo", &json!({"type": "specialist"})).unwrap();
         assert_eq!(r["emoji"], "•");
-        assert_eq!(r["model"], "sonnet-4.6");
+        assert_eq!(r["model"], "opus-5.5");
         assert_eq!(r["role"], "");
         assert_eq!(r["context_file"], "agents/foo.md");
         assert_eq!(r["tools"], json!(["Read", "Grep", "Glob"]));

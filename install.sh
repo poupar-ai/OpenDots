@@ -33,7 +33,7 @@ DL_BASE="${POUPAR_DL_BASE:-https://github.com}"
 # Tudo que o instalador cria dentro de POUPAR_HOME. Só esses caminhos são
 # removidos num upgrade — qualquer outra coisa que o usuário tenha
 # colocado lá sobrevive.
-OWNED=(.claude-plugin plugin ui VERSION TARGET LICENSE README.md)
+OWNED=(.claude-plugin plugin ui VERSION TARGET LICENSE LICENSE-INTERNAL-USE COMMERCIAL-LICENSE.md TRADEMARKS.md README.md)
 
 say()  { printf '%s\n' "$*"; }
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }

@@ -86,7 +86,7 @@ pub use autonomy::{
 pub mod model;
 pub use model::{
     normalize_model, propagate_model_to_seed, resolve_cli_model, update_model,
-    NormalizeModelError, PropagateModelError, UpdateModelError, CLI_MODEL_MAP,
+    NormalizeModelError, PropagateModelError, UpdateModelError, CLI_MODEL_MAP, DEFAULT_MODEL,
 };
 
 pub mod vault;

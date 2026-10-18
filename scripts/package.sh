@@ -82,8 +82,10 @@ echo "==> open-poupar $VERSION → $TARGET"
 
 if [ "$SKIP_CARGO" = "0" ]; then
   echo "==> cargo build --release"
+  # `${arr[@]+...}` em vez de `"${arr[@]}"`: o bash 3.2 do macOS trata
+  # array vazio como variável não definida sob `set -u`.
   ( cd v2 && cargo build --release \
-      "${CARGO_TARGET_ARGS[@]}" \
+      ${CARGO_TARGET_ARGS[@]+"${CARGO_TARGET_ARGS[@]}"} \
       --bin poupar --bin poupar-http --bin poupar-mcp \
       --bin poupar-hook-startup --bin poupar-hook-observe \
       --bin poupar-hook-session-init --bin poupar-hook-session-end )
@@ -113,7 +115,7 @@ done
 # repo, então não há colisão no `cp -R`.
 cp -R plugin/. "$STAGE/plugin/"
 cp .claude-plugin/marketplace.json "$STAGE/.claude-plugin/"
-cp LICENSE README.md "$STAGE/"
+cp LICENSE LICENSE-INTERNAL-USE COMMERCIAL-LICENSE.md TRADEMARKS.md README.md "$STAGE/"
 
 # UI buildada. Vai pra `ui/` (e não `ui-next/dist/`) porque no tarball não
 # existe fonte nem node_modules — só o resultado.

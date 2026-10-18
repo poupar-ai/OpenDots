@@ -14,11 +14,18 @@ use std::io;
 use std::path::Path;
 use thiserror::Error;
 
+/// Modelo de todo agente novo (registro, defaults e seeds) quando nada
+/// for informado.
+pub const DEFAULT_MODEL: &str = "opus-5.5";
+
 /// Aliases versionados → IDs completos pro `claude --model`. Porta de
 /// `agents.cjs:672-684`. Ordem preservada pro caso de alguma serialização
 /// iterar; em dicionário Rust usaríamos `HashMap`, mas aqui uso array
 /// de pares pra manter determinismo e ordem byte-paridade.
 pub const CLI_MODEL_MAP: &[(&str, &str)] = &[
+    ("opus-5.5", "claude-opus-5-5"),
+    ("sonnet-5.5", "claude-sonnet-5-5"),
+    ("haiku-5.5", "claude-haiku-5-5"),
     ("opus-4.7", "claude-opus-4-7"),
     ("opus-4.6", "claude-opus-4-6"),
     ("opus-4.5", "claude-opus-4-5"),

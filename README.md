@@ -836,7 +836,7 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Palavras-chave
 
-`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph` `rust` `rust-cli` `rust-agents` `mcp-server` `model-context-protocol` `multi-agent` `ai-agents` `agentic-coding` `llm-agents` `claude-skills` `local-first` `jsonl` `opendots`
+`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph` `rust` `rust-cli` `rust-agents` `mcp-server` `model-context-protocol` `multi-agent` `ai-agents` `agentic-coding` `llm-agents` `claude-skills` `local-first` `jsonl` `opendots` `grockbot`
 
 ---
 

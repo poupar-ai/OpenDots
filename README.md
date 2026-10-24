@@ -1,4 +1,4 @@
-# open-poupar.ai
+# OpenDots
 
 **A edição aberta da [poupar.ai](https://poupar.ai) — memória persistente e um time de
 agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.
@@ -9,11 +9,13 @@ Feito em Rust: um binário estático, sem Node nem dependências em runtime.**
 [![License: PolyForm Noncommercial + Internal Use](https://img.shields.io/badge/License-PolyForm%20NC%20%2B%20Internal%20Use-orange.svg)](#licença)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
 
-![O time de agentes do open-poupar.ai trabalhando](docs/assets/demo-agentes.gif)
+<p align="center"><img src="docs/assets/personagens.png" alt="Os personagens do OpenDots: robô, broto, raposa e nuvem" width="720"></p>
+
+![O time de agentes do OpenDots trabalhando](docs/assets/demo-agentes.gif)
 
 ## O que faz
 
-Toda vez que você abre o Claude Code, ele começa do zero. O open-poupar.ai resolve isso
+Toda vez que você abre o Claude Code, ele começa do zero. O OpenDots resolve isso
 com duas coisas que funcionam juntas:
 
 **1. Memória que mora no repositório.** Cada edição, comando e decisão vira uma linha de
@@ -183,7 +185,7 @@ Qualquer repositório do GitHub pode virar uma ferramenta dos seus agentes. Na U
 **mcps → do GitHub**, cole a URL, clique em **analisar**, marque quem pode usar e
 **instale**:
 
-![Instalando o Lightpanda como navegador dos agentes pesquisador e marketing](docs/assets/ferramenta-do-github-lightpanda.gif)
+![Instalando o Lightpanda como navegador dos agentes architect e reviewer](docs/assets/ferramenta-do-github-lightpanda.gif)
 
 O que acontece por baixo:
 
@@ -213,6 +215,9 @@ tem o navegador, recebe a permissão negada:
 
 Binários e checkouts ficam fora do repositório, em
 `~/.local/share/open-poupar/tools/` (ou `$POUPAR_TOOLS_DIR`).
+
+Guia completo, com todos os campos da API e os formatos de URL aceitos:
+[docs/ferramentas-do-github.md](docs/ferramentas-do-github.md).
 
 Pela API: `POST /api/tools/github` com
 `{ "url": "...", "agents": ["pesquisador"] }` (`"*"` = todos) e `"dry_run": true` para
@@ -278,7 +283,7 @@ Isso leva a respostas genéricas, violações de padrões estabelecidos e retrab
 
 ## A solução
 
-O **open-poupar.ai** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
+O **OpenDots** mantém um contexto vivo por projeto e o injeta automaticamente no início de cada conversa.
 
 ```
 Você abre o Claude Code
@@ -453,7 +458,7 @@ Para subir manualmente:
 POUPAR_PORT=37778 ~/.local/share/open-poupar/plugin/bin/poupar-http
 
 # instalação por clone (precisa de build prévio)
-cd /caminho/para/open-poupar.ai
+cd /caminho/para/OpenDots
 cargo build --release --manifest-path v2/Cargo.toml -p api-http
 cd ui-next && npm install && npm run build
 POUPAR_PORT=37778 v2/target/release/poupar-http
@@ -551,7 +556,7 @@ O hook `UserPromptSubmit` monta um bloco de contexto com tudo que for relevante 
 ## Estrutura do repositório
 
 ```
-open-poupar.ai/
+OpenDots/
 ├── install.sh                      ← instalador curl | bash
 ├── uninstall.sh
 ├── Makefile                        ← install / uninstall / status (fonte)
@@ -609,12 +614,12 @@ conta e um terceiro guardando o que seu time discute.
 banco na sua máquina, injetado no início da sessão. Simples e privado; a memória costuma
 ser pessoal daquela máquina e o escopo é lembrar fatos.
 
-**open-poupar.ai** — memória versionada *dentro do repositório* **e** um time de agentes
+**OpenDots** — memória versionada *dentro do repositório* **e** um time de agentes
 operando sobre ela.
 
 O que decorre disso, concretamente:
 
-| | open-poupar.ai |
+| | OpenDots |
 |---|---|
 | **Onde a memória vive** | `.poupar/` no seu repo — `git diff` mostra o que ela aprendeu, `git blame` mostra quando, e quem clona herda o contexto |
 | **De quem é a memória** | do projeto, não da máquina: o time inteiro compartilha pelo git, sem sync nem servidor |
@@ -816,7 +821,7 @@ scripts/package.sh && scripts/smoke-package.sh
 
 ## Apoie o projeto
 
-O **open-poupar.ai** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
+O **OpenDots** é gratuito para uso não-comercial e tem o código aberto para leitura, estudo e contribuição. Se ele economiza tempo no seu trabalho, considere apoiar o desenvolvimento:
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors)](https://github.com/sponsors/schedylabs)
 
@@ -852,7 +857,7 @@ Três licenças, escolha a que cobre o seu uso:
 | Vender, hospedar como serviço ou embutir num produto oferecido a terceiros | [Licença comercial](./COMMERCIAL-LICENSE.md), mediante solicitação | 5% do faturamento da oferta |
 
 Em todos os casos você pode **modificar**, desde que **mantenha a marca
-original** — o nome "open-poupar.ai", os avisos `Required Notice:` e a
+original** — o nome "OpenDots", os avisos `Required Notice:` e a
 atribuição. Veja [TRADEMARKS.md](./TRADEMARKS.md).
 
 Formalmente isso **não** é uma licença open source pela definição da

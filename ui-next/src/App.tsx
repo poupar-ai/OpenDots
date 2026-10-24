@@ -235,13 +235,13 @@ export default function App() {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Brain className="h-5 w-5 text-primary" />
           </div>
-          <div className="flex items-end -space-x-2">
+          <div className="flex shrink-0 items-end -space-x-1.5">
             {CHARACTERS.map((c) => (
-              <img key={c.id} src={c.url} alt={c.label} title={c.label} className="h-9 w-auto drop-shadow-sm" />
+              <img key={c.id} src={c.url} alt={c.label} title={c.label} className="h-8 w-auto drop-shadow-sm" />
             ))}
           </div>
-          <div>
-            <h1 className="text-base font-semibold leading-tight">open-poupar</h1>
+          <div className="shrink-0">
+            <h1 className="text-base font-semibold leading-tight whitespace-nowrap">OpenDots</h1>
             <p className="text-xs text-muted-foreground leading-tight">
               {data?.project.name || '…'}
             </p>

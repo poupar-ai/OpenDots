@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # open-poupar — desinstalador da instalação feita pelo install.sh.
 #
-#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/uninstall.sh | bash
 #
 # Tira o registro do ~/.claude/settings.json, remove o symlink do CLI e
 # apaga os diretórios que o instalador criou. **Não** toca em nenhum

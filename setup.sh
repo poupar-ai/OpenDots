@@ -2,7 +2,7 @@
 # open-poupar — setup interativo.
 #
 #   bash setup.sh                       # de dentro do clone
-#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/setup.sh | bash
 #
 # Pergunta como instalar (release pronta ou código-fonte), onde, e se
 # pode registrar no ~/.claude/settings.json — mostrando o que vai mudar e
@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-REPO="${POUPAR_REPO:-poupar-ai/open-poupar.ai}"
+REPO="${POUPAR_REPO:-poupar-ai/OpenDots}"
 RAW_BASE="${POUPAR_RAW_BASE:-https://raw.githubusercontent.com/$REPO/main}"
 DEFAULT_HOME="${POUPAR_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/open-poupar}"
 DEFAULT_LINK_DIR="${POUPAR_LINK_DIR:-$HOME/.local/bin}"
@@ -216,7 +216,7 @@ run_source() {
     ok "usando o clone em $repo_dir"
   else
     has git || die "precisa do 'git' pra clonar o código-fonte"
-    ask repo_dir "Onde clonar o repositório:" "$HOME/open-poupar.ai"
+    ask repo_dir "Onde clonar o repositório:" "$HOME/OpenDots"
     repo_dir="$(expand_path "$repo_dir")"
   fi
 

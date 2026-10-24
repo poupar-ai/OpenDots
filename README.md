@@ -1,9 +1,11 @@
 # open-poupar.ai
 
 **A edição aberta da [poupar.ai](https://poupar.ai) — memória persistente e um time de
-agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.**
+agentes para o [Claude Code](https://claude.ai/code), dentro do seu repositório.
+Feito em Rust: um binário estático, sem Node nem dependências em runtime.**
 
 [![poupar.ai](https://img.shields.io/badge/poupar.ai-site-2F6FED)](https://poupar.ai)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-000000?logo=rust)](v2/)
 [![License: PolyForm Noncommercial + Internal Use](https://img.shields.io/badge/License-PolyForm%20NC%20%2B%20Internal%20Use-orange.svg)](#licença)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/schedylabs?label=Sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/schedylabs)
 
@@ -60,7 +62,7 @@ não depende de runtime nenhum.
 são compilados e distribuídos prontos; não precisa de Node, Rust nem git.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/install.sh | bash
 ```
 
 O instalador detecta seu SO/arquitetura, baixa o tarball da última release,
@@ -95,7 +97,7 @@ curl -fsSL .../install.sh | POUPAR_NO_REGISTER=1 bash
 Para desinstalar (a memória dos seus projetos **não** é tocada):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/uninstall.sh | bash
 ```
 
 ### Setup interativo
@@ -105,7 +107,7 @@ código-fonte), onde, e se pode registrar no `~/.claude/settings.json` —
 mostra as 3 chaves que vai adicionar e faz backup do arquivo antes.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/setup.sh | bash
 
 # ou, de dentro de um clone (já sugere compilar dali):
 bash setup.sh
@@ -117,7 +119,7 @@ Sem terminal interativo (CI, Docker sem `-t`) ele recusa e aponta pro
 Prefere não canalizar um script pro shell? Baixe, leia, execute:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/poupar-ai/OpenDots/main/install.sh
 less install.sh && bash install.sh
 ```
 
@@ -125,12 +127,12 @@ less install.sh && bash install.sh
 
 Abra o Claude Code e peça:
 
-> "Instale o plugin poupar-ai/open-poupar.ai"
+> "Instale o plugin poupar-ai/OpenDots"
 
 Ou execute diretamente no terminal:
 
 ```bash
-claude plugins marketplace add poupar-ai/open-poupar.ai
+claude plugins marketplace add poupar-ai/OpenDots
 claude plugins install open-poupar@open-poupar
 ```
 
@@ -147,8 +149,8 @@ Reinicie o Claude Code.
 (a UI é buildada com Vite).
 
 ```bash
-git clone https://github.com/poupar-ai/open-poupar.ai.git
-cd open-poupar.ai
+git clone https://github.com/poupar-ai/OpenDots.git
+cd OpenDots
 make install
 ```
 
@@ -746,8 +748,8 @@ Issues, PRs e sugestões são bem-vindos.
 > Se você usa **Claude Code** para contribuir com este projeto, o repositório já tem um `CLAUDE.md` na raiz com contexto completo da arquitetura, convenções e como testar. O Claude lê esse arquivo automaticamente ao abrir o projeto.
 
 ```bash
-git clone https://github.com/poupar-ai/open-poupar.ai.git
-cd open-poupar.ai
+git clone https://github.com/poupar-ai/OpenDots.git
+cd OpenDots
 ```
 
 O runtime é o workspace Rust em `v2/` — `cargo build --release` a partir de
@@ -834,7 +836,7 @@ Se você tem interesse nas features Pro ou quer discutir suporte para sua equipe
 
 ## Palavras-chave
 
-`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph`
+`claude-code` `claude-code-plugin` `poupar-ai` `agent-team` `ai-memory` `project-context` `developer-tools` `llm-context` `persistent-memory` `git-friendly` `claude-ai` `ai-assistant` `coding-assistant` `context-injection` `knowledge-graph` `rust` `rust-cli` `rust-agents` `mcp-server` `model-context-protocol` `multi-agent` `ai-agents` `agentic-coding` `llm-agents` `claude-skills` `local-first` `jsonl` `opendots`
 
 ---
 

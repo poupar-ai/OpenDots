@@ -5,6 +5,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useCurrentHuman } from '@/hooks/useCurrentHuman';
 import { updateHuman } from '@/lib/humans';
 import { useTheme } from '@/hooks/useTheme';
+import { CHARACTERS } from '@/lib/characters';
 import { ModulesPanel } from '@/panels/ModulesPanel';
 import type { CanvasControls } from '@/panels/AgentCanvas';
 // Lazy: o AgentCanvas puxa o Pixi/WebGL (chunk pesado). Carrega depois do
@@ -233,6 +234,11 @@ export default function App() {
         <div className="flex items-center gap-2.5">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Brain className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex items-end -space-x-2">
+            {CHARACTERS.map((c) => (
+              <img key={c.id} src={c.url} alt={c.label} title={c.label} className="h-9 w-auto drop-shadow-sm" />
+            ))}
           </div>
           <div>
             <h1 className="text-base font-semibold leading-tight">open-poupar</h1>

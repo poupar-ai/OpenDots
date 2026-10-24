@@ -15,7 +15,7 @@ Forks, versões modificadas e obras derivadas são permitidos, desde que:
    não é);
 2. **preservem as linhas `Required Notice:`** dos arquivos de licença e a
    atribuição à Schedylabs, com link para
-   <https://github.com/poupar-ai/open-poupar.ai>;
+   <https://github.com/poupar-ai/OpenDots>;
 3. **deixem claro que é uma versão modificada**, para ninguém confundir com a
    distribuição oficial (ex.: "baseado no open-poupar.ai, modificado por …").
 

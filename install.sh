@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # open-poupar — instalador one-liner.
 #
-#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/open-poupar.ai/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/poupar-ai/OpenDots/main/install.sh | bash
 #
 # Baixa o tarball da release correspondente ao seu SO/arquitetura,
 # confere o SHA-256, instala em ~/.local/share/open-poupar e registra o
@@ -11,7 +11,7 @@
 #   POUPAR_VERSION      tag a instalar (ex.: v0.2.0). Default: última release.
 #   POUPAR_HOME         diretório de instalação. Default: ${XDG_DATA_HOME:-~/.local/share}/open-poupar
 #   POUPAR_LINK_DIR      onde criar o symlink do CLI. Default: ~/.local/bin
-#   POUPAR_REPO         owner/repo de origem. Default: poupar-ai/open-poupar.ai
+#   POUPAR_REPO         owner/repo de origem. Default: poupar-ai/OpenDots
 #   POUPAR_NO_REGISTER  =1 para instalar os arquivos sem tocar no settings.json
 #   POUPAR_API_BASE     base da API de releases. Default: https://api.github.com
 #   POUPAR_DL_BASE      base do download dos assets. Default: https://github.com
@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO="${POUPAR_REPO:-poupar-ai/open-poupar.ai}"
+REPO="${POUPAR_REPO:-poupar-ai/OpenDots}"
 VERSION="${POUPAR_VERSION:-}"
 HOME_DIR="${POUPAR_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/open-poupar}"
 BIN_DIR="${POUPAR_LINK_DIR:-$HOME/.local/bin}"

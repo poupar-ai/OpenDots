@@ -1,5 +1,6 @@
-import { Container, Graphics, Text, TextStyle, Ticker } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture, Ticker } from 'pixi.js';
 import type { AgentType } from '@/lib/types';
+import { characterFor } from '@/lib/characters';
 
 const PALETTE: Record<AgentType, { primary: number; accent: number; gear: number }> = {
   core:        { primary: 0x6366f1, accent: 0x312e81, gear: 0xfbbf24 },
@@ -9,7 +10,7 @@ const PALETTE: Record<AgentType, { primary: number; accent: number; gear: number
   firefighter: { primary: 0xef4444, accent: 0x7f1d1d, gear: 0xfde047 },
 };
 
-// Cor da "camisa" por profissão — sobrescreve a palette do tipo
+// Cor do crachá por profissão — sobrescreve a palette do tipo
 // quando o agente pertence a uma profissão conhecida.
 const PROFESSION_PALETTE: Record<string, { primary: number; accent: number; gear: number }> = {
   devs: { primary: 0x16a34a, accent: 0x14532d, gear: 0xbbf7d0 },
@@ -20,9 +21,12 @@ function paletteFor(type: AgentType, profession?: string) {
   return PALETTE[type] || PALETTE.specialist;
 }
 
-const SKIN = 0xfcd9b6;
 const SHADOW = 0x0f172a;
 const OUTLINE = 0x0f172a;
+
+// Altura do personagem (px) e linha dos pés — a sombra fica em y=30.
+const FIGURE_H = 62;
+const FEET_Y = 28;
 
 export type AgentState = 'idle' | 'walk' | 'talk' | 'work' | 'happy' | 'alert';
 
@@ -52,15 +56,8 @@ export class AgentSprite extends Container {
   private palette: (typeof PALETTE)[AgentType];
   private directionalView: Container; // wrapper pra flip horizontal (padrão Spine Boy)
   private body: Container;
-  private head: Container;
-  private eyeL: Graphics;
-  private eyeR: Graphics;
-  private mouth: Graphics;
-  private armL: Graphics;
-  private armR: Graphics;
-  private legL: Graphics;
-  private legR: Graphics;
-  private accessory: Container;
+  private figure: Sprite;
+  private figureUrl = '';
   private shadow: Graphics;
   private badge: Text;
   private badgeBg: Graphics;
@@ -72,8 +69,6 @@ export class AgentSprite extends Container {
   private particles: Particle[] = [];
   private particleLayer: Container;
   private t = 0;
-  private blinkT = 0;
-  private blinkClose = 0;
   private workingKind: 'default' | 'fire' | 'gear' | 'plug' | 'sparkle' | 'compass' = 'default';
 
   private state: AgentState = 'idle';
@@ -110,46 +105,11 @@ export class AgentSprite extends Container {
     this.body = new Container();
     this.directionalView.addChild(this.body);
 
-    this.legL = this.makeLeg(-6);
-    this.legR = this.makeLeg(6);
-    this.body.addChild(this.legL);
-    this.body.addChild(this.legR);
-
-    const torso = new Graphics();
-    torso
-      .roundRect(-11, -8, 22, 22, 6)
-      .fill({ color: this.palette.primary })
-      .stroke({ width: 1.5, color: OUTLINE, alpha: 0.35 });
-    torso.rect(-11, 2, 22, 3).fill({ color: this.palette.accent, alpha: 0.7 });
-    this.body.addChild(torso);
-
-    this.armL = this.makeArm(-11);
-    this.armR = this.makeArm(11);
-    this.body.addChild(this.armL);
-    this.body.addChild(this.armR);
-
-    this.head = new Container();
-    const face = new Graphics();
-    face.circle(0, -18, 11).fill({ color: SKIN }).stroke({ width: 1.5, color: OUTLINE, alpha: 0.45 });
-    this.head.addChild(face);
-
-    this.eyeL = new Graphics();
-    this.eyeL.circle(-4, -19, 1.5).fill({ color: OUTLINE });
-    this.head.addChild(this.eyeL);
-    this.eyeR = new Graphics();
-    this.eyeR.circle(4, -19, 1.5).fill({ color: OUTLINE });
-    this.head.addChild(this.eyeR);
-
-    this.mouth = new Graphics();
-    this.drawMouthNeutral();
-    this.head.addChild(this.mouth);
-
-    this.body.addChild(this.head);
-
-    this.accessory = new Container();
-    this.accessory.position.set(0, -25);
-    this.drawAccessory();
-    this.body.addChild(this.accessory);
+    this.figure = new Sprite(Texture.EMPTY);
+    this.figure.anchor.set(0.5, 1);
+    this.figure.position.set(0, FEET_Y);
+    this.body.addChild(this.figure);
+    this.loadFigure();
 
     this.badgeBg = new Graphics();
     this.badge = new Text({
@@ -173,7 +133,7 @@ export class AgentSprite extends Container {
         style: new TextStyle({ fontSize: 14 }),
       });
       emojiText.anchor.set(0.5);
-      emojiText.position.set(14, -26);
+      emojiText.position.set(-18, -30);
       this.addChild(emojiText);
     }
 
@@ -197,8 +157,6 @@ export class AgentSprite extends Container {
     this.state = state;
     this.mix = 0;
     this.stateTimer = 0;
-    if (state === 'happy' || state === 'talk') this.drawMouthSmile();
-    else this.drawMouthNeutral();
   }
 
   isAnimationPlaying(state: AgentState) {
@@ -209,101 +167,23 @@ export class AgentSprite extends Container {
     this.directionalView.scale.x = dir;
   }
 
-  // ── desenhos base ──────────────────────────────────────────────
-  private makeLeg(x: number): Graphics {
-    const g = new Graphics();
-    g.roundRect(-3, 0, 6, 10, 1.5).fill({ color: this.palette.accent });
-    g.position.set(x, 14);
-    return g;
+  // ── personagem (imagem) ────────────────────────────────────────
+  private loadFigure() {
+    const { url } = characterFor(this.type);
+    if (url === this.figureUrl) return;
+    this.figureUrl = url;
+    Assets.load<Texture>(url).then((tex) => {
+      if (this.destroyed || this.figureUrl !== url) return;
+      this.figure.texture = tex;
+      this.fitFigure();
+    });
   }
 
-  private makeArm(x: number): Graphics {
-    const g = new Graphics();
-    g.roundRect(-2.5, 0, 5, 13, 2).fill({ color: this.palette.primary }).stroke({ width: 1, color: OUTLINE, alpha: 0.35 });
-    g.circle(0, 13, 2.5).fill({ color: SKIN });
-    g.position.set(x, -6);
-    return g;
-  }
-
-  private drawMouthNeutral() {
-    this.mouth.clear();
-    this.mouth.moveTo(-2, -14).lineTo(2, -14).stroke({ width: 1.2, color: OUTLINE });
-  }
-
-  private drawMouthSmile() {
-    this.mouth.clear();
-    this.mouth
-      .moveTo(-2.5, -14.5)
-      .quadraticCurveTo(0, -13, 2.5, -14.5)
-      .stroke({ width: 1.2, color: OUTLINE });
-  }
-
-  private drawAccessory() {
-    this.accessory.removeChildren();
-    const g = new Graphics();
-    const p = this.palette;
-    switch (this.type) {
-      case 'core': {
-        g.moveTo(-9, 0).lineTo(-9, -4).lineTo(-5, -1).lineTo(-2, -7).lineTo(2, -1).lineTo(5, -7).lineTo(9, -1).lineTo(9, 0).closePath();
-        g.fill({ color: p.gear }).stroke({ width: 1, color: OUTLINE });
-        const gem = new Graphics();
-        gem.circle(0, -3, 1.5).fill({ color: 0xec4899 });
-        this.accessory.addChild(g);
-        this.accessory.addChild(gem);
-        break;
-      }
-      case 'specialist': {
-        g.circle(-4, 0, 3).stroke({ width: 1.2, color: OUTLINE });
-        g.circle(4, 0, 3).stroke({ width: 1.2, color: OUTLINE });
-        g.moveTo(-1.5, 0).lineTo(1.5, 0).stroke({ width: 1.2, color: OUTLINE });
-        g.y = 6;
-        this.accessory.addChild(g);
-        const hair = new Graphics();
-        hair.roundRect(-10, -6, 20, 5, 3).fill({ color: p.accent });
-        this.accessory.addChild(hair);
-        break;
-      }
-      case 'integrator': {
-        const stem = new Graphics();
-        stem.rect(-1, -8, 2, 8).fill({ color: p.accent });
-        stem.circle(0, -10, 3).fill({ color: p.gear }).stroke({ width: 1, color: OUTLINE });
-        this.accessory.addChild(stem);
-        const cap = new Graphics();
-        cap.roundRect(-8, -2, 16, 4, 2).fill({ color: p.primary });
-        this.accessory.addChild(cap);
-        break;
-      }
-      case 'motor': {
-        const gear = new Graphics();
-        const teeth = 8;
-        const R = 5;
-        const r = 3.5;
-        for (let i = 0; i < teeth; i++) {
-          const a = (i / teeth) * Math.PI * 2;
-          const x = Math.cos(a) * R;
-          const y = Math.sin(a) * R - 4;
-          gear.rect(x - 1, y - 1, 2, 2).fill({ color: p.gear });
-        }
-        gear.circle(0, -4, r).fill({ color: p.gear }).stroke({ width: 1, color: OUTLINE });
-        gear.circle(0, -4, 1).fill({ color: OUTLINE });
-        this.accessory.addChild(gear);
-        const antenna = new Graphics();
-        antenna.moveTo(6, -4).lineTo(8, -10).stroke({ width: 1, color: OUTLINE });
-        antenna.circle(8, -10, 1.5).fill({ color: 0xef4444 });
-        this.accessory.addChild(antenna);
-        break;
-      }
-      case 'firefighter': {
-        g.moveTo(-10, 0).quadraticCurveTo(-10, -9, 0, -9).quadraticCurveTo(10, -9, 10, 0).closePath();
-        g.fill({ color: p.primary }).stroke({ width: 1.2, color: OUTLINE });
-        g.roundRect(-10, -2, 20, 2, 1).fill({ color: p.gear });
-        const badge = new Graphics();
-        badge.circle(0, -5, 1.8).fill({ color: p.gear }).stroke({ width: 0.8, color: OUTLINE });
-        this.accessory.addChild(g);
-        this.accessory.addChild(badge);
-        break;
-      }
-    }
+  private fitFigure() {
+    const tex = this.figure.texture;
+    if (!tex.width || !tex.height) return;
+    const s = FIGURE_H / tex.height;
+    this.figure.scale.set(s);
   }
 
   private drawBadgeBg() {
@@ -325,7 +205,7 @@ export class AgentSprite extends Container {
     const color = isAlert ? 0xef4444 : 0x22c55e;
     const label = isAlert ? '!' : '✓';
     this.statusBg = new Graphics();
-    this.statusBg.circle(14, -36, 9).fill({ color }).stroke({ width: 1.5, color: 0xffffff });
+    this.statusBg.circle(18, -36, 9).fill({ color }).stroke({ width: 1.5, color: 0xffffff });
     this.statusMark = new Text({
       text: label,
       style: new TextStyle({
@@ -336,7 +216,7 @@ export class AgentSprite extends Container {
       }),
     });
     this.statusMark.anchor.set(0.5);
-    this.statusMark.position.set(14, -36);
+    this.statusMark.position.set(18, -36);
     this.addChild(this.statusBg);
     this.addChild(this.statusMark);
   }
@@ -460,26 +340,7 @@ export class AgentSprite extends Container {
       motor: 'gear',
       firefighter: 'fire',
     }[type] as any;
-    this.body.removeChildren();
-    this.legL = this.makeLeg(-6);
-    this.legR = this.makeLeg(6);
-    this.body.addChild(this.legL);
-    this.body.addChild(this.legR);
-    const torso = new Graphics();
-    torso
-      .roundRect(-11, -8, 22, 22, 6)
-      .fill({ color: this.palette.primary })
-      .stroke({ width: 1.5, color: OUTLINE, alpha: 0.35 });
-    torso.rect(-11, 2, 22, 3).fill({ color: this.palette.accent, alpha: 0.7 });
-    this.body.addChild(torso);
-    this.armL = this.makeArm(-11);
-    this.armR = this.makeArm(11);
-    this.body.addChild(this.armL);
-    this.body.addChild(this.armR);
-    this.body.addChild(this.head);
-    this.accessory.position.set(0, -25);
-    this.drawAccessory();
-    this.body.addChild(this.accessory);
+    this.loadFigure();
     this.drawBadgeBg();
   }
 
@@ -528,56 +389,51 @@ export class AgentSprite extends Container {
   }
 
   // ── animações por estado ───────────────────────────────────────
-  private animIdle(dt: number) {
+  // O personagem é uma imagem única: as animações atuam no corpo inteiro
+  // (bob, squash/stretch, inclinação, tremor) em vez de membros.
+  private animIdle(_dt: number) {
     this.body.y = lerp(this.body.y, Math.sin(this.t * 0.06) * 0.9, 0.12);
-    this.armL.rotation = lerp(this.armL.rotation, 0, 0.2);
-    this.armR.rotation = lerp(this.armR.rotation, 0, 0.2);
-    if (this.type === 'motor') this.accessory.rotation *= 0.9;
+    this.body.x = lerp(this.body.x, 0, 0.2);
+    this.body.rotation = lerp(this.body.rotation, 0, 0.2);
+    this.body.scale.set(lerp(this.body.scale.x, 1, 0.2), lerp(this.body.scale.y, 1, 0.2));
   }
 
-  private animTalk(dt: number) {
-    // respiração mais animada + leve aceno
+  private animTalk(_dt: number) {
+    // respiração mais animada + leve balanço
     this.body.y = lerp(this.body.y, Math.sin(this.t * 0.1) * 1.2, 0.15);
-    const wave = Math.sin(this.t * 0.22) * 0.35;
-    this.armR.rotation = lerp(this.armR.rotation, wave, 0.2);
-    this.armL.rotation = lerp(this.armL.rotation, 0, 0.2);
+    this.body.rotation = lerp(this.body.rotation, Math.sin(this.t * 0.22) * 0.06, 0.2);
+    this.body.scale.set(lerp(this.body.scale.x, 1, 0.2), lerp(this.body.scale.y, 1, 0.2));
   }
 
-  private animWalk(dt: number) {
+  private animWalk(_dt: number) {
     const s = Math.sin(this.t * 0.28);
     this.body.y = lerp(this.body.y, Math.abs(s) * -1.5, 0.2);
-    this.legL.rotation = s * 0.4;
-    this.legR.rotation = -s * 0.4;
-    this.armL.rotation = -s * 0.3;
-    this.armR.rotation = s * 0.3;
+    this.body.rotation = s * 0.08;
+    this.body.scale.set(1 - Math.abs(s) * 0.03, 1 + Math.abs(s) * 0.04);
   }
 
-  private animWork(dt: number) {
+  private animWork(_dt: number) {
     this.body.y = lerp(this.body.y, Math.sin(this.t * 0.22) * 2.2, 0.2);
-    const sw = Math.sin(this.t * 0.3) * 0.7;
-    this.armL.rotation = sw;
-    this.armR.rotation = -sw;
-    if (this.type === 'motor') this.accessory.rotation = this.t * 0.05;
+    const sw = Math.sin(this.t * 0.3);
+    this.body.scale.set(1 + sw * 0.04, 1 - sw * 0.04);
+    this.body.rotation = lerp(this.body.rotation, 0, 0.2);
     if (Math.random() < 0.22) this.emitParticle();
   }
 
   private animHappy(dt: number) {
     this.stateTimer += dt / 60;
-    // aceno mais rápido com braço direito
-    const wave = Math.sin(this.t * 0.5) * 0.9 - 0.3;
-    this.armR.rotation = lerp(this.armR.rotation, wave, 0.3);
-    this.armL.rotation = lerp(this.armL.rotation, 0, 0.2);
-    this.body.y = lerp(this.body.y, Math.sin(this.t * 0.25) * 1.6, 0.2);
+    // pulinhos com inclinação
+    this.body.rotation = lerp(this.body.rotation, Math.sin(this.t * 0.5) * 0.15, 0.3);
+    this.body.y = lerp(this.body.y, Math.abs(Math.sin(this.t * 0.25)) * -3, 0.2);
     // auto-retorno após ~1.6s
     if (this.stateTimer > 1.6) this.playAnimation('idle');
   }
 
-  private animAlert(dt: number) {
+  private animAlert(_dt: number) {
     this.body.y = lerp(this.body.y, Math.sin(this.t * 0.6) * 1.8, 0.3);
     const shake = Math.sin(this.t * 0.9) * 0.15;
     this.body.x = shake * 4;
-    this.armL.rotation = shake * 2;
-    this.armR.rotation = -shake * 2;
+    this.body.rotation = shake * 0.6;
     if (Math.random() < 0.3) this.emitParticle();
     if (this.statusMark && this.statusKind === 'alert') {
       const s = 1 + Math.sin(this.t * 0.4) * 0.12;
@@ -588,7 +444,6 @@ export class AgentSprite extends Container {
   public tick(t: Ticker) {
     const dt = t.deltaTime;
     this.t += dt;
-    this.blinkT += dt;
 
     // cross-fade (defaultMix): blend suave entre estado anterior e atual
     if (this.mix < 1) {
@@ -598,19 +453,6 @@ export class AgentSprite extends Container {
     this.animationMap[this.state](dt);
 
     this.shadow.scale.x = 1 - Math.abs(this.body.y) * 0.02;
-
-    if (this.blinkClose > 0) {
-      this.blinkClose -= dt;
-      this.eyeL.scale.y = 0.15;
-      this.eyeR.scale.y = 0.15;
-    } else {
-      this.eyeL.scale.y = 1;
-      this.eyeR.scale.y = 1;
-      if (this.blinkT > 120 + Math.random() * 100) {
-        this.blinkT = 0;
-        this.blinkClose = 8;
-      }
-    }
 
     // partículas
     for (let i = this.particles.length - 1; i >= 0; i--) {

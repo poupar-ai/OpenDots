@@ -41,7 +41,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 license = "PolyForm-Noncommercial-1.0.0 OR LicenseRef-PolyForm-Internal-Use-1.0.0 OR LicenseRef-Commercial"
-repository = "https://github.com/poupar-ai/open-poupar.ai"
+repository = "https://github.com/poupar-ai/OpenDots"
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
